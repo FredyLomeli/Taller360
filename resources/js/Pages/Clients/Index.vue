@@ -2,23 +2,61 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import Swal from 'sweetalert2';
 
-const props = defineProps({ clients: Array });
+const props = defineProps({
+    clients: Array
+})
 const search = ref('');
 
+// Filtro simple (Igual que en productos)
 const filteredClients = computed(() => {
     if (!search.value) return props.clients;
     const term = search.value.toLowerCase();
     return props.clients.filter(c => 
-        c.name.toLowerCase().includes(term) || 
-        (c.email && c.email.toLowerCase().includes(term))
+        c.name.toLowerCase().includes(term) ||
+        (c.email && c.email.toLowerCase().includes(term)) ||
+        (c.business_name && c.business_name.toLowerCase().includes(term))
     );
 });
 
+// --- FUNCIÓN DE ELIMINAR CON SWEETALERT ---
 const deleteClient = (client) => {
-    if (confirm(`¿Eliminar a ${client.name}?`)) {
-        router.delete(route('clients.destroy', client.id));
-    }
+    Swal.fire({
+        title: '¿Eliminar Cliente?',
+        text: `Vas a eliminar a "${client.name}". Esta acción es irreversible.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            router.delete(route('clients.destroy', client.id), {
+                preserveScroll: true,
+                onSuccess: () => {
+                    Swal.fire(
+                        'Eliminado',
+                        'El cliente ha sido eliminado correctamente.',
+                        'success'
+                    );
+                },
+                onError: (errors) => {
+                    // CAPTURAMOS EL MENSAJE DEL GUARDIA
+                    let msg = 'No se pudo eliminar.';
+                    if (errors.error) msg = errors.error;
+
+                    Swal.fire({
+                        title: 'No se puede eliminar',
+                        text: msg,
+                        icon: 'error',
+                        confirmButtonColor: '#d33'
+                    });
+                }
+            });
+        }
+    });
 };
 </script>
 

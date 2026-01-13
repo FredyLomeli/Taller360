@@ -1,58 +1,79 @@
-# ESTATUS DEL PROYECTO: SISTEMA POS MUEBLERÍA
+# 🛋️ TALLER 360 - Sistema POS Mueblería
 
-## Tecnologías
-- Laravel 12 (Backend)
-- Vue 3 + Inertia.js (Frontend)
-- Tailwind CSS (Estilos)
-- MySQL (Base de Datos)
-- DomPDF (Reportes PDF)
-- SweetAlert2 (Alertas)
-
-## Objetivo Actual
-Desarrollar un punto de venta completo, priorizando la operación de mostrador y control de inventario básico.
-
-## 🟢 FUNCIONALIDADES TERMINADAS (NO TOCAR SALVO ERRORES)
-1.  [x] **Buscador de productos:** Funciona por Nombre y SKU.
-2.  [x] **Categorías:** Filtrado por botones en el POS.
-3.  [x] **Manejo de Stock:** Input manual y botones +/-.
-4.  [x] **Modal de Cobro:** Soporta Efectivo, Tarjeta, Transferencia y detecta Créditos.
-5.  [x] **Descuentos:** Porcentaje por partida individual.
-6.  [x] **Buscador de Clientes:** Autocomplete funcional.
-7.  [x] **Documentos:** Generación de Ticket (Térmico) y Nota de Remisión (Carta PDF) con Folio.
-8.  [x] **Envío de Correo:** Lógica implementada (falta config de remitentes).
-9.  [x] **Cancelación:** Botón en historial que devuelve stock automáticamente.
-10. [x] **Zona Horaria:** Configurado a America/Mexico_City.
-
-## 🟠 LISTA DE PENDIENTES PRIORITARIOS (ORDEN DE EJECUCIÓN)
-
-### 1. Gestión de Clientes en POS (Punto 6 original)
-- **Tarea:** Agregar botón "+" en el buscador de clientes del POS.
-- **Detalle:** Permitir registrar un cliente nuevo (Nombre, RFC, Dirección, Teléfono) mediante un modal sin salir de la pantalla de venta ni perder el carrito.
-
-### 2. Traducción y UX (Puntos 8 y 9 original)
-- **Tarea:** "Españolizar" el sistema.
-- **Detalle:** - Instalar paquete de idioma (mensajes de error "Field is required").
-    - Traducir Login, Perfil y Fechas (Carbon).
-    - Reemplazar "confirm()" nativos por SweetAlert2 en eliminación de Productos y Clientes.
-
-### 3. Configuraciones Generales (Soporte para Punto 11 original)
-- **Tarea:** Crear módulo de Configuración (`Settings`).
-- **Detalle:** Formulario para subir Logo (usado en PDF), Nombre Empresa, Dirección y **Correos Administrativos** (para el envío de copias de ventas).
-
-### 4. Roles y Permisos (Punto 10 original)
-- **Tarea:** Diferenciar Admin vs Vendedor.
-- **Detalle:** El vendedor solo puede vender. No puede ver configuraciones, ni borrar productos, ni ver costos (si los hubiera).
-
-### 5. Dashboard y KPIs (Punto 12 nuevo)
-- **Tarea:** Poblar la pantalla de inicio.
-- **Detalle:** Tarjetas de Ventas del día, Gráfica de semana, Tabla de Stock Bajo.
-
-### 6. Corte de Caja (Sugerencia aceptada)
-- **Tarea:** Cierre de turno.
-- **Detalle:** Reporte de cuánto dinero debe haber en caja.
+Sistema de Punto de Venta y Administración desarrollado en **Laravel 12 + Vue 3 (Inertia.js)**.
+Enfocado en la gestión de inventarios con variantes (color/material), control de ventas y administración de clientes.
 
 ---
-## NOTAS TÉCNICAS RECIENTES
-- El PDF de Nota de Venta usa estilos CSS en línea para compatibilidad con DomPDF.
-- La zona horaria es Mexico_City, recordar limpiar caché (`php artisan config:clear`) si hay desfases.
-- Los botones del modal de venta usan un Grid 2x2.
+
+## 🚀 ESTATUS DEL PROYECTO
+**Última Actualización:** 14 Enero 2024
+**Fase Actual:** Pulido de UX y Estabilidad.
+
+### ✅ Módulos Terminados y Funcionales
+1.  **Gestión de Productos (Inventario):**
+    * Alta/Edición con variantes (Color, Material, SKU, Stock).
+    * **Blindaje SQL:** Validación automática de campos vacíos (se convierten a 0).
+    * **Visual:** Bolitas de colores reales en el listado.
+    * **Seguridad:** "Guardia" en Backend que impide borrar productos si ya tienen ventas históricas.
+2.  **Punto de Venta (POS):**
+    * Carrito de compras reactivo.
+    * Buscador de productos y clientes.
+    * **Cliente Rápido:** Modal para registrar clientes nuevos sin salir de la venta (con dirección y nivel de precio).
+    * **Pagos:** Modal multiformato (Efectivo, Tarjeta, Transferencia, Crédito).
+    * Manejo de Stock (resta al vender, suma al cancelar).
+3.  **Gestión de Clientes:**
+    * CRUD completo con validaciones.
+    * Bloqueo de eliminación si el cliente tiene deudas o historial.
+4.  **Historial de Ventas:**
+    * Listado paginado.
+    * **Buscador Avanzado:** Filtrado por servidor (Folio o Nombre Cliente).
+    * Cancelación de ventas (con devolución de stock automática).
+5.  **Configuración:**
+    * Carga de Logotipo y Datos de la Empresa (se reflejan en PDFs).
+    * Configuración de correos de notificación.
+6.  **UX / UI:**
+    * Alertas **SweetAlert2** para confirmaciones de eliminación.
+    * Mensajes de error y fechas en **Español** (Paquete de idioma instalado).
+
+---
+
+## 📝 LISTA DE PENDIENTES (Roadmap)
+
+### 🔴 Prioridad Alta (Estabilidad y Rendimiento)
+1.  **Optimización de Buscadores (Productos y Clientes):**
+    * *Estado Actual:* Se cargan todos los registros (`all()`) en memoria al abrir el POS.
+    * *Meta:* Migrar `ClientAutocomplete` y el buscador de productos a **Búsqueda AJAX** (Server-side) para soportar miles de registros sin lentitud.
+2.  **Paginación Dinámica:**
+    * Agregar selector "Mostrar 10, 20, 50, 100 registros" en todas las tablas.
+
+### 🟡 Prioridad Media (Funcionalidad)
+3.  **Dashboard (Pantalla de Inicio):**
+    * Actualmente vacía. Agregar tarjetas de KPIs (Ventas del día, Productos bajos en stock).
+4.  **Roles y Permisos:**
+    * Separar rol `Administrador` (Acceso total) de `Vendedor` (Solo POS, sin acceso a borrar productos ni configuración).
+
+### 🔵 Futuro / Deseables
+5.  **Corte de Caja:** Funcionalidad para cierre de turno y arqueo de efectivo.
+6.  **Cuentas por Cobrar:** Módulo para gestionar los créditos y abonos de clientes.
+
+---
+
+## 🛠️ Instalación y Configuración
+
+### Requisitos Previos
+* PHP 8.2+
+* Node.js & NPM
+* MySQL
+
+### Pasos Rápidos
+1.  Clonar repositorio: `git clone ...`
+2.  Instalar dependencias PHP: `composer install`
+3.  Instalar dependencias JS: `npm install`
+4.  Configurar `.env` (Base de datos y `APP_LOCALE=es`).
+5.  Migrar BD: `php artisan migrate`
+6.  Compilar assets: `npm run dev`
+7.  **Importante:** Ejecutar `php artisan storage:link` para ver las imágenes.
+
+### Comandos Útiles
+* **Limpiar caché:** `php artisan optimize:clear`
+* **Publicar traducciones:** `php artisan lang:publish`

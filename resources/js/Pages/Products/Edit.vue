@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import Swal from 'sweetalert2';
 
 const props = defineProps({
     product: Object, // El producto a editar
@@ -64,41 +65,97 @@ const getColorsForMaterial = (materialName) => {
 };
 
 const addVariant = () => {
-    form.variants.push({id: null, material: '', color: '', stock: 0, sku: '', price_1: '', price_2: '', price_3: '', price_4: '', price_5: '' });
+    // CAMBIO: Inicializamos con 0 en lugar de ''
+    form.variants.push({
+        id: null, 
+        material: '', 
+        color: '', 
+        stock: 0, 
+        sku: '', 
+        price_1: 0, // <--- CERO
+        price_2: 0, 
+        price_3: 0, 
+        price_4: 0, 
+        price_5: 0 
+    });
 };
 
-const removeVariant = (index) => {
-    const variant = form.variants[index];
-
-    // CASO 1: Es una variante nueva (aún no se guarda en BD)
-    // No tiene ID o su ID es nulo. Solo la quitamos del array visual.
-    if (!variant.id) {
-        form.variants.splice(index, 1);
+const deleteVariant = (variantId, index) => {
+    // CASO A: La variante es nueva (aún no se guarda en BD, no tiene ID)
+    if (!variantId) {
+        form.variants.splice(index, 1); // Solo la quitamos de la lista visual
         return;
     }
 
-    // CASO 2: Es una variante real (ya existe en BD)
-    // Preguntamos antes de disparar la petición al servidor.
-    if (confirm(`¿Estás seguro de eliminar permanentemente la variante ${variant.material} - ${variant.color}?`)) {
-        
-        router.delete(route('variants.destroy', variant.id), {
-            preserveScroll: true,
-            onSuccess: () => {
-                // Si el servidor la borró con éxito, la quitamos de la lista visual
-                // Nota: Inertia usualmente recarga los props, pero esto hace que la UI se sienta instantánea
-                form.variants.splice(index, 1);
-            },
-            onError: (errors) => {
-                // Si falla (por ejemplo, porque ya tiene ventas), mostramos el error
-                if(errors.error) alert(errors.error);
-            }
-        });
-    }
+    // CASO B: La variante ya existe en BD (tiene ID) -> Necesita confirmación y petición al servidor
+    Swal.fire({
+        title: '¿Eliminar Variante?',
+        text: "Esta acción borrará la variante permanentemente.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Hacemos la petición DELETE a la ruta específica de variantes
+            router.delete(route('variants.destroy', variantId), {
+                preserveScroll: true, // Para que no te regrese al inicio de la página
+                onSuccess: () => {
+                    // Si el backend borró, la quitamos de la lista visualmente también
+                    form.variants.splice(index, 1); 
+                    
+                    Swal.fire('Eliminado', 'La variante ha sido eliminada.', 'success');
+                },
+                onError: (errors) => {
+                    // AQUÍ CAPTURAMOS EL MENSAJE DEL GUARDIA
+                    let msg = 'No se pudo eliminar.';
+                    if (errors.error) msg = errors.error;
+
+                    Swal.fire({
+                        title: 'Operación Bloqueada',
+                        text: msg,
+                        icon: 'error',
+                        confirmButtonColor: '#d33'
+                    });
+                }
+            });
+        }
+    });
 };
 
 const submit = () => {
-    // Enviamos a la ruta UPDATE
+    // LIMPIEZA FINAL: Recorremos todas las variantes antes de enviar
+    form.variants.forEach(variant => {
+        // Lista de campos numéricos a revisar
+        const numericFields = ['stock', 'price_1', 'price_2', 'price_3', 'price_4', 'price_5'];
+        
+        numericFields.forEach(field => {
+            let val = variant[field];
+            // Si es vacío, nulo o texto inválido, lo forzamos a 0
+            if (val === '' || val === null || isNaN(val)) {
+                variant[field] = 0;
+            }
+        });
+    });
+
+    // Ahora sí, enviamos
     router.post(route('products.update', props.product.id), form);
+};
+
+// Función para evitar campos vacíos en precios y stock
+const sanitizeNumber = (item, field) => {
+    // 1. Obtenemos el valor actual
+    let value = item[field];
+
+    // 2. Si está vacío, es null, indefinido o no es un número válido
+    if (value === '' || value === null || value === undefined || isNaN(value)) {
+        item[field] = 0; // Lo forzamos a CERO
+    } else {
+        // 3. Opcional: Asegurarnos que sea positivo (absoluto)
+        item[field] = Math.abs(parseFloat(value));
+    }
 };
 </script>
 
@@ -152,7 +209,7 @@ const submit = () => {
                             <h3 class="text-sm font-bold text-gray-700 uppercase mb-2">Variantes y Precios</h3>
                             
                             <div v-for="(variant, index) in form.variants" :key="index" class="bg-white border-2 border-gray-100 rounded-lg p-4 mb-4 shadow-sm relative hover:border-green-100">
-                                <button type="button" @click="removeVariant(index)" class="absolute top-2 right-2 text-red-400 hover:text-red-600" v-if="form.variants.length > 1">
+                                <button type="button" @click="deleteVariant(variant.id, index)" class="absolute top-2 right-2 text-red-400 hover:text-red-600" title="Eliminar variante" v-if="form.variants.length > 1">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                 </button>
 
@@ -171,7 +228,7 @@ const submit = () => {
                                     </div>
                                     <div>
                                         <label class="block text-xs font-bold text-gray-500">Stock</label>
-                                        <input v-model="variant.stock" type="number" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500">
+                                        <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500">
                                     </div>
                                      <div>
                                         <label class="block text-xs font-bold text-gray-500">SKU</label>
@@ -181,11 +238,11 @@ const submit = () => {
 
                                 <div class="bg-green-50 p-3 rounded-md">
                                     <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                        <div><span class="text-[10px] text-gray-500 font-bold">P1</span><input v-model="variant.price_1" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P2</span><input v-model="variant.price_2" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P3</span><input v-model="variant.price_3" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P4</span><input v-model="variant.price_4" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P5</span><input v-model="variant.price_5" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500 font-bold">P1</span><input v-model="variant.price_1" min="0" @blur="sanitizeNumber(variant, 'price_1')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P2</span><input v-model="variant.price_2" min="0" @blur="sanitizeNumber(variant, 'price_2')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P3</span><input v-model="variant.price_3" min="0" @blur="sanitizeNumber(variant, 'price_3')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P4</span><input v-model="variant.price_4" min="0" @blur="sanitizeNumber(variant, 'price_4')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P5</span><input v-model="variant.price_5" min="0" @blur="sanitizeNumber(variant, 'price_5')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
                                     </div>
                                 </div>
                             </div>

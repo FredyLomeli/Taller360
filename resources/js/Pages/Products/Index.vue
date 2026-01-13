@@ -6,6 +6,7 @@ import ProductCard from '@/Components/ProductCard.vue';
 import ClientAutocomplete from '@/Components/ClientAutocomplete.vue';
 import Modal from '@/Components/Modal.vue';
 import Swal from 'sweetalert2';
+import axios from 'axios';
 
 const props = defineProps({
     products: Array,
@@ -13,8 +14,81 @@ const props = defineProps({
     categories: Array
 });
 
+const clientList = ref([...props.clients]);
+
 const showImageModal = ref(false);
 const selectedProductForModal = ref(null);
+
+// === LÓGICA NUEVA PARA CLIENTE RÁPIDO ===
+const showClientModal = ref(false);
+const isCreatingClient = ref(false);
+
+const newClientForm = ref({
+    name: '',
+    business_name: '',
+    price_tier: 1,
+    email: '',
+    phones: '',
+    street_address: '',
+    neighborhood: '',
+    city: 'Tepatitlán', // Valor por defecto sugerido
+    state: 'Jalisco',
+    delegation: '',
+    zip_code: '',
+    references: ''
+});
+
+// Función para limpiar el formulario al abrir
+const openClientModal = () => {
+    newClientForm.value = { 
+        name: '', business_name: '', price_tier: 1, email: '', phones: '',
+        street_address: '', neighborhood: '', city: 'Tepatitlán', state: 'Jalisco',
+        delegation: '', zip_code: '', references: ''
+    };
+    showClientModal.value = true;
+};
+
+const saveNewClient = async () => {
+    if (!newClientForm.value.name) {
+        Swal.fire('Error', 'El nombre es obligatorio', 'error');
+        return;
+    }
+
+    isCreatingClient.value = true;
+
+    try {
+        // Hacemos POST a la ruta de clientes
+        const response = await axios.post(route('clients.store'), newClientForm.value, {
+            headers: { 'Accept': 'application/json' }
+        });
+
+        const newClient = response.data.client;
+        // Agregamos el nuevo cliente a la lista y lo seleccionamos
+        clientList.value.unshift(newClient);
+        // Lo seleccionamos automáticamente
+        selectedClient.value = newClient; 
+        
+        showClientModal.value = false;
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Cliente Creado',
+            text: `Listo para vender a: ${newClient.name}`,
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+    } catch (error) {
+        console.error(error);
+        let msg = "Error al guardar.";
+        if (error.response?.data?.errors) {
+            msg = Object.values(error.response.data.errors).flat().join('\n');
+        }
+        Swal.fire('Error', msg, 'error');
+    } finally {
+        isCreatingClient.value = false;
+    }
+};
 
 const openImageModal = (product) => {
     selectedProductForModal.value = product;
@@ -277,23 +351,38 @@ const sendSaleRequest = () => {
             <div class="flex-1 flex flex-col overflow-hidden">
                 
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 shrink-0">
-                    <div class="flex flex-col md:flex-row gap-4 items-start">
-                        
+                    
+                   <div class="flex flex-col md:flex-row gap-4 items-start mb-4">
+    
                         <div class="w-full md:w-1/2">
-                            <ClientAutocomplete 
-                                :clients="clients" 
-                                v-model="selectedClient" 
-                            />
+                            <div class="flex justify-between items-center mb-1 px-1">
+                                <label class="block text-xs font-bold text-gray-500 uppercase">Cliente</label>
+                                
+                                <button 
+                                    @click="openClientModal" 
+                                    class="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 transition-colors"
+                                >
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                    Nuevo Cliente
+                                </button>
+                            </div>
+
+                            <div class="relative w-full">
+                                <ClientAutocomplete 
+                                    :clients="clientList" 
+                                    v-model="selectedClient"
+                                />
+                            </div>
                         </div>
 
                         <div class="w-full md:w-1/2">
-                             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Buscar Producto (Nombre o SKU)</label>
-                             <div class="relative">
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1 px-1">Buscar Producto</label>
+                            <div class="relative">
                                 <input 
                                     v-model="searchProduct" 
                                     type="text" 
-                                    placeholder="Ej: Ropero, SKU-123..." 
-                                    class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-sm w-full"
+                                    placeholder="Nombre, SKU..." 
+                                    class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-sm w-full shadow-sm"
                                 >
                                 <svg class="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                                 <button v-if="searchProduct" @click="searchProduct = ''" class="absolute right-2 top-2 text-gray-400 hover:text-red-500">X</button>
@@ -322,7 +411,7 @@ const sendSaleRequest = () => {
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto pr-2 pb-20">
+                <div class="flex-1 overflow-y-auto pr-2 pb-4">
                     <div v-if="filteredProducts.length === 0" class="text-center py-20 text-gray-400">
                         <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         <p>No se encontraron productos con esos filtros.</p>
@@ -537,5 +626,100 @@ const sendSaleRequest = () => {
                 </div>
             </div>
         </div>
+
+        <Modal :show="showClientModal" @close="showClientModal = false">
+            <div class="bg-white rounded-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center shrink-0">
+                    <h3 class="text-lg font-bold text-gray-800">Registrar Cliente</h3>
+                    <button @click="showClientModal = false" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                </div>
+                
+                <div class="p-6 overflow-y-auto">
+                    
+                    <div class="mb-6">
+                        <h4 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 border-b border-blue-100 pb-1">Datos Principales</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Nombre Completo *</label>
+                                <input v-model="newClientForm.name" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Teléfonos</label>
+                                <input v-model="newClientForm.phones" type="text" placeholder="Ej: 378-123-4567" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Nivel de Precio *</label>
+                                <select v-model="newClientForm.price_tier" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <option :value="1">Precio 1</option>
+                                    <option :value="2">Precio 2</option>
+                                    <option :value="3">Precio 3</option>
+                                    <option :value="4">Precio 4</option>
+                                    <option :value="5">Precio 5</option>
+                                </select>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Razón Social (Opcional)</label>
+                                <input v-model="newClientForm.business_name" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 border-b border-blue-100 pb-1">Domicilio y Entrega</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Calle y Número</label>
+                                <input v-model="newClientForm.street_address" type="text" placeholder="Calle Hidalgo #123..." class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Colonia</label>
+                                <input v-model="newClientForm.neighborhood" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Delegación (Opcional)</label>
+                                <input v-model="newClientForm.delegation" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
+                                <input v-model="newClientForm.city" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Código Postal</label>
+                                <input v-model="newClientForm.zip_code" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Referencias de Ubicación</label>
+                                <textarea v-model="newClientForm.references" rows="2" placeholder="Casa color azul, frente al parque..." class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-gray-200 shrink-0">
+                    <button 
+                        @click="saveNewClient" 
+                        :disabled="isCreatingClient"
+                        class="inline-flex justify-center rounded-lg border border-transparent shadow-sm px-6 py-2 bg-blue-600 text-sm font-bold text-white hover:bg-blue-700 focus:outline-none disabled:opacity-50 transition-colors"
+                    >
+                        {{ isCreatingClient ? 'Guardando...' : 'Guardar Cliente' }}
+                    </button>
+                    <button 
+                        @click="showClientModal = false" 
+                        class="inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AuthenticatedLayout>
 </template>

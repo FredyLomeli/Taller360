@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\Product;
 use Inertia\Inertia;
+use App\Models\Product;
+use App\Models\Client;
 use App\Models\Category;
+use App\Models\SaleDetail;
+use App\Models\ProductVariant;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use App\Models\Client;
+
 
 class ProductController extends Controller
 {
@@ -161,38 +164,46 @@ class ProductController extends Controller
 
     public function destroy($id)
     {
-        $product = Product::findOrFail($id);
+        $product = Product::with('variants')->findOrFail($id);
 
-        // 1. Si tiene imagen, la borramos del disco duro
-        if ($product->image) {
-            Storage::disk('public')->delete($product->image);
+        // 1. REGLA DE ORO: Verificar si alguna variante ya se vendió
+        // Obtenemos los IDs de las variantes de este producto
+        $variantIds = $product->variants->pluck('id');
+
+        // Buscamos si existen en la tabla de ventas
+        $isUsedInSales = SaleDetail::whereIn('product_variant_id', $variantIds)->exists();
+
+        if ($isUsedInSales) {
+            // Si existe, DETENEMOS TODO y regresamos error
+            return back()->withErrors([
+                'error' => 'No se puede eliminar el producto "' . $product->name . '" porque forma parte de una o más ventas registradas en el historial.'
+            ]);
         }
 
-        // 2. Borramos el producto (Las variantes se borran solas por la cascada de BD)
+        // 2. Si no se ha vendido, procedemos al borrado seguro
+        // (Aquí sí aplica el borrado en cascada: Se borra Producto y sus Variantes)
         $product->delete();
 
-        // 3. Redirigimos atrás (generalmente al inventario)
-        return redirect()->back()->with('message', 'Producto eliminado correctamente');
+        return back()->with('success', 'Producto eliminado correctamente.');
     }
 
     public function destroyVariant($id)
     {
-        try {
-            // Buscamos la variante
-            $variant = \App\Models\ProductVariant::findOrFail($id);
+        $variant = ProductVariant::findOrFail($id);
 
-            // Intentamos borrar
-            $variant->delete();
+        // 1. EL GUARDIA: Verificar si esta variante específica se vendió
+        $isSold = SaleDetail::where('product_variant_id', $id)->exists();
 
-            // Si funciona, regresamos éxito (Inertia recargará la página automáticamente)
-            return redirect()->back()->with('success', 'Variante eliminada correctamente.');
-
-        } catch (\Illuminate\Database\QueryException $e) {
-            // Código 23000 suele ser violación de integridad (Foreign Key)
-            if ($e->getCode() == "23000") {
-                return redirect()->back()->withErrors(['error' => 'No se puede eliminar esta variante porque ya tiene VENTAS asociadas.']);
-            }
-            return redirect()->back()->withErrors(['error' => 'Ocurrió un error al intentar eliminar.']);
+        if ($isSold) {
+            // Importante: regresar con 'error' para que el frontend lo lea
+            return back()->withErrors([
+                'error' => 'No puedes eliminar esta variante ("' . $variant->color . ' - ' . $variant->material . '") porque ya se ha vendido en el pasado.'
+            ]);
         }
+
+        // 2. Borrar si está limpia
+        $variant->delete();
+
+        return back()->with('success', 'Variante eliminada.');
     }
 }

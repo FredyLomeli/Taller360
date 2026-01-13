@@ -51,9 +51,6 @@ onUnmounted(() => document.removeEventListener('click', closeOnClickOutside));
 
 <template>
     <div class="relative w-full" ref="inputRef">
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">
-            Cliente
-        </label>
         
         <div class="relative">
             <input 

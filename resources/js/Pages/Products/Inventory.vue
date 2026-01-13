@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import Swal from 'sweetalert2';
 
 const props = defineProps({
     products: Array
@@ -26,12 +27,47 @@ const getTotalStock = (variants) => {
     return variants.reduce((acc, variant) => acc + variant.stock, 0);
 };
 
+// Función para eliminar producto con confirmación bonita
 const deleteProduct = (product) => {
-    if (confirm(`¿Estás seguro de eliminar "${product.name}"? Esta acción no se puede deshacer.`)) {
-        router.delete(route('products.destroy', product.id), {
-            preserveScroll: true, // Para que no te mande al inicio de la página
-        });
-    }
+    Swal.fire({
+        title: '¿Eliminar Producto?',
+        text: `Estás a punto de eliminar "${product.name}". Esta acción no se puede deshacer.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33', // Rojo peligro
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Si confirma, ejecutamos la eliminación
+            router.delete(route('products.destroy', product.id), {
+                onSuccess: () => {
+                    Swal.fire(
+                        'Eliminado',
+                        'El producto ha sido eliminado correctamente.',
+                        'success'
+                    );
+                },
+                onError: (errors) => {
+                    // CAPTURAMOS EL MENSAJE DEL CONTROLADOR
+                    let mensaje = 'Ocurrió un error inesperado.';
+                    
+                    // Si el backend mandó un error llamado 'error' (como lo definimos en el controlador)
+                    if (errors.error) {
+                        mensaje = errors.error;
+                    }
+
+                    Swal.fire({
+                        title: 'No se puede eliminar',
+                        text: mensaje, // <--- Aquí mostramos la razón real
+                        icon: 'error',
+                        confirmButtonColor: '#d33'
+                    });
+                }
+            });
+        }
+    });
 };
 </script>
 

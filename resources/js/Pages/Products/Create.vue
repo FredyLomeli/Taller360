@@ -59,11 +59,17 @@ const getColorsForMaterial = (materialName) => {
     return materialColors[materialName] || [];
 };
 
-// --- FUNCIONES ---
 const addVariant = () => {
     form.variants.push({
-        material: '', color: '', stock: 0, sku: '', 
-        price_1: '', price_2: '', price_3: '', price_4: '', price_5: '' 
+        material: '', 
+        color: '', 
+        stock: 0,     // <--- CERO
+        sku: '', 
+        price_1: 0,   // <--- CERO
+        price_2: 0, 
+        price_3: 0, 
+        price_4: 0, 
+        price_5: 0 
     });
 };
 
@@ -74,7 +80,29 @@ const removeVariant = (index) => {
 };
 
 const submit = () => {
+    // LIMPIEZA DE SEGURIDAD
+    form.variants.forEach(variant => {
+        const numericFields = ['stock', 'price_1', 'price_2', 'price_3', 'price_4', 'price_5'];
+        
+        numericFields.forEach(field => {
+            let val = variant[field];
+            if (val === '' || val === null || isNaN(val)) {
+                variant[field] = 0;
+            }
+        });
+    });
+
+    // Enviamos
     form.post(route('products.store'));
+};
+
+const sanitizeNumber = (item, field) => {
+    let value = item[field];
+    if (value === '' || value === null || value === undefined || isNaN(value)) {
+        item[field] = 0;
+    } else {
+        item[field] = Math.abs(parseFloat(value));
+    }
 };
 </script>
 
@@ -171,7 +199,7 @@ const submit = () => {
 
                                     <div>
                                         <label class="block text-xs font-bold text-gray-500">Stock Inicial</label>
-                                        <input v-model="variant.stock" type="number" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500">
+                                        <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500">
                                     </div>
                                      <div>
                                         <label class="block text-xs font-bold text-gray-500">Código (SKU)</label>
@@ -183,23 +211,23 @@ const submit = () => {
                                     <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
                                         <div>
                                             <span class="text-[10px] text-gray-500 font-bold">Precio 1</span>
-                                            <input v-model="variant.price_1" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_1" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_1')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 2</span>
-                                            <input v-model="variant.price_2" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_2" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_2')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 3</span>
-                                            <input v-model="variant.price_3" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_3" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_3')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 4</span>
-                                            <input v-model="variant.price_4" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_4" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_4')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 5</span>
-                                            <input v-model="variant.price_5" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_5" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_5')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                     </div>
                                 </div>

@@ -15,16 +15,33 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class SaleController extends Controller
 {
-    public function index()
+
+    public function index(Request $request)
     {
-        // Traemos las ventas con sus relaciones: Cliente, Vendedor y Detalles
-        // Ordenamos por la más reciente primero (latest)
-        $sales = Sale::with(['client', 'user', 'details'])
-                    ->latest()
-                    ->paginate(10); // Paginamos de 10 en 10
+        // Iniciamos la consulta con las relaciones necesarias
+        $query = Sale::with(['client', 'user'])->latest();
+
+        // --- LÓGICA DEL BUSCADOR ---
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            
+            $query->where(function($q) use ($search) {
+                // 1. Buscar por ID exacto (Folio)
+                $q->where('id', 'like', "%$search%")
+                // 2. O buscar por nombre del cliente
+                ->orWhereHas('client', function($clientQ) use ($search) {
+                    $clientQ->where('name', 'like', "%$search%");
+                });
+            });
+        }
+        // ---------------------------
 
         return Inertia::render('Sales/Index', [
-            'sales' => $sales
+            // Mantenemos la paginación y adjuntamos el filtro para que no se pierda al cambiar de página
+            'sales' => $query->paginate(10)->withQueryString(),
+            
+            // Devolvemos el filtro actual para que el input no se borre al buscar
+            'filters' => $request->only(['search']),
         ]);
     }
 

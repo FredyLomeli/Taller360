@@ -1,12 +1,16 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router, Link } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import Swal from 'sweetalert2';
+import debounce from 'lodash/debounce';
 
 const props = defineProps({
-    sales: Object // Viene paginado
+    sales: Object,
+    filters: Object
 });
+
+const search = ref(props.filters.search || '');
 
 const sendingEmail = ref(false);
 
@@ -72,6 +76,18 @@ const cancelSale = (id) => {
         }
     });
 };
+
+// Usamos 'watch' para detectar cuando escriben
+watch(search, debounce((value) => {
+    router.get(
+        route('sales.index'), 
+        { search: value }, // Enviamos el parámetro
+        { 
+            preserveState: true, // No recargar toda la página
+            replace: true        // No llenar el historial del navegador
+        }
+    );
+}, 500)); // Espera 500ms a que deje de escribir para buscar
 </script>
 
 <template>
@@ -81,9 +97,21 @@ const cancelSale = (id) => {
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Historial de Ventas</h2>
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-xl font-bold text-gray-800">Historial de Ventas</h2>
+                    
+                    <div class="relative w-full md:w-96">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <input 
+                            v-model="search" 
+                            type="text" 
+                            class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-green-500 focus:ring-green-500 sm:text-sm transition duration-150 ease-in-out" 
+                            placeholder="Buscar por Folio o Cliente..." 
+                        />
                     </div>
+                </div>
 
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                     <table class="w-full text-sm text-left text-gray-500">

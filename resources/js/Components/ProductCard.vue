@@ -1,6 +1,22 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 
+const colorMap = {
+    'Chocolate': '#5D4037', // Café oscuro
+    'Nogal': '#8D6E63',     // Café medio
+    'Blanco': '#FFFFFF',
+    'Gris': '#9E9E9E',
+    'Gris cenizo': '#B0BEC5',
+    'Cherry': '#880E4F',    // Rojo oscuro
+    'Tabaco': '#4E342E',
+    'Caoba': '#3E2723',
+    'Negro': '#000000',
+    'Tzalam': '#A1887F',
+    'Parota': '#795548',
+    // Default si no encuentra el color
+    'default': '#E0E0E0' 
+};
+
 const props = defineProps({
     product: Object,
     priceTier: Number // Recibimos el nivel del cliente (1, 2, 3...)
@@ -80,6 +96,11 @@ onMounted(() => {
         selectVariant(cheapest);
     }
 });
+
+// Función para obtener el código hex
+const getColorHex = (colorName) => {
+    return colorMap[colorName] || colorMap['default'];
+};
 </script>
 
 <template>
@@ -108,8 +129,13 @@ onMounted(() => {
                         v-for="variant in availableVariantsForMaterial" 
                         :key="variant.id" 
                         @click="selectVariant(variant)" 
-                        :class="{'ring-2 ring-offset-1 ring-green-500 scale-110': selectedVariant?.id === variant.id}" 
-                        class="w-6 h-6 rounded-full border border-gray-300 bg-gray-500 transition-transform"
+                        :class="{
+                            'ring-2 ring-offset-1 ring-green-500 scale-110': selectedVariant?.id === variant.id,
+                            'border-gray-300': true 
+                        }"
+                        :style="{ backgroundColor: getColorHex(variant.color) }" 
+                        :title="variant.color"
+                        class="w-6 h-6 rounded-full border transition-transform shadow-sm"
                     ></button>
                     <span class="text-xs text-gray-500 ml-2 font-medium">
                         {{ selectedVariant?.color }}
