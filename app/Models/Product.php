@@ -2,11 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model
 {
-    protected $fillable = ['category_id', 'name', 'measurements', 'description', 'image'];
+    use HasFactory;
+    
+    protected $fillable = [
+        'category_id', 
+        'name', 
+        'measurements', 
+        'description', 
+        'image', 
+        'description'
+];
 
     public function category()
     {

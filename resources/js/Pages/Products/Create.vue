@@ -145,6 +145,16 @@ const sanitizeNumber = (item, field) => {
                                 </div>
                             </div>
                             <div class="md:col-span-3 mt-4">
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Descripción Detallada</label>
+                                <textarea 
+                                    v-model="form.description" 
+                                    rows="3" 
+                                    class="w-full rounded-lg border-gray-300 focus:border-green-500 focus:ring-green-500 shadow-sm"
+                                    placeholder="Ej: Incluye correderas telescópicas, garantía de 1 año..."
+                                ></textarea>
+                                <div v-if="form.errors.description" class="text-red-500 text-sm mt-1">{{ form.errors.description }}</div>
+                            </div>
+                            <div class="md:col-span-3 mt-4">
                                 <label class="block font-medium text-sm text-gray-700">Fotografía del Producto</label>
                                 <input 
                                     type="file" 
@@ -211,23 +221,23 @@ const sanitizeNumber = (item, field) => {
                                     <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
                                         <div>
                                             <span class="text-[10px] text-gray-500 font-bold">Precio 1</span>
-                                            <input v-model="variant.price_1" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_1')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_1" lang="en" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_1')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 2</span>
-                                            <input v-model="variant.price_2" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_2')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_2" lang="en" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_2')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 3</span>
-                                            <input v-model="variant.price_3" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_3')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_3" lang="en" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_3')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 4</span>
-                                            <input v-model="variant.price_4" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_4')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_4" lang="en" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_4')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                         <div>
                                             <span class="text-[10px] text-gray-500">Precio 5</span>
-                                            <input v-model="variant.price_5" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_5')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
+                                            <input v-model="variant.price_5" lang="en" type="number"  min="0" @blur="sanitizeNumber(variant, 'price_5')"  step="0.01" class="w-full text-sm border-gray-300 rounded-md focus:border-green-500 focus:ring-green-500" placeholder="$">
                                         </div>
                                     </div>
                                 </div>

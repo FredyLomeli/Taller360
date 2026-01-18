@@ -1,75 +1,100 @@
 # 🧠 CONTEXTO TÉCNICO - TALLER 360 (POS SYSTEM)
-**Fecha de actualización:** 14 Enero 2026
-**Repositorio:** https://github.com/FredyLomeli/Taller360
+**Versión:** 1.0 (Full Context)
+**Fecha de actualización:** 17 Enero 2026
+**Repositorio:** `https://github.com/FredyLomeli/Taller360`
 
 ## 1. 🛠 Stack Tecnológico
-* **Backend:** Laravel 12 (PHP 8.2+)
-* **Frontend:** Vue 3 (Composition API `<script setup>`)
-* **Adaptador:** Inertia.js (SPA Monolítico)
-* **Estilos:** Tailwind CSS
-* **Librerías Clave:**
-    * `sweetalert2`: Alertas UI.
-    * `lodash`: Función `debounce` para búsqueda.
-    * `laravel-lang/common`: Idioma Español.
+* **Backend:** Laravel 12 (PHP 8.2+).
+* **Frontend:** Vue 3 (Composition API `<script setup>`) + Inertia.js.
+* **Estilos:** Tailwind CSS.
+* **Base de Datos:** MySQL / MariaDB (InnoDB).
+* **Testing:** Pest PHP.
+* **Librerías:** `dompdf`, `sweetalert2`, `lodash`, `laravel-lang`.
 
-## 2. 🗄️ Esquema de Base de Datos (Schema)
+---
 
-### Tabla: `product_variants` (Inventario Real)
-* **Relación:** `product_id` (Padre) -> `onDelete('cascade')`.
-* **Identificadores:** `sku` (nullable), `material`, `color`.
-* **Precios (Multi-nivel):**
-    * `price_1` (decimal 10,2) - Precio Público.
-    * `price_2` a `price_5` (decimal 10,2 nullable) - Mayoreo/Distribuidor.
-* **Inventario:** `stock` (integer, default 0).
+## 2. 🗄️ Estructura de Base de Datos (Schema Exacto)
 
-### Tabla: `sales` (Cabecera de Venta)
-* **Actores:** `user_id` (Vendedor), `client_id` (Cliente, nullable).
-* **Financiero:**
-    * `total` (decimal).
-    * `paid_amount` (Cuánto pagó, útil para cambio/abonos).
-    * `change_amount` (Cambio entregado).
-* **Estado:**
-    * `payment_method`: 'Efectivo', 'Tarjeta', 'Transferencia' (default 'Efectivo').
-    * `status`: 'pagado', 'pendiente', 'cancelado' (default 'pagado').
+Esta referencia es la **única** autorizada para consultas SQL/Eloquent.
 
-### Tabla: `sale_details` (Detalle de Venta)
-* **Relación:** `sale_id`, `product_variant_id`.
-* **Snapshot (Histórico):**
-    * `product_name`: Se guarda texto fijo por si se borra el catálogo.
-    * `quantity`: Cantidad vendida.
-    * `unit_price`: Precio al momento de la venta.
-    * `subtotal`: (quantity * unit_price).
-    * `discount_percent`: % de descuento aplicado (default 0).
+### 👤 Usuarios y Clientes
+* **`users`**: `id`, `name`, `email` (unique), `password`, `role` ('admin'|'vendedor'), `email_verified_at`, timestamps.
+* **`clients`**: `id`, `name`, `email` (unique), `phone`, `address`, `price_tier` (int 1-5), timestamps.
 
-### Tabla: `clients`
-* `name`, `business_name`, `price_tier` (int 1-5), `phones`.
+### 📦 Inventario
+* **`categories`**: `id`, `name`, timestamps.
+* **`products`**: `id`, `category_id` (FK), `name`, `description`, `image_url`, timestamps.
+* **`product_variants`**:
+    * `id`, `product_id` (FK -> cascade).
+    * `sku` (string, nullable), `material` (string), `color` (string).
+    * `stock` (int).
+    * `price_1` (decimal 10,2 - Público).
+    * `price_2`, `price_3`, `price_4`, `price_5` (decimal 10,2 - Mayoreo).
 
-## 3. 🚦 Reglas de Negocio (Backend)
+### 💰 Ventas
+* **`sales`**:
+    * `id`, `user_id` (FK), `client_id` (FK).
+    * `total` (decimal 10,2).
+    * `paid_amount` (decimal 10,2) -> *Lo que realmente entró a caja*.
+    * `change_amount` (decimal 10,2).
+    * `payment_method` (string: 'Efectivo', 'Tarjeta', etc).
+    * `status` (enum: 'pagado', 'pendiente', 'cancelado').
+    * `created_at` (Usado para filtros de fecha).
+* **`sale_details`**:
+    * `id`, `sale_id` (FK).
+    * `product_variant_id` (FK).
+    * `product_name` (string Snapshot), `quantity` (int).
+    * `unit_price` (decimal 10,2), `subtotal` (decimal 10,2).
+    * `discount_percent` (int).
 
-1.  **Guardia de Eliminación (Integridad Referencial):**
-    * En `ProductController` y `ClientController`.
-    * **Regla:** Antes de borrar, verificar existencia en `sale_details` o `sales`.
-    * **Acción:** Si existe historial, retornar error `back()->withErrors(...)`. NO BORRAR.
+### ⚙️ Configuración
+* **`settings`**: `key` (string, unique), `value` (text).
+    * Keys actuales: `'allow_negative_stock'`, `'company_name'`, `'company_logo'`.
 
-2.  **Buscador Historial (SaleController):**
-    * Filtra dinámicamente por `id` (Folio) O `client.name`.
-    * Paginación activa (`paginate(10)`).
+---
 
-## 4. 🖥️ Lógica de Interfaz (Frontend)
+## 3. 🚦 Reglas de Negocio Blindadas (Backend)
 
-1.  **Sanitización de Inputs (Precios/Stock):**
-    * **Ubicación:** `Products/Create.vue` y `Edit.vue`.
-    * **Lógica:** Al evento `@blur` y `submit`, cualquier valor vacío/inválido en precios o stock se convierte automáticamente a `0`. Evita error SQL `General error: 1366 Incorrect decimal value`.
+### 🛡️ Seguridad y Roles
+1.  **Admin (`role: admin`):** Acceso total. Middleware `IsAdmin`.
+2.  **Vendedor (`role: vendedor`):**
+    * Solo accede a POS (`/pos`), Clientes y su Historial (`/sales`).
+    * **Restricción Dura:** El Dashboard filtra datos sensibles (`sellersStats`, `income` global) a `null` si el rol no es Admin.
 
-2.  **Buscador Asíncrono (AJAX):**
-    * **Ubicación:** `Sales/Index.vue`.
-    * **Lógica:** Uso de `watch` + `lodash/debounce` (500ms) para filtrar sin recargar página.
+### 💰 Flujo de Venta (SalesController)
+1.  **Stock Negativo:** Antes de guardar, se verifica `Setting::get('allow_negative_stock')`. Si es `0` y falta stock, lanza Excepción.
+2.  **Transacciones:** `Sale` + `SaleDetail` + `Decremento de Stock` ocurren en una transacción atómica.
+3.  **Upsert:** Al editar productos, variantes omitidas se borran (soft-logic: solo si no tienen ventas, de lo contrario error de integridad).
 
-3.  **Visualización de Colores:**
-    * `ProductCard.vue` mapea nombres de color ("Chocolate") a Hex (`#5D4037`).
+---
 
-## 5. 📍 Hoja de Ruta (Pendientes)
+## 4. 🧪 Estrategia de Testing (Suite de 32 Pruebas)
+* **Comando:** `php artisan test`
+* **Cobertura Actual:**
+    * ✅ **Auth:** Roles y redirecciones.
+    * ✅ **Sales:** Cálculo de totales, stock y cambio.
+    * ✅ **Dashboard:** Visibilidad de datos por rol y filtros de fecha.
+    * ✅ **Settings:** Cambio de configuración impacta lógica de venta.
 
-1.  **Optimización Buscadores POS:** Migrar carga de Productos/Clientes de `all()` a búsqueda por servidor (AJAX) para evitar lentitud con muchos registros.
-2.  **Selector Paginación:** UI para elegir "Ver 50 registros".
-3.  **Dashboard:** Implementar KPIs.
+---
+
+## 5. 🖥️ Lógica de Frontend (Performance)
+* **Carga Inicial:** Productos y Clientes se cargan completos en el POS. Filtrado local (JS).
+* **Búsqueda AJAX:** Historial de ventas usa `lodash/debounce` para buscar en servidor.
+* **Formato:** Inputs numéricos usan `lang="en"` para evitar errores de decimales.
+
+---
+
+## 6. 📍 Hoja de Ruta (Backlog Priorizado)
+
+### FASE 1: Operatividad Crítica (Próximos Pasos)
+1.  **🖨️ Impresión Térmica (Ticket 80mm):**
+    * Conectar vista HTML existente al botón de impresión en `Sales/Index.vue` y al finalizar venta.
+2.  **📦 Ajuste de Inventario:**
+    * Crear módulo "Movimientos" para Entradas (Compras) y Salidas (Mermas) manuales con motivo obligatorio.
+3.  **💰 Corte de Caja:**
+    * Comparar `Suma(paid_amount)` vs `Efectivo Reportado` por usuario.
+
+### FASE 2: Administración
+4.  **📈 Reportes Excel:** Exportación basada en filtros del Dashboard.
+5.  **💳 Facturación (CFDI 4.0):** Generación de XML para México.

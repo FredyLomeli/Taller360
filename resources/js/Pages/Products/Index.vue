@@ -38,6 +38,8 @@ const newClientForm = ref({
     references: ''
 });
 
+const formErrors = ref({});
+
 // Función para limpiar el formulario al abrir
 const openClientModal = () => {
     newClientForm.value = { 
@@ -45,46 +47,59 @@ const openClientModal = () => {
         street_address: '', neighborhood: '', city: 'Tepatitlán', state: 'Jalisco',
         delegation: '', zip_code: '', references: ''
     };
+    formErrors.value = {};
     showClientModal.value = true;
 };
 
 const saveNewClient = async () => {
+    // 1. Limpiamos errores previos y validamos localmente lo básico
+    formErrors.value = {}; 
+    
     if (!newClientForm.value.name) {
-        Swal.fire('Error', 'El nombre es obligatorio', 'error');
-        return;
+        formErrors.value.name = "El nombre es obligatorio"; // Error manual
+        return; // Detenemos
     }
 
     isCreatingClient.value = true;
 
     try {
-        // Hacemos POST a la ruta de clientes
         const response = await axios.post(route('clients.store'), newClientForm.value, {
             headers: { 'Accept': 'application/json' }
         });
 
         const newClient = response.data.client;
-        // Agregamos el nuevo cliente a la lista y lo seleccionamos
-        clientList.value.unshift(newClient);
-        // Lo seleccionamos automáticamente
-        selectedClient.value = newClient; 
         
+        // ÉXITO
+        clientList.value.unshift(newClient);
+        selectedClient.value = newClient; 
         showClientModal.value = false;
 
+        // Limpiamos formulario y errores
+        openClientModal(); // Opcional: para resetear valores
+        
         Swal.fire({
             icon: 'success',
             title: 'Cliente Creado',
-            text: `Listo para vender a: ${newClient.name}`,
-            timer: 1500,
-            showConfirmButton: false
+            toast: true, // Hacemos que sea una notificación pequeña
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000
         });
 
     } catch (error) {
-        console.error(error);
-        let msg = "Error al guardar.";
-        if (error.response?.data?.errors) {
-            msg = Object.values(error.response.data.errors).flat().join('\n');
+        // ERROR: Aquí capturamos las validaciones de Laravel (Código 422)
+        if (error.response && error.response.status === 422) {
+            // Laravel devuelve: { errors: { email: ["El email ya existe"], name: [...] } }
+            // Mapeamos para obtener el primer mensaje de cada campo
+            const backendErrors = error.response.data.errors;
+            for (const key in backendErrors) {
+                formErrors.value[key] = backendErrors[key][0];
+            }
+        } else {
+            // Error grave (Servidor, Conexión)
+            console.error(error);
+            Swal.fire('Error', 'Ocurrió un error inesperado en el servidor.', 'error');
         }
-        Swal.fire('Error', msg, 'error');
     } finally {
         isCreatingClient.value = false;
     }
@@ -346,7 +361,7 @@ const sendSaleRequest = () => {
     <Head title="Venta" />
 
     <AuthenticatedLayout>
-        <div class="p-4 flex flex-col lg:flex-row gap-4 overflow-hidden" style="height: calc(100vh - 5rem);">
+        <div class="flex flex-col lg:flex-row gap-4 h-[calc(100vh-0px)] overflow-hidden p-2">
             
             <div class="flex-1 flex flex-col overflow-hidden">
                 
@@ -640,8 +655,14 @@ const sendSaleRequest = () => {
                         <h4 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 border-b border-blue-100 pb-1">Datos Principales</h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="md:col-span-2">
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Nombre Completo *</label>
-                                <input v-model="newClientForm.name" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Nombre Completo <span class="text-red-500">*</span></label>
+                                <input 
+                                    v-model="newClientForm.name" 
+                                    type="text" 
+                                    class="w-full rounded-md shadow-sm text-sm"
+                                    :class="formErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'"
+                                >
+                                <p v-if="formErrors.name" class="text-red-600 text-xs mt-1 font-bold">{{ formErrors.name }}</p>
                             </div>
 
                             <div>
@@ -663,6 +684,23 @@ const sendSaleRequest = () => {
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-medium text-gray-600 mb-1">Razón Social (Opcional)</label>
                                 <input v-model="newClientForm.business_name" type="text" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">
+                                    Correo Electrónico <span class="text-red-500">*</span>
+                                </label>
+                                <input 
+                                    type="email" 
+                                    v-model="newClientForm.email"
+                                    class="block w-full rounded-md shadow-sm sm:text-sm"
+                                    :class="formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-green-500 focus:ring-green-500'"
+                                    placeholder="cliente@ejemplo.com"
+                                    required
+                                >
+                                <p v-if="formErrors.email" class="text-red-600 text-xs mt-1 font-bold">
+                                    ⚠ {{ formErrors.email }}
+                                </p>
                             </div>
                         </div>
                     </div>

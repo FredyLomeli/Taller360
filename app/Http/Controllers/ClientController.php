@@ -30,7 +30,7 @@ class ClientController extends Controller
             'name' => 'required|string|max:255',
             'business_name' => 'nullable|string|max:255',
             'price_tier' => 'required|integer|min:1|max:5', 
-            'email' => 'nullable|email|max:255',
+            'email' => 'required|email|unique:clients,email|max:255',
             'phones' => 'nullable|string|max:50',           
             'street_address' => 'nullable|string|max:255',  
             'neighborhood' => 'nullable|string|max:255',    

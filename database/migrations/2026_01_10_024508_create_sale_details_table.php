@@ -22,6 +22,7 @@ return new class extends Migration
             // Guardamos el nombre del producto por si luego lo borran del catálogo
             $table->string('product_name'); 
             $table->integer('quantity');
+            $table->integer('discount_percent')->default(0);
             $table->decimal('unit_price', 10, 2);
             $table->decimal('subtotal', 10, 2);
             

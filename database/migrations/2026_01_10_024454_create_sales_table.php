@@ -17,8 +17,11 @@ return new class extends Migration
             $table->foreignId('client_id')->nullable()->constrained(); // Cliente (Puede ser nulo si es venta rápida)
             
             $table->decimal('total', 10, 2);
+            $table->decimal('paid_amount', 10, 2)->default(0);
+            $table->decimal('change_amount', 10, 2)->default(0);
             $table->string('payment_method')->default('Efectivo'); // Efectivo, Tarjeta, Transferencia
             $table->string('status')->default('pagado'); // pagado, pendiente, cancelado
+            // Columna para cambio (opcional, pero útil para historial)
             
             $table->timestamps();
         });

@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue'; 
 import Swal from 'sweetalert2';
 
 const props = defineProps({
@@ -9,7 +9,11 @@ const props = defineProps({
 })
 const search = ref('');
 
-// Filtro simple (Igual que en productos)
+// --- PAGINACIÓN LOCAL ---
+const itemsPerPage = ref(10);
+const currentPage = ref(1);
+
+// Filtro
 const filteredClients = computed(() => {
     if (!search.value) return props.clients;
     const term = search.value.toLowerCase();
@@ -20,11 +24,28 @@ const filteredClients = computed(() => {
     );
 });
 
-// --- FUNCIÓN DE ELIMINAR CON SWEETALERT ---
+// Resetear página al buscar o cambiar limite
+watch([search, itemsPerPage], () => {
+    currentPage.value = 1;
+});
+
+// Datos Paginados
+const paginatedClients = computed(() => {
+    const start = (currentPage.value - 1) * itemsPerPage.value;
+    const end = start + itemsPerPage.value;
+    return filteredClients.value.slice(start, end);
+});
+
+const totalPages = computed(() => Math.ceil(filteredClients.value.length / itemsPerPage.value));
+
+const nextPage = () => { if (currentPage.value < totalPages.value) currentPage.value++; };
+const prevPage = () => { if (currentPage.value > 1) currentPage.value--; };
+
+// --- DELETE FUNCTION ---
 const deleteClient = (client) => {
     Swal.fire({
         title: '¿Eliminar Cliente?',
-        text: `Vas a eliminar a "${client.name}". Esta acción es irreversible.`,
+        text: `Vas a eliminar a "${client.name}".`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
@@ -35,24 +56,10 @@ const deleteClient = (client) => {
         if (result.isConfirmed) {
             router.delete(route('clients.destroy', client.id), {
                 preserveScroll: true,
-                onSuccess: () => {
-                    Swal.fire(
-                        'Eliminado',
-                        'El cliente ha sido eliminado correctamente.',
-                        'success'
-                    );
-                },
+                onSuccess: () => Swal.fire('Eliminado', 'Cliente eliminado.', 'success'),
                 onError: (errors) => {
-                    // CAPTURAMOS EL MENSAJE DEL GUARDIA
-                    let msg = 'No se pudo eliminar.';
-                    if (errors.error) msg = errors.error;
-
-                    Swal.fire({
-                        title: 'No se puede eliminar',
-                        text: msg,
-                        icon: 'error',
-                        confirmButtonColor: '#d33'
-                    });
+                    let msg = errors.error || 'No se pudo eliminar.';
+                    Swal.fire({ title: 'Error', text: msg, icon: 'error', confirmButtonColor: '#d33' });
                 }
             });
         }
@@ -65,12 +72,22 @@ const deleteClient = (client) => {
     <AuthenticatedLayout>
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                <div class="flex justify-between items-center mb-6">
+                
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                     <h2 class="text-2xl font-bold text-gray-800">Cartera de Clientes</h2>
-                    <div class="flex gap-2">
-                        <input v-model="search" type="text" placeholder="Buscar cliente..." class="border rounded-lg px-4 py-2">
-                        <Link :href="route('clients.create')" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">
-                            + Nuevo Cliente
+                    
+                    <div class="flex flex-wrap gap-2 w-full md:w-auto items-center">
+                        <select v-model="itemsPerPage" class="border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 cursor-pointer">
+                            <option :value="10">10</option>
+                            <option :value="25">25</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                        </select>
+
+                        <input v-model="search" type="text" placeholder="Buscar cliente..." class="border rounded-lg px-4 py-2 w-full md:w-64">
+                        
+                        <Link :href="route('clients.create')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow transition">
+                            + Nuevo
                         </Link>
                     </div>
                 </div>
@@ -87,7 +104,7 @@ const deleteClient = (client) => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="client in filteredClients" :key="client.id" class="border-b hover:bg-gray-50">
+                            <tr v-for="client in paginatedClients" :key="client.id" class="border-b hover:bg-gray-50 transition">
                                 <td class="px-6 py-4">
                                     <div class="font-bold text-gray-900">{{ client.name }}</div>
                                     <div class="text-xs">{{ client.business_name }}</div>
@@ -109,8 +126,23 @@ const deleteClient = (client) => {
                                     <button @click="deleteClient(client)" class="text-red-600 hover:underline">Borrar</button>
                                 </td>
                             </tr>
+                            <tr v-if="filteredClients.length === 0">
+                                <td colspan="5" class="px-6 py-8 text-center text-gray-400">No hay clientes registrados.</td>
+                            </tr>
                         </tbody>
                     </table>
+
+                    <div v-if="filteredClients.length > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <span class="text-xs text-gray-500">
+                            {{ (currentPage - 1) * itemsPerPage + 1 }} - {{ Math.min(currentPage * itemsPerPage, filteredClients.length) }} de {{ filteredClients.length }}
+                        </span>
+                        
+                        <div class="flex items-center gap-2">
+                            <button @click="prevPage" :disabled="currentPage === 1" class="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-100 disabled:opacity-50">Ant.</button>
+                            <span class="text-xs font-bold">{{ currentPage }} / {{ totalPages }}</span>
+                            <button @click="nextPage" :disabled="currentPage === totalPages" class="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-100 disabled:opacity-50">Sig.</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

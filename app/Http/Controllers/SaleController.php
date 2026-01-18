@@ -34,7 +34,6 @@ class SaleController extends Controller
                 });
             });
         }
-        // ---------------------------
 
         return Inertia::render('Sales/Index', [
             // Mantenemos la paginación y adjuntamos el filtro para que no se pierda al cambiar de página
@@ -58,13 +57,17 @@ class SaleController extends Controller
         try {
             DB::transaction(function () use ($request) {
                 
-                // 1. Calcular totales
+                //  Calcular totales
                 $totalVenta = 0;
-                // ... (tu lógica del foreach para calcular total y descontar stock sigue IGUAL aquí) ...
-                // (Voy a resumir esta parte para no repetir código, pero mantén tu foreach de stock aquí)
                 foreach ($request->cart as $item) {
                     $variant = ProductVariant::lockForUpdate()->find($item['variant_id']);
-                    if ($variant->stock < $item['quantity']) throw new \Exception("Stock insuficiente: {$item['product_name']}");
+                // Buscamos la configuración (Si no existe, asumimos 0/Falso por seguridad)
+                $permitirStockNegativo = Setting::where('key', 'allow_negative_stock')->value('value');
+
+                // Solo lanzamos error SI falta stock Y ADEMÁS NO está permitido el negativo
+                if ($variant->stock < $item['quantity'] && !$permitirStockNegativo) {
+                    throw new \Exception("Stock insuficiente: {$item['product_name']}");
+                }
                     
                     // Usamos el precio FINAL que viene del frontend (ya con descuento aplicado)
                     $precioFinal = $item['price']; 
@@ -74,11 +77,11 @@ class SaleController extends Controller
                     $variant->decrement('stock', $item['quantity']);
                 }
 
-                // 2. Determinar Estado (Pagado o Pendiente/Crédito)
+                // Determinar Estado (Pagado o Pendiente/Crédito)
                 // Si lo recibido es mayor o igual al total, está PAGADO. Si no, es PENDIENTE (Abono).
                 $status = ($request->amount_received >= $totalVenta) ? 'pagado' : 'pendiente';
 
-                // 3. Crear Venta
+                // Crear Venta
                 $sale = Sale::create([
                     'user_id' => Auth::id(),
                     'client_id' => $request->client_id,
@@ -89,7 +92,7 @@ class SaleController extends Controller
                     'change_amount' => max(0, $request->amount_received - $totalVenta) // El cambio entregado
                 ]);
 
-                // 4. Guardar Detalles
+                // Guardar Detalles
                 foreach ($request->cart as $item) {
                     $sale->details()->create([
                         'product_variant_id' => $item['variant_id'],
@@ -112,20 +115,30 @@ class SaleController extends Controller
         }
     }
 
-    // Generar PDF del Ticket
     public function printTicket($id)
     {
         $sale = Sale::with(['details', 'client', 'user'])->findOrFail($id);
         
-        // Cargamos la vista que creamos y le pasamos la venta
-        $pdf = Pdf::loadView('pdf.ticket', compact('sale'));
+        // 1. Obtenemos configuración real de la BD
+        $settings = \App\Models\Setting::all()->pluck('value', 'key');
         
-        // Configuramos el tamaño del papel (ticket térmico aprox 80mm de ancho)
-        // array(0, 0, 226.77, 800) -> 80mm ancho x Alto dinámico (suficiente)
-        $pdf->setPaper([0, 0, 227, 800], 'portrait');
+        // 2. Preparamos los datos de la empresa para la vista
+        $company = [
+            'name' => $settings['company_name'] ?? 'POS SYSTEM',
+            'address' => $settings['company_address'] ?? 'Dirección no configurada',
+            'rfc' => $settings['company_rfc'] ?? 'XAXX010101000',
+            'phone' => $settings['company_phone'] ?? '',
+            'footer_text' => $settings['ticket_footer_text'] ?? '¡Gracias por su preferencia!',
+        ];
 
-        // stream() muestra el PDF en el navegador
-        // download() lo baja directamente
+        // 3. Pasamos tanto la venta ($sale) como la empresa ($company)
+        $pdf = Pdf::loadView('pdf.ticket', compact('sale', 'company'));
+        
+        // 80mm ancho x Alto dinámico
+        $pdf->setPaper([0, 0, 227, 800], 'portrait');
+        // 58mm ancho x Alto dinámico
+        //$pdf->setPaper([0, 0, 164, 800], 'portrait');
+
         return $pdf->stream('ticket-'.$sale->id.'.pdf');
     }
 

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 const showingProductMenu = ref(false);
 const showingClientMenu = ref(false);
+const showingUsersMenu = ref(false);
 
 // Control para el menú lateral móvil
 const showingNavigationDropdown = ref(false);
@@ -16,6 +17,7 @@ const toggleSidebar = () => {
     if (!isSidebarOpen.value) {
         showingProductMenu.value = false;
         showingClientMenu.value = false;
+        showingUsersMenu.value = false;
     }
 };
 </script>
@@ -64,9 +66,9 @@ const toggleSidebar = () => {
                     <span v-show="isSidebarOpen" class="ml-3">Reporte de Ventas</span>
                 </Link>
 
-                <Link :href="route('products.index')" 
+                <Link :href="route('sales.create')" 
                       class="flex items-center px-3 py-3 rounded-lg transition-colors whitespace-nowrap mb-4"
-                      :class="{'bg-green-600 text-white shadow-lg': route().current('products.index'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('products.index')}"
+                      :class="{'bg-green-600 text-white shadow-lg': route().current('sales.create'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('sales.create')}"
                       title="Punto de Venta"
                 >
                     <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
@@ -108,6 +110,24 @@ const toggleSidebar = () => {
                     <div v-show="showingClientMenu && isSidebarOpen" class="pl-10 pr-2 space-y-1 mt-1 bg-green-900/50 py-2 rounded-lg">
                         <Link :href="route('clients.index')" :class="{'text-white font-bold bg-green-700': route().current('clients.index')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Listado</Link>
                         <Link :href="route('clients.create')" :class="{'text-white font-bold bg-green-700': route().current('clients.create')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Nuevo Cliente</Link>
+                    </div>
+                </div>
+
+                <div>
+                    <button @click="isSidebarOpen ? showingUsersMenu = !showingUsersMenu : toggleSidebar()" 
+                            class="flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-green-100 hover:bg-green-800 hover:text-white whitespace-nowrap"
+                            :class="{'bg-green-800': showingUsersMenu && isSidebarOpen}"
+                            title="Usuarios">
+                        <div class="flex items-center">
+                            <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0c0 .884-.5 2-2 2h4c-1.5 0-2-1.116-2-2z"></path></svg>
+                            <span v-show="isSidebarOpen" class="ml-3">Usuarios</span>
+                        </div>
+                        <svg v-show="isSidebarOpen" class="w-4 h-4 transition-transform duration-200" :class="{'rotate-180': showingUsersMenu}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+
+                    <div v-show="showingUsersMenu && isSidebarOpen" class="pl-10 pr-2 space-y-1 mt-1 bg-green-900/50 py-2 rounded-lg">
+                        <Link :href="route('users.index')" :class="{'text-white font-bold bg-green-700': route().current('users.index')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Listado</Link>
+                        <Link :href="route('users.create')" :class="{'text-white font-bold bg-green-700': route().current('users.create')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Nuevo Usuario</Link>
                     </div>
                 </div>
 

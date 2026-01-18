@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Sale extends Model
 {
@@ -28,9 +29,10 @@ class Sale extends Model
     public function client() {
         return $this->belongsTo(Client::class);
     }
-    
-    // Una venta la hizo un usuario
-    public function user() {
+
+    // Relación: Una venta pertenece a un usuario (vendedor)
+    public function user(): BelongsTo
+    {
         return $this->belongsTo(User::class);
     }
 }

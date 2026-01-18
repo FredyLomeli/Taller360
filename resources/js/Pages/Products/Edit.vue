@@ -5,35 +5,41 @@ import { computed } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    product: Object, // El producto a editar
+    product: Object, 
     categories: Array
 });
 
-// --- REGLAS DE NEGOCIO (Las mismas de Create.vue) ---
+// --- 1. REGLAS DE NEGOCIO (AJUSTADAS A LA BASE DE DATOS) ---
+// Importante: Las llaves deben ser EXACTAS a como están escritas en la BD (Seeders)
 const categoryRules = {
-    'Roperos': ['MDF', 'Madera', 'Melamina'],
-    'Trinchers': ['Madera', 'MDF', 'MDF Enchapado'],
-    'Cómodas y Lokers': ['MDF', 'MDF Enchapado', 'Melamina'],
-    'Recámaras y Comedores': ['MDF', 'MDF Enchapado', 'Melamina'],
-    'Bases': ['MDF', 'Madera']
-};
-const materialColors = {
-    'MDF': ['Chocolate', 'Nogal', 'Blanco', 'Gris', 'Cherry', '258'],
-    'Madera': ['Chocolate', 'Caoba', 'Tabaco', 'Cherry'],
-    'Melamina': ['Fresno andino', 'Parota', 'Nogal africano', 'Gris cenizo', 'Gris antracita', 'Tzalam', 'Moka'],
-    'MDF Enchapado': ['Chocolate', 'Nogal', 'Blanco']
+    'Roperos':               ['MDF', 'Madera y MDF enchapado', 'Melamina'],
+    'Trinchers':             ['Madera', 'Madera y MDF enchapado', 'MDF'],
+    'Cómodas y Lokers':      ['MDF', 'Madera y MDF enchapado', 'Melamina'],
+    'Recámaras y comedores': ['MDF', 'Madera y MDF enchapado', 'Melamina'], // 'c' minúscula
+    'Bases':                 ['MDF', 'Madera']
 };
 
-// --- FORMULARIO (Pre-llenado) ---
+const materialColors = {
+    'MDF':                    ['Chocolate', 'Nogal', 'Blanco', 'Gris', 'Cherry', '258'],
+    'Madera':                 ['Chocolate', 'Caoba', 'Tabaco', 'Cherry'],
+    
+    // El seeder usa 'MELAMINA' o 'Melamina'? Normalizamos para asegurar.
+    'Melamina':               ['Fresno andino', 'Parota', 'Nogal africano', 'Gris cenizo', 'Gris antracita', 'Tzalam', 'Moka'],
+    'MELAMINA':               ['Fresno andino', 'Parota', 'Nogal africano', 'Gris cenizo', 'Gris antracita', 'Tzalam', 'Moka'],
+    
+    // Ajustado al nombre real de la BD
+    'Madera y MDF enchapado': ['Chocolate', 'Nogal', 'Blanco', 'Caoba', 'Tabaco', 'Cherry'] 
+};
+
+// --- FORMULARIO ---
 const form = useForm({
-    _method: 'POST', // Truco para enviar archivos en updates
+    _method: 'PUT', // Laravel resource espera PUT para updates (aunque enviemos POST por el archivo)
     name: props.product.name,
     category_id: props.product.category_id,
     measurements: props.product.measurements,
     description: props.product.description,
-    image: null, // Solo se llena si cambian la imagen
+    image: null,
     
-    // Mapeamos las variantes existentes
     variants: props.product.variants.map(v => ({
         id: v.id,
         material: v.material,
@@ -48,14 +54,17 @@ const form = useForm({
     }))
 });
 
-// --- COMPUTADAS Y FUNCIONES ---
+// --- COMPUTADAS ---
+
 const selectedCategoryName = computed(() => {
-    const category = props.categories.find(c => c.id === form.category_id);
+    // Usamos '==' (doble igual) para que '5' sea igual a 5 (flexible con tipos)
+    const category = props.categories.find(c => c.id == form.category_id);
     return category ? category.name : null;
 });
 
 const availableMaterials = computed(() => {
     if (!selectedCategoryName.value) return [];
+    // Busca en las reglas. Si no encuentra (por mayúsculas/minúsculas), intenta buscar seguro
     return categoryRules[selectedCategoryName.value] || [];
 });
 
@@ -64,61 +73,40 @@ const getColorsForMaterial = (materialName) => {
     return materialColors[materialName] || [];
 };
 
+// --- ACCIONES ---
+
 const addVariant = () => {
-    // CAMBIO: Inicializamos con 0 en lugar de ''
     form.variants.push({
         id: null, 
-        material: '', 
-        color: '', 
-        stock: 0, 
-        sku: '', 
-        price_1: 0, // <--- CERO
-        price_2: 0, 
-        price_3: 0, 
-        price_4: 0, 
-        price_5: 0 
+        material: '', color: '', stock: 0, sku: '', 
+        price_1: 0, price_2: 0, price_3: 0, price_4: 0, price_5: 0 
     });
 };
 
 const deleteVariant = (variantId, index) => {
-    // CASO A: La variante es nueva (aún no se guarda en BD, no tiene ID)
     if (!variantId) {
-        form.variants.splice(index, 1); // Solo la quitamos de la lista visual
+        form.variants.splice(index, 1);
         return;
     }
 
-    // CASO B: La variante ya existe en BD (tiene ID) -> Necesita confirmación y petición al servidor
     Swal.fire({
         title: '¿Eliminar Variante?',
-        text: "Esta acción borrará la variante permanentemente.",
+        text: "Esta acción es irreversible en la base de datos.",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
         confirmButtonText: 'Sí, eliminar',
         cancelButtonText: 'Cancelar'
     }).then((result) => {
         if (result.isConfirmed) {
-            // Hacemos la petición DELETE a la ruta específica de variantes
             router.delete(route('variants.destroy', variantId), {
-                preserveScroll: true, // Para que no te regrese al inicio de la página
+                preserveScroll: true,
                 onSuccess: () => {
-                    // Si el backend borró, la quitamos de la lista visualmente también
-                    form.variants.splice(index, 1); 
-                    
-                    Swal.fire('Eliminado', 'La variante ha sido eliminada.', 'success');
+                    form.variants.splice(index, 1);
+                    Swal.fire('Eliminado', 'Variante eliminada.', 'success');
                 },
                 onError: (errors) => {
-                    // AQUÍ CAPTURAMOS EL MENSAJE DEL GUARDIA
-                    let msg = 'No se pudo eliminar.';
-                    if (errors.error) msg = errors.error;
-
-                    Swal.fire({
-                        title: 'Operación Bloqueada',
-                        text: msg,
-                        icon: 'error',
-                        confirmButtonColor: '#d33'
-                    });
+                   Swal.fire('Error', errors.error || 'No se pudo eliminar.', 'error');
                 }
             });
         }
@@ -126,34 +114,42 @@ const deleteVariant = (variantId, index) => {
 };
 
 const submit = () => {
-    // LIMPIEZA FINAL: Recorremos todas las variantes antes de enviar
+    // 1. Limpieza de números
     form.variants.forEach(variant => {
-        // Lista de campos numéricos a revisar
         const numericFields = ['stock', 'price_1', 'price_2', 'price_3', 'price_4', 'price_5'];
-        
         numericFields.forEach(field => {
             let val = variant[field];
-            // Si es vacío, nulo o texto inválido, lo forzamos a 0
             if (val === '' || val === null || isNaN(val)) {
                 variant[field] = 0;
             }
         });
     });
 
-    // Ahora sí, enviamos
-    router.post(route('products.update', props.product.id), form);
+    // 2. Envío Correcto para Inertia Forms con Archivos
+    // Usamos post con _method: PUT (simulado arriba) o usamos la ruta update con post
+    // NOTA: Para subir archivos en "Edición", Laravel exige usar POST, pero simular PUT.
+    // Como definimos _method: 'PUT' en el useForm, usamos form.post aqui.
+    
+    form.post(route('products.update', props.product.id), {
+        onSuccess: () => {
+            Swal.fire({
+                icon: 'success',
+                title: 'Producto Actualizado',
+                showConfirmButton: false,
+                timer: 1500
+            });
+        },
+        onError: () => {
+             Swal.fire('Error', 'Revisa los campos en rojo.', 'error');
+        }
+    });
 };
 
-// Función para evitar campos vacíos en precios y stock
 const sanitizeNumber = (item, field) => {
-    // 1. Obtenemos el valor actual
     let value = item[field];
-
-    // 2. Si está vacío, es null, indefinido o no es un número válido
     if (value === '' || value === null || value === undefined || isNaN(value)) {
-        item[field] = 0; // Lo forzamos a CERO
+        item[field] = 0;
     } else {
-        // 3. Opcional: Asegurarnos que sea positivo (absoluto)
         item[field] = Math.abs(parseFloat(value));
     }
 };
@@ -181,16 +177,29 @@ const sanitizeNumber = (item, field) => {
                                 <div>
                                     <label class="block font-medium text-sm text-gray-700">Nombre</label>
                                     <input v-model="form.name" type="text" class="w-full border-gray-300 rounded-md shadow-sm focus:border-green-500">
+                                    <div v-if="form.errors.name" class="text-red-500 text-xs mt-1 font-bold">{{ form.errors.name }}</div>
                                 </div>
                                 <div>
                                     <label class="block font-medium text-sm text-gray-700">Categoría</label>
                                     <select v-model="form.category_id" class="w-full border-gray-300 rounded-md shadow-sm focus:border-green-500">
                                         <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
                                     </select>
+                                    <div v-if="form.errors.category_id" class="text-red-500 text-xs mt-1 font-bold">{{ form.errors.category_id }}</div>
                                 </div>
                                 <div>
                                     <label class="block font-medium text-sm text-gray-700">Medidas</label>
                                     <input v-model="form.measurements" type="text" class="w-full border-gray-300 rounded-md shadow-sm focus:border-green-500">
+                                    <div v-if="form.errors.measurements" class="text-red-500 text-xs mt-1 font-bold">{{ form.errors.measurements }}</div>
+                                </div>
+                                                            <div class="md:col-span-3 mt-4">
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Descripción Detallada</label>
+                                    <textarea 
+                                        v-model="form.description" 
+                                        rows="3" 
+                                        class="w-full rounded-lg border-gray-300 focus:border-green-500 focus:ring-green-500 shadow-sm"
+                                        placeholder="Ej: Incluye correderas telescópicas, garantía de 1 año..."
+                                    ></textarea>
+                                    <div v-if="form.errors.description" class="text-red-500 text-sm mt-1">{{ form.errors.description }}</div>
                                 </div>
 
                                 <div class="md:col-span-3 mt-2 flex items-center gap-4">
@@ -200,6 +209,7 @@ const sanitizeNumber = (item, field) => {
                                     <div class="flex-1">
                                         <label class="block font-medium text-sm text-gray-700">Cambiar Imagen (Opcional)</label>
                                         <input type="file" @input="form.image = $event.target.files[0]" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"/>
+                                        <div v-if="form.errors.image" class="text-red-500 text-xs mt-1 font-bold">{{ form.errors.image }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -238,11 +248,11 @@ const sanitizeNumber = (item, field) => {
 
                                 <div class="bg-green-50 p-3 rounded-md">
                                     <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                        <div><span class="text-[10px] text-gray-500 font-bold">P1</span><input v-model="variant.price_1" min="0" @blur="sanitizeNumber(variant, 'price_1')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P2</span><input v-model="variant.price_2" min="0" @blur="sanitizeNumber(variant, 'price_2')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P3</span><input v-model="variant.price_3" min="0" @blur="sanitizeNumber(variant, 'price_3')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P4</span><input v-model="variant.price_4" min="0" @blur="sanitizeNumber(variant, 'price_4')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
-                                        <div><span class="text-[10px] text-gray-500">P5</span><input v-model="variant.price_5" min="0" @blur="sanitizeNumber(variant, 'price_5')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500 font-bold">P1</span><input v-model="variant.price_1" lang="en" min="0" @blur="sanitizeNumber(variant, 'price_1')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P2</span><input v-model="variant.price_2" lang="en" min="0" @blur="sanitizeNumber(variant, 'price_2')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P3</span><input v-model="variant.price_3" lang="en" min="0" @blur="sanitizeNumber(variant, 'price_3')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P4</span><input v-model="variant.price_4" lang="en" min="0" @blur="sanitizeNumber(variant, 'price_4')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
+                                        <div><span class="text-[10px] text-gray-500">P5</span><input v-model="variant.price_5" lang="en" min="0" @blur="sanitizeNumber(variant, 'price_5')" type="number" step="0.01" class="w-full text-sm border-gray-300 rounded-md"></div>
                                     </div>
                                 </div>
                             </div>

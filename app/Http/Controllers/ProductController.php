@@ -42,7 +42,8 @@ class ProductController extends Controller
             'category_id' => 'required|exists:categories,id',
             'image' => 'nullable|image|max:2048', // <--- Nueva regla: Imagen máx 2MB
             'variants' => 'required|array|min:1',
-            // ... resto de validaciones ...
+            'measurements' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:1000',
         ]);
 
         DB::transaction(function () use ($request) {
@@ -104,6 +105,31 @@ class ProductController extends Controller
 
     public function update(Request $request, $id)
     {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'category_id' => 'required|exists:categories,id',
+            'measurements' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:1000',
+            'image' => 'nullable|image|max:2048', // Opcional, pero si la suben, debe ser imagen válida
+            
+            // Validaciones del Array de Variantes
+            'variants' => 'required|array|min:1',
+            'variants.*.material' => 'required|string|max:100',
+            'variants.*.color' => 'required|string|max:100',
+            'variants.*.stock' => 'required|numeric|min:0',
+            'variants.*.sku' => 'nullable|string|max:100',
+            'variants.*.price_1' => 'required|numeric|min:0',
+            'variants.*.price_2' => 'nullable|numeric|min:0',
+            'variants.*.price_3' => 'nullable|numeric|min:0',
+            'variants.*.price_4' => 'nullable|numeric|min:0',
+            'variants.*.price_5' => 'nullable|numeric|min:0',
+        ], [
+            // Mensajes personalizados opcionales para que se entiendan mejor los errores del array
+            'variants.*.material.required' => 'El material es obligatorio en todas las variantes.',
+            'variants.*.stock.min' => 'El stock no puede ser negativo.',
+            'variants.*.price_1.required' => 'El precio 1 es obligatorio.',
+        ]);
+
         $product = Product::findOrFail($id);
         
         // 1. Actualizamos datos del padre
@@ -111,7 +137,7 @@ class ProductController extends Controller
             'name' => $request->name,
             'description' => $request->description,
             'category_id' => $request->category_id,
-            'measurements' => $request->measurements, // Asegúrate de tener este campo en fillable
+            'measurements' => $request->measurements,
         ];
 
         if ($request->hasFile('image')) {

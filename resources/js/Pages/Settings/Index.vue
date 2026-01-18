@@ -101,7 +101,7 @@ const submit = () => {
                                     <input v-model="form.company_name" type="text" class="w-full border-gray-300 rounded focus:ring-green-500">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-bold text-gray-700">RFC / Tax ID</label>
+                                    <label class="block text-sm font-bold text-gray-700">RFC </label>
                                     <input v-model="form.company_rfc" type="text" class="w-full border-gray-300 rounded focus:ring-green-500">
                                 </div>
                                 <div class="grid grid-cols-2 gap-4">

@@ -1,79 +1,109 @@
 # 🛋️ TALLER 360 - Sistema POS Mueblería
 
-Sistema de Punto de Venta y Administración desarrollado en **Laravel 12 + Vue 3 (Inertia.js)**.
-Enfocado en la gestión de inventarios con variantes (color/material), control de ventas y administración de clientes.
+![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)
+![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
+![Inertia](https://img.shields.io/badge/Inertia-Purple?style=for-the-badge&logo=inertia&logoColor=white)
+![Pest PHP](https://img.shields.io/badge/Tests-Passing-success?style=for-the-badge)
+
+Sistema de Punto de Venta (POS) y Administración robusto, diseñado específicamente para mueblerías que gestionan inventarios complejos con variantes (Color, Material, Tela).
+
+## 🚀 ESTATUS DEL PROYECTO
+**Versión:** 1.0 (Release Candidate)
+**Última Actualización:** 17 Enero 2026
+**Fase Actual:** Operatividad y Pruebas de Campo.
 
 ---
 
-## 🚀 ESTATUS DEL PROYECTO
-**Última Actualización:** 14 Enero 2024
-**Fase Actual:** Pulido de UX y Estabilidad.
+## ✅ Módulos Terminados y Funcionales
 
-### ✅ Módulos Terminados y Funcionales
-1.  **Gestión de Productos (Inventario):**
-    * Alta/Edición con variantes (Color, Material, SKU, Stock).
-    * **Blindaje SQL:** Validación automática de campos vacíos (se convierten a 0).
-    * **Visual:** Bolitas de colores reales en el listado.
-    * **Seguridad:** "Guardia" en Backend que impide borrar productos si ya tienen ventas históricas.
-2.  **Punto de Venta (POS):**
-    * Carrito de compras reactivo.
-    * Buscador de productos y clientes.
-    * **Cliente Rápido:** Modal para registrar clientes nuevos sin salir de la venta (con dirección y nivel de precio).
-    * **Pagos:** Modal multiformato (Efectivo, Tarjeta, Transferencia, Crédito).
-    * Manejo de Stock (resta al vender, suma al cancelar).
-3.  **Gestión de Clientes:**
-    * CRUD completo con validaciones.
-    * Bloqueo de eliminación si el cliente tiene deudas o historial.
-4.  **Historial de Ventas:**
-    * Listado paginado.
-    * **Buscador Avanzado:** Filtrado por servidor (Folio o Nombre Cliente).
-    * Cancelación de ventas (con devolución de stock automática).
-5.  **Configuración:**
-    * Carga de Logotipo y Datos de la Empresa (se reflejan en PDFs).
-    * Configuración de correos de notificación.
-6.  **UX / UI:**
-    * Alertas **SweetAlert2** para confirmaciones de eliminación.
-    * Mensajes de error y fechas en **Español** (Paquete de idioma instalado).
+### 📊 Dashboard Inteligente (Nuevo 🌟)
+Panel de control dinámico con lógica de negocio diferenciada por roles:
+* **Modo Admin:**
+    * KPIs Financieros: Ingreso Real (Caja), Crédito por Cobrar y Tickets Totales.
+    * **Máquina del Tiempo:** Filtro por rango de fechas para analizar ventas históricas.
+    * Ranking de Vendedores y Alertas de Stock Crítico.
+* **Modo Vendedor:**
+    * Vista simplificada. Solo ve sus propios ingresos y su historial reciente.
+    * Privacidad de Datos: El backend bloquea el envío de estadísticas globales a usuarios no admins.
+
+### 🛒 Punto de Venta (POS)
+* **Diseño App-Like:** Altura ajustada (`h-[calc(100vh-0px)]`) sin scrollbars dobles.
+* **Control de Stock:**
+    * Resta automática al vender.
+    * **Configurable:** Permite o bloquea ventas con stock negativo según la configuración del sistema (`allow_negative_stock`).
+* **Decimales:** Solución `lang="en"` para evitar errores de moneda en navegadores en español.
+* **Cliente Rápido:** Modal para registrar clientes al vuelo con validaciones de unicidad.
+
+### 📦 Gestión de Inventario (Variantes)
+* **Arquitectura Padre-Hijo:** Un producto (ej. "Ropero") tiene múltiples variantes (ej. "MDF - Chocolate", "Madera - Caoba").
+* **Precios Multi-Nivel:** 5 listas de precios por variante (Público, Mayoreo, Distribuidor).
+* **Integridad:** Protección "Cascade" y validación que impide borrar productos si tienen historial de ventas.
+
+### 🛡️ Seguridad y Roles
+* **Middlewares Estrictos:** Separación total entre Admin y Vendedor.
+* **Vendedores:** Acceso exclusivo a POS y su historial. Bloqueo de rutas de configuración, usuarios y reportes globales.
+* **Anti-Intrusos:** Registro público desactivado. Solo el Admin crea usuarios desde el panel interno.
+
+### 🧪 Calidad y Testing (QA)
+Suite de **32 Pruebas Automatizadas (Feature Tests)** usando Pest PHP que validan:
+* Seguridad de rutas (Auth).
+* Cálculo exacto de totales y cambios.
+* Integridad del inventario.
+* Privacidad del Dashboard.
 
 ---
 
 ## 📝 LISTA DE PENDIENTES (Roadmap)
 
-### 🔴 Prioridad Alta (Estabilidad y Rendimiento)
-1.  **Optimización de Buscadores (Productos y Clientes):**
-    * *Estado Actual:* Se cargan todos los registros (`all()`) en memoria al abrir el POS.
-    * *Meta:* Migrar `ClientAutocomplete` y el buscador de productos a **Búsqueda AJAX** (Server-side) para soportar miles de registros sin lentitud.
-2.  **Paginación Dinámica:**
-    * Agregar selector "Mostrar 10, 20, 50, 100 registros" en todas las tablas.
+### 🔴 Prioridad Inmediata (Operatividad)
+* **🖨️ Impresión Térmica:** Conectar la vista HTML (ya calibrada a 80mm/227pt) al botón de imprimir del POS.
+* **📦 Ajuste de Inventario:** Módulo para registrar entradas (compras) y salidas (mermas/uso interno) manualmente.
+* **💰 Corte de Caja:** Comparativa de "Dinero en Sistema" vs "Dinero Físico" por vendedor.
 
-### 🟡 Prioridad Media (Funcionalidad)
-3.  **Dashboard (Pantalla de Inicio):**
-    * Actualmente vacía. Agregar tarjetas de KPIs (Ventas del día, Productos bajos en stock).
-4.  **Roles y Permisos:**
-    * Separar rol `Administrador` (Acceso total) de `Vendedor` (Solo POS, sin acceso a borrar productos ni configuración).
-
-### 🔵 Futuro / Deseables
-5.  **Corte de Caja:** Funcionalidad para cierre de turno y arqueo de efectivo.
-6.  **Cuentas por Cobrar:** Módulo para gestionar los créditos y abonos de clientes.
+### 🟡 Fase 2 (Administración)
+* **Reportes Excel:** Exportación de ventas filtradas por fecha.
+* **Facturación (CFDI 4.0):** Generación de XML para México.
 
 ---
 
-## 🛠️ Instalación y Configuración
+## 🛠️ Instalación y Despliegue
 
-### Requisitos Previos
+### Requisitos
 * PHP 8.2+
 * Node.js & NPM
-* MySQL
+* MySQL / MariaDB
 
-### Pasos Rápidos
-1.  Clonar repositorio: `git clone ...`
-2.  Instalar dependencias PHP: `composer install`
-3.  Instalar dependencias JS: `npm install`
-4.  Configurar `.env` (Base de datos y `APP_LOCALE=es`).
-5.  Migrar BD: `php artisan migrate`
-6.  Compilar assets: `npm run dev`
-7.  **Importante:** Ejecutar `php artisan storage:link` para ver las imágenes.
+### Pasos de Instalación
+1.  **Clonar repositorio:**
+    ```bash
+    git clone [https://github.com/FredyLomeli/Taller360.git](https://github.com/FredyLomeli/Taller360.git)
+    ```
+2.  **Instalar dependencias:**
+    ```bash
+    composer install
+    npm install
+    ```
+3.  **Configurar Entorno:**
+    * Duplicar `.env.example` a `.env`.
+    * Configurar base de datos.
+    * Establecer `APP_LOCALE=es`.
+4.  **Base de Datos y Datos de Prueba:**
+    * Este comando crea tablas y **usuarios demo** (Admin + 3 Vendedores) con ventas simuladas para el Dashboard.
+    ```bash
+    php artisan migrate:fresh --seed
+    ```
+5.  **Compilar Frontend:**
+    ```bash
+    npm run dev
+    ```
 
-### Comandos Útiles
-* **Limpiar caché:** `php artisan optimize:clear`
-* **Publicar traducciones:** `php artisan lang:publish`
+### Credenciales Demo (Seeder)
+* **Admin:** `admin@admin.com` / `password`
+* **Vendedor:** `vendedor1@tienda.com` / `password`
+
+---
+
+### Comandos de Mantenimiento
+* **Correr Pruebas:** `php artisan test`
+* **Limpiar Caché:** `php artisan optimize:clear`
+* **Link de Imágenes:** `php artisan storage:link`
