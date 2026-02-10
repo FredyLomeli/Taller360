@@ -16,21 +16,17 @@ return new class extends Migration
             // Relación con el padre
             $table->foreignId('product_id')->constrained()->onDelete('cascade');
             
-            $table->string('material'); 
-            $table->string('color');    
+            $table->string('material');
+            $table->integer('stock')->default(0);
+            $table->string('sku')->nullable();
             
-            // --- AQUÍ ESTÁ EL CAMBIO IMPORTANTE ---
-            // En lugar de 'price', ponemos los 5 niveles
+            // Precios
             $table->decimal('price_1', 10, 2); // Precio Público (Obligatorio)
             $table->decimal('price_2', 10, 2)->nullable(); 
             $table->decimal('price_3', 10, 2)->nullable(); 
             $table->decimal('price_4', 10, 2)->nullable(); 
             $table->decimal('price_5', 10, 2)->nullable(); 
-            // -------------------------------------
 
-            $table->integer('stock')->default(0);
-            $table->string('sku')->nullable();
-            
             $table->timestamps();
         });
     }

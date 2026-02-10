@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('measurements')->nullable(); // Ej: "180x120"
             $table->text('description')->nullable(); // Detalles generales del diseño
             $table->string('image')->nullable(); // Imagen principal del modelo
+            $table->boolean('is_favorite')->default(false);
             $table->timestamps();
         });
     }

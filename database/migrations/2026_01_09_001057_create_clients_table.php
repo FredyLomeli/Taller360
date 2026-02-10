@@ -20,8 +20,8 @@ return new class extends Migration
             $table->integer('price_tier')->default(1); // Tipo de Cliente (1 al 5 para definir precios)
             
             // Datos de Contacto
-            $table->string('email')->nullable();
-            $table->string('phones')->nullable(); // Plural: "3312345678, 3387654321"
+            $table->string('email')->unique();
+            $table->string('phones'); // Plural: "3312345678, 3387654321"
             
             // Dirección Completa
             $table->string('street_address')->nullable(); // Calle con número

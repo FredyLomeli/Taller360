@@ -1,6 +1,6 @@
 # 🧠 CONTEXTO TÉCNICO - TALLER 360 (POS SYSTEM)
-**Versión:** 1.0 (Full Context)
-**Fecha de actualización:** 17 Enero 2026
+**Versión:** 2.1 (POS & Order Builder Completado)
+**Fecha de actualización:** 10 Febrero 2026
 **Repositorio:** `https://github.com/FredyLomeli/Taller360`
 
 ## 1. 🛠 Stack Tecnológico
@@ -18,34 +18,43 @@
 Esta referencia es la **única** autorizada para consultas SQL/Eloquent.
 
 ### 👤 Usuarios y Clientes
-* **`users`**: `id`, `name`, `email` (unique), `password`, `role` ('admin'|'vendedor'), `email_verified_at`, timestamps.
-* **`clients`**: `id`, `name`, `email` (unique), `phone`, `address`, `price_tier` (int 1-5), timestamps.
+* **`users`**: `id`, `name`, `email` (unique), `password`, `role` (default 'vendedor'), `email_verified_at`, timestamps.
+* **`clients`**:
+    * `id`, `name` (Nombre corto), `business_name` (Razón Social).
+    * `price_tier` (int 1-5).
+    * **Contacto:** `email` (unique), `phones` (string plural: "33123, 33456").
+    * **Dirección:** `street_address`, `neighborhood`, `city`, `state`, `delegation`, `zip_code`.
+    * `references` (text).
 
 ### 📦 Inventario
 * **`categories`**: `id`, `name`, timestamps.
-* **`products`**: `id`, `category_id` (FK), `name`, `description`, `image_url`, timestamps.
+* **`products`**:
+    * `id`, `category_id` (FK), `name`, `description`.
+    * `measurements` (string), `image` (string).
+    * **`is_favorite`** (boolean) -> *Para monitoreo rápido en Dashboard*.
 * **`product_variants`**:
     * `id`, `product_id` (FK -> cascade).
-    * `sku` (string, nullable), `material` (string), `color` (string).
-    * `stock` (int).
-    * `price_1` (decimal 10,2 - Público).
-    * `price_2`, `price_3`, `price_4`, `price_5` (decimal 10,2 - Mayoreo).
+    * **`material`** (string), `sku` (string, nullable).
+    * `stock` (int). **Nota:** El `color` se eliminó de aquí (ahora es atributo de venta).
+    * `price_1` (Público - Obligatorio).
+    * `price_2` a `price_5` (Mayoreo - Opcionales).
 
-### 💰 Ventas
+### 💰 Ventas y Pedidos (Core)
 * **`sales`**:
-    * `id`, `user_id` (FK), `client_id` (FK).
-    * `total` (decimal 10,2).
-    * `paid_amount` (decimal 10,2) -> *Lo que realmente entró a caja*.
-    * `change_amount` (decimal 10,2).
-    * `payment_method` (string: 'Efectivo', 'Tarjeta', etc).
-    * `status` (enum: 'pagado', 'pendiente', 'cancelado').
-    * `created_at` (Usado para filtros de fecha).
+    * `id`, `user_id` (FK), `client_id` (FK - nullable).
+    * `total` (decimal), `paid_amount` (decimal), `change_amount` (decimal).
+    * `payment_method` (string).
+    * **`stage`** (enum): `'pedido'`, `'confirmado'`, `'produccion'`, `'enviado'`, `'entregado'`, `'cancelado'`.
+    * `promised_date` (date), `is_partial_shipping` (bool).
 * **`sale_details`**:
-    * `id`, `sale_id` (FK).
-    * `product_variant_id` (FK).
-    * `product_name` (string Snapshot), `quantity` (int).
-    * `unit_price` (decimal 10,2), `subtotal` (decimal 10,2).
-    * `discount_percent` (int).
+    * `id`, `sale_id` (FK), `product_variant_id` (FK).
+    * `product_name` (Snapshot), `quantity` (int).
+    * **`chosen_color`** (string) -> *Elegido libremente al vender*.
+    * **`custom_notes`** (text), **`additional_cost`** (decimal).
+    * `unit_price`, `subtotal`, `discount_percent`.
+* **`sale_histories`**:
+    * `id`, `sale_id` (FK), `user_id` (FK).
+    * `from_stage`, `to_stage`, `notes`.
 
 ### ⚙️ Configuración
 * **`settings`**: `key` (string, unique), `value` (text).
@@ -53,48 +62,62 @@ Esta referencia es la **única** autorizada para consultas SQL/Eloquent.
 
 ---
 
-## 3. 🚦 Reglas de Negocio Blindadas (Backend)
+## 3. 🚦 Reglas de Negocio Blindadas (Backend v2.0)
 
 ### 🛡️ Seguridad y Roles
-1.  **Admin (`role: admin`):** Acceso total. Middleware `IsAdmin`.
+1.  **Admin (`role: admin`):** Acceso total.
 2.  **Vendedor (`role: vendedor`):**
-    * Solo accede a POS (`/pos`), Clientes y su Historial (`/sales`).
-    * **Restricción Dura:** El Dashboard filtra datos sensibles (`sellersStats`, `income` global) a `null` si el rol no es Admin.
+    * Acceso a POS (Nuevo Pedido), Clientes y Historial personal.
+    * Restricción de Dashboard global y configuración.
 
-### 💰 Flujo de Venta (SalesController)
-1.  **Stock Negativo:** Antes de guardar, se verifica `Setting::get('allow_negative_stock')`. Si es `0` y falta stock, lanza Excepción.
-2.  **Transacciones:** `Sale` + `SaleDetail` + `Decremento de Stock` ocurren en una transacción atómica.
-3.  **Upsert:** Al editar productos, variantes omitidas se borran (soft-logic: solo si no tienen ventas, de lo contrario error de integridad).
+### 💰 Lógica de Pedidos (OrderWorkflow)
+1.  **Estados (`stage`):**
+    * `pedido`: Borrador/Cotización. **NO descuenta stock**.
+    * `confirmado`: Se ha dado anticipo. Pasa a cola de producción.
+    * `enviado`: Salió del taller. **AQUÍ se descuenta el stock** (o se valida existencia).
+2.  **Precios Dinámicos:**
+    * Se selecciona automáticamente el precio (1-5) según el `price_tier` del cliente.
+    * Fórmula Total: `(PrecioVariante * Cantidad) + CostoAdicional`.
+    * **Validación Financiera:** No se permiten costos extra negativos ni descuentos mayores al 50%.
 
 ---
 
-## 4. 🧪 Estrategia de Testing (Suite de 32 Pruebas)
+## 4. 🧪 Estrategia de Testing
 * **Comando:** `php artisan test`
-* **Cobertura Actual:**
-    * ✅ **Auth:** Roles y redirecciones.
-    * ✅ **Sales:** Cálculo de totales, stock y cambio.
-    * ✅ **Dashboard:** Visibilidad de datos por rol y filtros de fecha.
-    * ✅ **Settings:** Cambio de configuración impacta lógica de venta.
+* **Nuevos Objetivos QA:**
+    * Validar que la creación de pedido (`store`) guarde colores y notas.
+    * Validar que `updateStage` a 'enviado' reste stock correctamente.
+    * Validar que `promised_date` sea opcional.
 
 ---
 
-## 5. 🖥️ Lógica de Frontend (Performance)
-* **Carga Inicial:** Productos y Clientes se cargan completos en el POS. Filtrado local (JS).
-* **Búsqueda AJAX:** Historial de ventas usa `lodash/debounce` para buscar en servidor.
-* **Formato:** Inputs numéricos usan `lang="en"` para evitar errores de decimales.
+## 5. 🖥️ Lógica de Frontend (Actualizada)
+* **POS / Order Builder (`Sales/Create.vue`):** ✅ **COMPLETADO**
+    * **Catálogo Visual:** Selección de colores mediante "bolitas" dinámicas según material (MDF, Madera, Melamina) definidas en JS local.
+    * **Ticket Compacto:** Diseño optimizado para ver más ítems, con botón para editar "Notas/Extras" en un modal.
+    * **Modal Checkout V1:** Restaurado diseño visual (encabezado verde, iconos grandes) pero con lógica V2 (Anticipo + Fecha Entrega Opcional).
+    * **Validaciones:** Bloqueo de cantidades negativas y costos extra negativos.
 
 ---
 
 ## 6. 📍 Hoja de Ruta (Backlog Priorizado)
 
-### FASE 1: Operatividad Crítica (Próximos Pasos)
-1.  **🖨️ Impresión Térmica (Ticket 80mm):**
-    * Conectar vista HTML existente al botón de impresión en `Sales/Index.vue` y al finalizar venta.
-2.  **📦 Ajuste de Inventario:**
-    * Crear módulo "Movimientos" para Entradas (Compras) y Salidas (Mermas) manuales con motivo obligatorio.
-3.  **💰 Corte de Caja:**
-    * Comparar `Suma(paid_amount)` vs `Efectivo Reportado` por usuario.
+### 🚀 FASE ACTUAL: Gestión de Pedidos (Kanban)
 
-### FASE 2: Administración
-4.  **📈 Reportes Excel:** Exportación basada en filtros del Dashboard.
-5.  **💳 Facturación (CFDI 4.0):** Generación de XML para México.
+#### 1. 📋 Tablero de Control (`Sales/Index.vue`) - **[EN PROGRESO]**
+* Transformar la tabla simple en un gestor de estados.
+* **Tabs:** Filtrar por `Todos`, `Pendientes`, `Producción`, `Enviados`.
+* **Acciones:** Botón para avanzar etapa ("Pasar a Producción", "Enviar").
+* **Visual:** Mostrar Semaforización de estatus y resumen de notas/colores en la tabla.
+
+#### 2. 📄 Detalles del Pedido (`Sales/Show.vue`)
+* Mostrar desglose completo incluyendo `chosen_color`, `notes` y `promised_date`.
+* Botón para imprimir **Ticket** y **Nota de Venta**.
+* **Nueva Vista:** "Hoja de Producción" (Impresión limpia para taller sin precios).
+
+#### 3. 📦 Ajustes de Inventario
+* Módulo para registrar entradas (compras) y salidas (mermas) manualmente.
+
+### 🟡 Fase 2 (Administración)
+* **Reportes Excel:** Exportación de ventas filtradas por fecha.
+* **Facturación (CFDI 4.0):** Generación de XML para México.

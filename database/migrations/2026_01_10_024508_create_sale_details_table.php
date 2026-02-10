@@ -14,14 +14,17 @@ return new class extends Migration
         Schema::create('sale_details', function (Blueprint $table) {
             $table->id();
             $table->foreignId('sale_id')->constrained()->onDelete('cascade');
-            
-            // Relación con la variante específica (MDF Chocolate)
             $table->foreignId('product_variant_id')->constrained();
-            
-            // Guardamos datos históricos (Snapshot)
-            // Guardamos el nombre del producto por si luego lo borran del catálogo
-            $table->string('product_name'); 
+    
+            $table->string('product_name'); // Snapshot del nombre
             $table->integer('quantity');
+            // Color elegido al momento de la venta
+            $table->string('chosen_color')->nullable();
+
+            // Adicionales (ej. "Espejo extra") y su costo
+            $table->text('custom_notes')->nullable(); 
+            $table->decimal('additional_cost', 10, 2)->default(0);
+
             $table->integer('discount_percent')->default(0);
             $table->decimal('unit_price', 10, 2);
             $table->decimal('subtotal', 10, 2);

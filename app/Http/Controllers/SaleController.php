@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use Inertia\Inertia;
 use App\Models\Sale;
+use App\Models\SaleDetail;
 use App\Models\ProductVariant;
+use App\Models\Client;
 use App\Models\Setting;
 use App\Mail\SaleNoteEmail;
 use Illuminate\Http\Request;
@@ -15,20 +17,31 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class SaleController extends Controller
 {
-
+    /**
+     * Listado de Pedidos con Filtros (V2.0)
+     */
     public function index(Request $request)
     {
         // Iniciamos la consulta con las relaciones necesarias
-        $query = Sale::with(['client', 'user'])->latest();
+        $query = Sale::with(['client', 'user', 'history'])->latest();
+
+        // Regla de Negocio: Vendedores solo ven lo suyo
+        if (Auth::user()->role !== 'admin') {
+            $query->where('user_id', Auth::id());
+        }
+
+        // Filtro por Etapa (Tabs del Dashboard)
+        if ($request->has('stage') && $request->stage !== 'todos') {
+            $query->where('stage', $request->stage);
+        }
 
         // --- LÓGICA DEL BUSCADOR ---
         if ($request->filled('search')) {
             $search = $request->input('search');
-            
             $query->where(function($q) use ($search) {
-                // 1. Buscar por ID exacto (Folio)
+                // Buscar por Folio
                 $q->where('id', 'like', "%$search%")
-                // 2. O buscar por nombre del cliente
+                // O buscar por nombre del cliente
                 ->orWhereHas('client', function($clientQ) use ($search) {
                     $clientQ->where('name', 'like', "%$search%");
                 });
@@ -36,93 +49,182 @@ class SaleController extends Controller
         }
 
         return Inertia::render('Sales/Index', [
-            // Mantenemos la paginación y adjuntamos el filtro para que no se pierda al cambiar de página
-            'sales' => $query->paginate(10)->withQueryString(),
-            
-            // Devolvemos el filtro actual para que el input no se borre al buscar
-            'filters' => $request->only(['search']),
+            'sales' => $query->paginate(15)->withQueryString(),
+            'filters' => $request->all(['search', 'stage']),
         ]);
     }
 
+    /**
+     * Vista para crear nuevo pedido (POS)
+     */
+    public function create()
+    {
+        return Inertia::render('Sales/Create', [
+            // CORRECCIÓN: Agregamos 'category' al with()
+            'products' => \App\Models\Product::with(['variants', 'category']) 
+                ->orderBy('is_favorite', 'desc')
+                ->get(),
+            'clients' => Client::all(),
+        ]);
+    }
+
+    /**
+     * GUARDAR PEDIDO (V2.0)
+     * - Guarda en estado 'pedido'.
+     * - NO descuenta stock (eso pasa en 'enviado').
+     * - Guarda colores y adicionales.
+     */
     public function store(Request $request)
     {
         $request->validate([
-            'client_id' => 'nullable|exists:clients,id',
-            'cart' => 'required|array|min:1',
-            // Validaciones nuevas
+            'client_id' => 'required|exists:clients,id',
+            'items' => 'required|array|min:1',
+            // Validaciones de partida
+            'items.*.variant_id' => 'required|exists:product_variants,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.price' => 'required|numeric|min:0',
+            'items.*.chosen_color' => 'required|string', // Nuevo v2.0
+            
             'payment_method' => 'required|string',
-            'amount_received' => 'required|numeric|min:0',
+            'paid_amount' => 'required|numeric|min:0', // Anticipo
+            'promised_date' => 'nullable|date',
         ]);
 
         try {
-            DB::transaction(function () use ($request) {
-                
-                //  Calcular totales
-                $totalVenta = 0;
-                foreach ($request->cart as $item) {
-                    $variant = ProductVariant::lockForUpdate()->find($item['variant_id']);
-                // Buscamos la configuración (Si no existe, asumimos 0/Falso por seguridad)
-                $permitirStockNegativo = Setting::where('key', 'allow_negative_stock')->value('value');
+            return DB::transaction(function () use ($request) {
+                $totalSale = 0;
 
-                // Solo lanzamos error SI falta stock Y ADEMÁS NO está permitido el negativo
-                if ($variant->stock < $item['quantity'] && !$permitirStockNegativo) {
-                    throw new \Exception("Stock insuficiente: {$item['product_name']}");
-                }
-                    
-                    // Usamos el precio FINAL que viene del frontend (ya con descuento aplicado)
-                    $precioFinal = $item['price']; 
-                    $subtotal = $precioFinal * $item['quantity'];
-                    
-                    $totalVenta += $subtotal;
-                    $variant->decrement('stock', $item['quantity']);
-                }
-
-                // Determinar Estado (Pagado o Pendiente/Crédito)
-                // Si lo recibido es mayor o igual al total, está PAGADO. Si no, es PENDIENTE (Abono).
-                $status = ($request->amount_received >= $totalVenta) ? 'pagado' : 'pendiente';
-
-                // Crear Venta
+                // 1. Crear Venta (Estado inicial: pedido)
                 $sale = Sale::create([
                     'user_id' => Auth::id(),
                     'client_id' => $request->client_id,
-                    'total' => $totalVenta,
-                    'paid_amount' => $request->amount_received, // Lo que realmente dio
+                    'total' => 0, // Se calcula abajo
+                    'paid_amount' => $request->paid_amount,
+                    'change_amount' => 0, // Se calcula abajo
                     'payment_method' => $request->payment_method,
-                    'status' => $status,
-                    'change_amount' => max(0, $request->amount_received - $totalVenta) // El cambio entregado
+                    'stage' => 'pedido', // SIEMPRE inicia como pedido
+                    'promised_date' => $request->promised_date,
                 ]);
 
-                // Guardar Detalles
-                foreach ($request->cart as $item) {
-                    $sale->details()->create([
-                        'product_variant_id' => $item['variant_id'],
-                        'product_name' => $item['product_name'] . ' (' . $item['material'] . ' ' . $item['color'] . ')',
+                // 2. Guardar Detalles
+                foreach ($request->items as $item) {
+                    $variant = ProductVariant::with('product')->find($item['variant_id']);
+                    
+                    // Calculamos subtotal incluyendo costo adicional
+                    $additionalCost = $item['additional_cost'] ?? 0;
+                    $lineTotal = ($item['price'] * $item['quantity']) + $additionalCost;
+
+                    SaleDetail::create([
+                        'sale_id' => $sale->id,
+                        'product_variant_id' => $variant->id,
+                        // Snapshot del nombre + material
+                        'product_name' => $variant->product->name . ' (' . $variant->material . ')',
                         'quantity' => $item['quantity'],
                         
-                        // GUARDAMOS EL DESCUENTO AQUÍ
-                        'discount_percent' => $item['discount_percent'] ?? 0, 
+                        // Nuevos campos V2.0
+                        'chosen_color' => $item['chosen_color'],
+                        'custom_notes' => $item['notes'] ?? null,
+                        'additional_cost' => $additionalCost,
                         
-                        'unit_price' => $item['price'], // Este sigue siendo el precio YA rebajado
-                        'subtotal' => $item['price'] * $item['quantity']
+                        'unit_price' => $item['price'],
+                        'subtotal' => $lineTotal,
+                        'discount_percent' => $item['discount_percent'] ?? 0,
                     ]);
+
+                    $totalSale += $lineTotal;
                 }
+
+                // 3. Actualizar Totales
+                // Si el anticipo cubre el total, podríamos marcarlo como pagado internamente, 
+                // pero el stage sigue siendo 'pedido' hasta que se autorice.
+                $change = max(0, $request->paid_amount - $totalSale);
+                
+                $sale->update([
+                    'total' => $totalSale,
+                    'change_amount' => $change
+                ]);
+                
+                // Si dio anticipo, pasamos a 'confirmado' automáticamente (Opcional)
+                if ($request->paid_amount > 0) {
+                    $sale->update(['stage' => 'confirmado']);
+                }
+
+                return redirect()->route('sales.index')->with('success', 'Pedido registrado correctamente (Folio #' . $sale->id . ')');
             });
 
-            return redirect()->back()->with('success', 'Venta registrada correctamente.');
-
         } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $e->getMessage()]);
         }
     }
+
+    /**
+     * Ver detalle del pedido
+     */
+    public function show(Sale $sale)
+    {
+        $sale->load(['details.variant', 'client', 'user', 'history.user']);
+        return Inertia::render('Sales/Show', ['sale' => $sale]);
+    }
+
+    /**
+     * MOTOR DE ESTADOS (V2.0)
+     * Maneja el inventario y los cambios de etapa.
+     * Reemplaza a la antigua función 'cancel'.
+     */
+    public function updateStage(Request $request, Sale $sale)
+    {
+        $request->validate([
+            'stage' => 'required|in:pedido,confirmado,produccion,enviado,entregado,cancelado'
+        ]);
+
+        $newStage = $request->stage;
+        $oldStage = $sale->stage;
+
+        if ($newStage === $oldStage) return back();
+
+        try {
+            DB::transaction(function () use ($sale, $newStage, $oldStage) {
+                
+                // CASO A: Salida de Almacén (Enviado) -> RESTAR STOCK
+                if ($newStage === 'enviado' && $oldStage !== 'enviado' && $oldStage !== 'entregado') {
+                    $allowNegative = Setting::where('key', 'allow_negative_stock')->value('value');
+
+                    foreach ($sale->details as $detail) {
+                        $variant = ProductVariant::lockForUpdate()->find($detail->product_variant_id);
+                        
+                        if (!$allowNegative && $variant->stock < $detail->quantity) {
+                            throw new \Exception("Stock insuficiente de {$detail->product_name} para enviar.");
+                        }
+                        $variant->decrement('stock', $detail->quantity);
+                    }
+                }
+
+                // CASO B: Cancelación de un pedido YA enviado -> DEVOLVER STOCK
+                if ($newStage === 'cancelado' && ($oldStage === 'enviado' || $oldStage === 'entregado')) {
+                    foreach ($sale->details as $detail) {
+                        ProductVariant::where('id', $detail->product_variant_id)
+                            ->increment('stock', $detail->quantity);
+                    }
+                }
+
+                // Actualizamos el estado (El Observer guardará el historial)
+                $sale->update(['stage' => $newStage]);
+            });
+
+            return back()->with('success', "Estado actualizado a: " . ucfirst($newStage));
+
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // --- FUNCIONES DE IMPRESIÓN Y CORREO (Legacy v1.0 Adaptado) ---
 
     public function printTicket($id)
     {
         $sale = Sale::with(['details', 'client', 'user'])->findOrFail($id);
+        $settings = Setting::all()->pluck('value', 'key');
         
-        // 1. Obtenemos configuración real de la BD
-        $settings = \App\Models\Setting::all()->pluck('value', 'key');
-        
-        // 2. Preparamos los datos de la empresa para la vista
         $company = [
             'name' => $settings['company_name'] ?? 'POS SYSTEM',
             'address' => $settings['company_address'] ?? 'Dirección no configurada',
@@ -131,13 +233,9 @@ class SaleController extends Controller
             'footer_text' => $settings['ticket_footer_text'] ?? '¡Gracias por su preferencia!',
         ];
 
-        // 3. Pasamos tanto la venta ($sale) como la empresa ($company)
+        // Usamos la misma vista 'pdf.ticket', asegúrate de actualizarla si quieres mostrar el color elegido
         $pdf = Pdf::loadView('pdf.ticket', compact('sale', 'company'));
-        
-        // 80mm ancho x Alto dinámico
         $pdf->setPaper([0, 0, 227, 800], 'portrait');
-        // 58mm ancho x Alto dinámico
-        //$pdf->setPaper([0, 0, 164, 800], 'portrait');
 
         return $pdf->stream('ticket-'.$sale->id.'.pdf');
     }
@@ -145,11 +243,8 @@ class SaleController extends Controller
     public function printNote($id)
     {
         $sale = Sale::with(['details', 'client'])->findOrFail($id);
+        $settings = Setting::all()->pluck('value', 'key');
         
-        // Obtenemos configuración
-        $settings = Setting::getAll(); // El método que creamos antes
-        
-        // Preparamos datos para la vista
         $company = [
             'name' => $settings['company_name'] ?? 'Mi Empresa',
             'address' => $settings['company_address'] ?? '',
@@ -158,16 +253,14 @@ class SaleController extends Controller
             'footer_text' => $settings['ticket_footer_text'] ?? ''
         ];
 
-        // LOGO: Dompdf necesita la ruta absoluta del sistema de archivos, no URL http://...
         $logoPath = null;
         if (isset($settings['company_logo']) && $settings['company_logo']) {
-            // public_path obtiene C:\xampp\htdocs\...\public
+            // Fix para rutas en Hostings Compartidos o Local
             $logoPath = public_path('storage/' . $settings['company_logo']);
+            // Si usaste el truco del link symbolico personalizado, ajusta aquí si falla.
         }
 
         $pdf = Pdf::loadView('pdf.sale_note', compact('sale', 'company', 'logoPath'));
-        
-        // Tamaño Carta (Letter) Vertical
         $pdf->setPaper('letter', 'portrait');
 
         return $pdf->stream('nota-venta-'.$sale->id.'.pdf');
@@ -176,10 +269,9 @@ class SaleController extends Controller
     public function sendEmail($id)
     {
         $sale = Sale::with(['details', 'client'])->findOrFail($id);
-
-        // 1. Generar el PDF en memoria (Reutilizamos lógica de vista)
-        $settings = Setting::getAll();
+        $settings = Setting::all()->pluck('value', 'key');
         
+        // Preparar Datos (Igual que printNote)
         $company = [
             'name' => $settings['company_name'] ?? 'Mi Empresa',
             'address' => $settings['company_address'] ?? '',
@@ -193,69 +285,32 @@ class SaleController extends Controller
             $logoPath = public_path('storage/' . $settings['company_logo']);
         }
 
-        // Generamos el PDF usando DomPDF
+        // Generar PDF en Memoria
         $pdf = Pdf::loadView('pdf.sale_note', compact('sale', 'company', 'logoPath'));
         $pdf->setPaper('letter', 'portrait');
-        $pdfOutput = $pdf->output(); // Obtenemos el contenido binario del PDF
+        $pdfOutput = $pdf->output();
 
-        // 2. Obtener Destinatarios
+        // Obtener Destinatarios
         $emails = [];
-        
-        // A. Correo del Cliente (si tiene)
         if ($sale->client && $sale->client->email) {
             $emails[] = $sale->client->email;
         }
-
-        // B. Correos Administrativos (desde Configuración)
         if (!empty($settings['notification_emails'])) {
-            // Convertimos "correo1@x.com, correo2@x.com" en array
             $adminEmails = array_map('trim', explode(',', $settings['notification_emails']));
             $emails = array_merge($emails, $adminEmails);
         }
         
-        // Eliminar duplicados y vacíos
         $emails = array_unique(array_filter($emails));
 
         if (empty($emails)) {
             return back()->withErrors(['error' => 'No hay correos configurados para enviar.']);
         }
 
-        // 3. Enviar Correo
         try {
-            // Enviamos a todos los destinatarios encontrados
             Mail::to($emails)->send(new SaleNoteEmail($sale, $pdfOutput));
-            
             return back()->with('success', 'Correo enviado correctamente a: ' . implode(', ', $emails));
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
-    }
-
-    // Cancelar Venta y Devolver Stock
-    public function cancel($id)
-    {
-        $sale = Sale::with('details')->findOrFail($id);
-
-        if ($sale->status === 'cancelado') {
-            return back()->withErrors(['error' => 'Esta venta ya ha sido cancelada anteriormente.']);
-        }
-
-        DB::transaction(function () use ($sale) {
-            // 1. Devolver Stock al Inventario
-            foreach ($sale->details as $detail) {
-                // Buscamos la variante exacta (por si cambió algo, aseguramos que exista)
-                $variant = ProductVariant::find($detail->product_variant_id);
-                
-                if ($variant) {
-                    // Sumamos la cantidad vendida de regreso al stock
-                    $variant->increment('stock', $detail->quantity);
-                }
-            }
-
-            // 2. Cambiar Estatus de la Venta
-            $sale->update(['status' => 'cancelado']);
-        });
-
-        return back()->with('success', 'Venta #' . str_pad($sale->id, 6, '0', STR_PAD_LEFT) . ' cancelada y stock restaurado.');
     }
 }

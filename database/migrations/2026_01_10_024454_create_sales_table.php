@@ -20,9 +20,17 @@ return new class extends Migration
             $table->decimal('paid_amount', 10, 2)->default(0);
             $table->decimal('change_amount', 10, 2)->default(0);
             $table->string('payment_method')->default('Efectivo'); // Efectivo, Tarjeta, Transferencia
-            $table->string('status')->default('pagado'); // pagado, pendiente, cancelado
-            // Columna para cambio (opcional, pero útil para historial)
-            
+            // NUEVO: FLUJO DE ESTADOS
+            // pedido: Borrador / Cotización
+            // confirmado: Cliente aprobó (Anticipo)
+            // produccion: En taller
+            // enviado: Salió a ruta
+            // entregado: Cliente recibió (Final)
+            // cancelado: Se cayó la venta
+            $table->enum('stage', ['pedido', 'confirmado', 'produccion', 'enviado', 'entregado', 'cancelado'])->default('pedido');
+        
+            $table->date('promised_date')->nullable(); // Fecha promesa de entrega
+            $table->boolean('is_partial_shipping')->default(false); // Si se entregó una parte
             $table->timestamps();
         });
     }

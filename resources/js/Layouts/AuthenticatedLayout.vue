@@ -90,7 +90,7 @@ const toggleSidebar = () => {
                     </button>
 
                     <div v-show="showingProductMenu && isSidebarOpen" class="pl-10 pr-2 space-y-1 mt-1 bg-green-900/50 py-2 rounded-lg">
-                        <Link :href="route('products.inventory')" :class="{'text-white font-bold bg-green-700': route().current('products.inventory')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Inventario General</Link>
+                        <Link :href="route('products.index')" :class="{'text-white font-bold bg-green-700': route().current('products.index')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Inventario General</Link>
                         <Link :href="route('products.create')" :class="{'text-white font-bold bg-green-700': route().current('products.create')}" class="block py-2 px-2 text-sm text-green-200 hover:text-white rounded hover:bg-green-700 transition">Nuevo Producto</Link>
                     </div>
                 </div>

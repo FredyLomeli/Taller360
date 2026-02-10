@@ -1,41 +1,36 @@
-# 🛋️ TALLER 360 - Sistema POS Mueblería
+# 🛋️ TALLER 360 - Sistema POS Mueblería (v2.0)
 
 ![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
 ![Inertia](https://img.shields.io/badge/Inertia-Purple?style=for-the-badge&logo=inertia&logoColor=white)
-![Pest PHP](https://img.shields.io/badge/Tests-Passing-success?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Producción-blue?style=for-the-badge)
 
-Sistema de Punto de Venta (POS) y Administración robusto, diseñado específicamente para mueblerías que gestionan inventarios complejos con variantes (Color, Material, Tela).
+Sistema de Gestión de Pedidos y Manufactura robusto, diseñado específicamente para mueblerías que fabrican sobre pedido y requieren control detallado de especificaciones (Colores, Materiales, Notas de Taller).
 
 ## 🚀 ESTATUS DEL PROYECTO
-**Versión:** 1.0 (Release Candidate)
-**Última Actualización:** 17 Enero 2026
-**Fase Actual:** Operatividad y Pruebas de Campo.
+**Versión:** 2.0 (Order & Manufacture)
+**Última Actualización:** 09 Febrero 2026
+**Fase Actual:** Operatividad Completa (Backend + POS).
 
 ---
 
 ## ✅ Módulos Terminados y Funcionales
 
-### 📊 Dashboard Inteligente (Nuevo 🌟)
-Panel de control dinámico con lógica de negocio diferenciada por roles:
-* **Modo Admin:**
-    * KPIs Financieros: Ingreso Real (Caja), Crédito por Cobrar y Tickets Totales.
-    * **Máquina del Tiempo:** Filtro por rango de fechas para analizar ventas históricas.
-    * Ranking de Vendedores y Alertas de Stock Crítico.
-* **Modo Vendedor:**
-    * Vista simplificada. Solo ve sus propios ingresos y su historial reciente.
-    * Privacidad de Datos: El backend bloquea el envío de estadísticas globales a usuarios no admins.
+### 🏭 Order Builder (Nuevo POS v2.0 🌟)
+Ya no es solo un POS, es un **Constructor de Pedidos** inteligente:
+* **Flujo de Manufactura:** Los pedidos nacen como "Cotización/Pedido" y no descuentan stock hasta que se envían.
+* **Personalización Visual:**
+    * Selector de **Colores Visuales (Bolitas)** dinámicos según el material (MDF, Madera, Melamina).
+    * Notas de Taller ilimitadas ("Cortar patas 5cm", "Vidrio esmerilado").
+    * Costos Adicionales por ítem (suman al total automáticamente).
+* **Precios Dinámicos:** Validación que oculta precios hasta seleccionar un cliente y aplica su tarifa específica (Tier 1-5).
+* **Validaciones Financieras:**
+    * Control estricto de descuentos (Tope 50%).
+    * Cálculo de Anticipos y Saldos Pendientes en tiempo real.
+    * Bloqueo de cantidades negativas o errores de captura.
 
-### 🛒 Punto de Venta (POS)
-* **Diseño App-Like:** Altura ajustada (`h-[calc(100vh-0px)]`) sin scrollbars dobles.
-* **Control de Stock:**
-    * Resta automática al vender.
-    * **Configurable:** Permite o bloquea ventas con stock negativo según la configuración del sistema (`allow_negative_stock`).
-* **Decimales:** Solución `lang="en"` para evitar errores de moneda en navegadores en español.
-* **Cliente Rápido:** Modal para registrar clientes al vuelo con validaciones de unicidad.
-
-### 📦 Gestión de Inventario (Variantes)
-* **Arquitectura Padre-Hijo:** Un producto (ej. "Ropero") tiene múltiples variantes (ej. "MDF - Chocolate", "Madera - Caoba").
+### 📦 Gestión de Inventario (Variantes Simplificadas)
+* **Arquitectura Padre-Hijo:** Un producto (ej. "Ropero") tiene variantes por **Material**.
 * **Precios Multi-Nivel:** 5 listas de precios por variante (Público, Mayoreo, Distribuidor).
 * **Integridad:** Protección "Cascade" y validación que impide borrar productos si tienen historial de ventas.
 
@@ -44,21 +39,19 @@ Panel de control dinámico con lógica de negocio diferenciada por roles:
 * **Vendedores:** Acceso exclusivo a POS y su historial. Bloqueo de rutas de configuración, usuarios y reportes globales.
 * **Anti-Intrusos:** Registro público desactivado. Solo el Admin crea usuarios desde el panel interno.
 
-### 🧪 Calidad y Testing (QA)
-Suite de **32 Pruebas Automatizadas (Feature Tests)** usando Pest PHP que validan:
-* Seguridad de rutas (Auth).
-* Cálculo exacto de totales y cambios.
-* Integridad del inventario.
-* Privacidad del Dashboard.
+### 📊 Dashboard Inteligente
+Panel de control dinámico con lógica de negocio diferenciada por roles:
+* **Modo Admin:** KPIs Financieros, Filtro de Fechas, Ranking de Vendedores y Alertas de Stock.
+* **Modo Vendedor:** Vista simplificada. Solo ve sus propios ingresos y su historial reciente.
 
 ---
 
-## 📝 LISTA DE PENDIENTES (Roadmap)
+## 📝 LISTA DE PENDIENTES (Roadmap v2.1)
 
-### 🔴 Prioridad Inmediata (Operatividad)
-* **🖨️ Impresión Térmica:** Conectar la vista HTML (ya calibrada a 80mm/227pt) al botón de imprimir del POS.
-* **📦 Ajuste de Inventario:** Módulo para registrar entradas (compras) y salidas (mermas/uso interno) manualmente.
-* **💰 Corte de Caja:** Comparativa de "Dinero en Sistema" vs "Dinero Físico" por vendedor.
+### 🔴 Prioridad Inmediata
+* **📋 Tablero de Pedidos (Kanban):** Actualizar la vista `Sales/Index` para gestionar los estados del pedido (Pendiente -> Producción -> Enviado -> Entregado).
+* **📄 Hoja de Producción:** Formato de impresión especial para el taller (sin precios, solo medidas, colores y notas).
+* **📦 Ajuste de Inventario:** Módulo para registrar entradas (compras) y salidas (mermas) manualmente.
 
 ### 🟡 Fase 2 (Administración)
 * **Reportes Excel:** Exportación de ventas filtradas por fecha.
@@ -88,7 +81,7 @@ Suite de **32 Pruebas Automatizadas (Feature Tests)** usando Pest PHP que valida
     * Configurar base de datos.
     * Establecer `APP_LOCALE=es`.
 4.  **Base de Datos y Datos de Prueba:**
-    * Este comando crea tablas y **usuarios demo** (Admin + 3 Vendedores) con ventas simuladas para el Dashboard.
+    * Este comando crea tablas y **usuarios demo** (Admin + 3 Vendedores).
     ```bash
     php artisan migrate:fresh --seed
     ```

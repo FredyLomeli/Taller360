@@ -8,15 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 class Product extends Model
 {
     use HasFactory;
-    
+
     protected $fillable = [
-        'category_id', 
-        'name', 
-        'measurements', 
-        'description', 
-        'image', 
-        'description'
-];
+        'category_id',
+        'name',
+        'description',
+        'measurements', // Nuevo
+        'image',        // Antes image_url, normalicemos a image si cambiaste la migración, si no déjalo como image_url
+        'is_favorite'   // Nuevo
+    ];
 
     public function category()
     {

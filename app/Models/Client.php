@@ -10,17 +10,23 @@ class Client extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 
+        'name',
         'business_name', 
         'price_tier',
-        'email', 
-        'phones',
+        'email',
+        'phones',        
         'street_address', 
-        'neighborhood', 
-        'city', 
-        'state', 
-        'delegation', 
+        'neighborhood',
+        'city',
+        'state',
+        'delegation',
         'zip_code',
         'references'
     ];
+
+    // Relación con Ventas
+    public function sales()
+    {
+        return $this->hasMany(Sale::class);
+    }
 }

@@ -18,94 +18,54 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // --- 1. CONFIGURACIÓN DE REGLAS (MATERIALES Y COLORES) ---
-        
+        // Reglas de Materiales por Categoría
         $rulesCategoryMaterial = [
-            'Roperos'               => ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'Trinchers'             => ['Madera', 'Madera y MDF enchapado', 'MDF'],
-            'Cómodas y Lokers'      => ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'Recámaras y comedores' => ['MDF', 'Madera y MDF enchapado', 'Melamina'],
+            'Roperos'               => ['MDF', 'Madera', 'Melamina'],
+            'Trinchers'             => ['Madera', 'MDF'],
+            'Cómodas y Lokers'      => ['MDF', 'Melamina'],
+            'Recámaras y comedores' => ['MDF', 'Madera', 'Melamina'],
             'Bases'                 => ['MDF', 'Madera'],
         ];
 
-        $rulesMaterialColor = [
-            'MDF' => ['Chocolate', 'Nogal', 'Blanco', 'Gris', 'Cherry', '258'],
-            'MADERA' => ['Chocolate', 'Caoba', 'Tabaco', 'Cherry'],
-            'MELAMINA' => ['Fresno andino', 'Parota', 'Nogal africano', 'Gris cenizo', 'Gris antracita', 'Tzalam', 'Moka'],
-            'Madera y MDF enchapado' => ['Chocolate', 'Nogal', 'Caoba', 'Tabaco', 'Cherry']
-        ];
+        // Colores posibles (Ahora solo para elegir al azar en la venta, no en variante)
+        $possibleColors = ['Chocolate', 'Nogal', 'Blanco', 'Gris', 'Cherry', 'Tzalam', 'Moka'];
 
-        // --- 2. CREACIÓN DE USUARIOS (ADMIN Y VENDEDORES) ---
-        
         echo "👤 Creando usuarios...\n";
+        $admin = User::firstOrCreate(['email' => 'admin@admin.com'], [
+            'name' => 'Administrador Principal', 'password' => Hash::make('password'), 'role' => 'admin', 'email_verified_at' => now(),
+        ]);
 
-        // A. Crear Admin
-        $admin = User::firstOrCreate(
-            ['email' => 'admin@admin.com'],
-            [
-                'name' => 'Administrador Principal',
-                'password' => Hash::make('password'),
-                'role' => 'admin',
-                'email_verified_at' => now(),
-            ]
-        );
-
-        // B. Crear 3 Vendedores
         $vendors = [];
         for ($i = 1; $i <= 3; $i++) {
-            $vendors[] = User::firstOrCreate(
-                ['email' => "vendedor{$i}@tienda.com"],
-                [
-                    'name' => "Vendedor {$i}",
-                    'password' => Hash::make('password'),
-                    'role' => 'vendedor',
-                    'email_verified_at' => now(),
-                ]
-            );
+            $vendors[] = User::firstOrCreate(['email' => "vendedor{$i}@tienda.com"], [
+                'name' => "Vendedor {$i}", 'password' => Hash::make('password'), 'role' => 'vendedor', 'email_verified_at' => now(),
+            ]);
         }
-
-        // Juntamos a todos (Admin + Vendedores) para repartir las ventas aleatoriamente
         $allStaff = collect([$admin])->merge($vendors);
-        
-        echo "✅ Admin y 3 Vendedores creados.\n";
 
-        // --- 3. CREACIÓN DE CATEGORÍAS ---
-        
+        echo "📦 Creando Catálogo...\n";
         foreach (array_keys($rulesCategoryMaterial) as $catName) {
             Category::firstOrCreate(['name' => $catName]);
         }
         $categories = Category::all();
-        echo "✅ Categorías creadas.\n";
 
-        // --- 4. CREACIÓN DE PRODUCTOS Y VARIANTES ---
-        
-        echo "🔄 Generando inventario...\n";
-
-        for ($i = 0; $i < 200; $i++) {
+        for ($i = 0; $i < 100; $i++) {
             $category = $categories->random();
-            
             $product = Product::factory()->create([
                 'category_id' => $category->id,
-                'name' => rtrim($category->name, 's') . ' Modelo ' . fake()->word(), 
+                'name' => rtrim($category->name, 's') . ' Modelo ' . fake()->word(),
+                'is_favorite' => fake()->boolean(20) // 20% de probabilidad de ser favorito
             ]);
 
             $allowedMaterials = $rulesCategoryMaterial[$category->name] ?? ['MDF'];
-            $numVariants = rand(2, 4);
-
-            for ($j = 0; $j < $numVariants; $j++) {
-                $material = fake()->randomElement($allowedMaterials);
-                
-                // Normalización de llave para color
-                $matKey = strtoupper($material) === 'MDF' ? 'MDF' : (strtoupper($material) === 'MELAMINA' ? 'MELAMINA' : (strtoupper($material) === 'MADERA' ? 'MADERA' : $material));
-                $allowedColors = $rulesMaterialColor[$matKey] ?? ['Chocolate'];
-                $color = fake()->randomElement($allowedColors);
-
+            
+            // Creamos variantes solo por MATERIAL
+            foreach ($allowedMaterials as $material) {
                 $price1 = fake()->randomFloat(2, 1500, 12000);
-
                 ProductVariant::create([
                     'product_id' => $product->id,
                     'material' => $material,
-                    'color' => $color,
+                    // YA NO HAY COLOR AQUÍ
                     'sku' => strtoupper(substr($material, 0, 3)) . '-' . fake()->unique()->numerify('####'),
                     'stock' => fake()->numberBetween(0, 40),
                     'price_1' => $price1,
@@ -116,91 +76,75 @@ class DatabaseSeeder extends Seeder
                 ]);
             }
         }
-        echo "✅ Productos creados.\n";
 
-        // --- 5. CREACIÓN DE CLIENTES ---
-        
-        Client::factory(300)->create();
-        echo "✅ Clientes creados.\n";
+        echo "👥 Creando Clientes...\n";
+        Client::factory(50)->create(); // Factory debe estar actualizado con campos obligatorios
 
-        // --- 6. GENERACIÓN DE VENTAS DISTRIBUIDAS ---
-        
-        echo "🔄 Simulando ventas distribuidas entre vendedores...\n";
-        
+        echo "💰 Simulando Pedidos/Ventas...\n";
         $clients = Client::all();
         $variants = ProductVariant::with('product')->get();
 
-        DB::transaction(function () use ($allStaff, $clients, $variants) {
-            // Generamos 500 ventas
-            for ($i = 0; $i < 500; $i++) {
-                
-                // 1. Elegir un Vendedor al azar (o el admin) para esta venta
+        DB::transaction(function () use ($allStaff, $clients, $variants, $possibleColors) {
+            for ($i = 0; $i < 200; $i++) {
                 $seller = $allStaff->random();
-
-                // 2. Fecha aleatoria (80% antiguas, 20% recientes de HOY)
-                // Esto asegura que haya datos en el Dashboard del día actual
-                $date = (rand(1, 100) <= 80) 
-                    ? Carbon::today()->subDays(rand(1, 60))->subHours(rand(1, 12)) // Últimos 2 meses
-                    : Carbon::now()->subMinutes(rand(1, 400)); // Hoy
-
+                $date = Carbon::today()->subDays(rand(1, 60));
                 $client = $clients->random();
 
-                // Crear Venta (Inicialmente en 0)
+                // Decidir estado aleatorio
+                $stages = ['pedido', 'confirmado', 'produccion', 'enviado', 'entregado'];
+                $stage = $stages[array_rand($stages)];
+
                 $sale = Sale::create([
-                    'user_id' => $seller->id, // <--- AQUÍ ASIGNAMOS AL VENDEDOR
+                    'user_id' => $seller->id,
                     'client_id' => $client->id,
                     'total' => 0,
-                    'status' => 'pagado',
+                    'stage' => $stage, // Usamos stage en vez de status
                     'created_at' => $date,
                     'updated_at' => $date,
                     'paid_amount' => 0,
-                    'change_amount' => 0,
-                    'payment_method' => 'Efectivo'
+                    'promised_date' => $date->copy()->addDays(15),
                 ]);
 
                 $totalSale = 0;
-                $itemsCount = rand(1, 3); // 1 a 3 productos por venta
+                $itemsCount = rand(1, 3);
 
-                // Agregar detalles (Productos)
                 for ($j = 0; $j < $itemsCount; $j++) {
                     $variant = $variants->random();
-                    
-                    // Precio según nivel de cliente
-                    $priceField = 'price_' . $client->price_tier;
-                    $unitPrice = $variant->$priceField ?? $variant->price_1;
-                    
+                    $unitPrice = $variant->price_1;
                     $qty = rand(1, 2);
-                    $subtotal = $unitPrice * $qty;
+                    
+                    // Lógica de Adicionales
+                    $hasAdicional = fake()->boolean(30);
+                    $additionalCost = $hasAdicional ? rand(100, 500) : 0;
+                    $notes = $hasAdicional ? 'Adicional: Jaladeras cromadas' : null;
+                    
+                    $subtotal = ($unitPrice * $qty) + $additionalCost;
 
                     SaleDetail::create([
                         'sale_id' => $sale->id,
                         'product_variant_id' => $variant->id,
                         'product_name' => $variant->product->name . ' (' . $variant->material . ')',
                         'quantity' => $qty,
+                        'chosen_color' => $possibleColors[array_rand($possibleColors)], // Color se elige AQUÍ
+                        'custom_notes' => $notes,
+                        'additional_cost' => $additionalCost,
                         'unit_price' => $unitPrice,
                         'subtotal' => $subtotal,
                         'created_at' => $date,
                         'updated_at' => $date,
                     ]);
-                    
                     $totalSale += $subtotal;
                 }
 
-                // Actualizar total y pago
-                // Simulamos que el 90% pagaron completo, y un 10% dejaron crédito pendiente
-                $paidAmount = (rand(1, 100) <= 90) ? $totalSale : ($totalSale * 0.5); 
-                
-                $sale->update([
-                    'total' => $totalSale, 
-                    'paid_amount' => $paidAmount,
-                    'status' => ($paidAmount >= $totalSale) ? 'pagado' : 'pendiente'
-                ]);
+                // Lógica de Pagos según Estado
+                $paidAmount = 0;
+                if ($stage === 'pedido') $paidAmount = 0;
+                elseif ($stage === 'confirmado') $paidAmount = $totalSale * 0.50; // Anticipo
+                elseif ($stage === 'entregado') $paidAmount = $totalSale; // Liquidado
+
+                $sale->update(['total' => $totalSale, 'paid_amount' => $paidAmount]);
             }
         });
-
-        echo "✅ 500 Ventas generadas y distribuidas entre el equipo.\n";
-        echo "🚀 ¡Base de datos lista!\n";
-        echo "   Admin: admin@admin.com (password)\n";
-        echo "   Vendedor 1: vendedor1@tienda.com (password)\n";
+        echo "✅ Base de datos reestructurada lista.\n";
     }
 }

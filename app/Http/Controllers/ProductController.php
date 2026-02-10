@@ -2,33 +2,30 @@
 
 namespace App\Http\Controllers;
 
-use Inertia\Inertia;
 use App\Models\Product;
-use App\Models\Client;
 use App\Models\Category;
-use App\Models\SaleDetail;
 use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-
+use Inertia\Inertia;
 
 class ProductController extends Controller
 {
-
     public function index()
     {
-
+        // Cargamos productos con sus variantes y categoría
+        // Agregamos is_favorite a la consulta
         return Inertia::render('Products/Index', [
-            'products' => Product::with(['category', 'variants'])->get(),
-            'clients' => Client::all(),
-            'categories' => Category::all() 
+            'products' => Product::with(['category', 'variants'])
+                ->orderBy('is_favorite', 'desc') // Los favoritos aparecen primero en la lista
+                ->orderBy('created_at', 'desc')
+                ->get()
         ]);
     }
 
     public function create()
     {
-        // Cargamos las categorías para el selector
         return Inertia::render('Products/Create', [
             'categories' => Category::all()
         ]);
@@ -36,200 +33,154 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
-        // Validaciones (Agregamos la validación de imagen)
+        // 1. Validación (Ya no pedimos color en variants)
         $request->validate([
             'name' => 'required|string|max:255',
             'category_id' => 'required|exists:categories,id',
-            'image' => 'nullable|image|max:2048', // <--- Nueva regla: Imagen máx 2MB
-            'variants' => 'required|array|min:1',
-            'measurements' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:1000',
-        ]);
-
-        DB::transaction(function () use ($request) {
+            'description' => 'nullable|string',
+            'measurements' => 'nullable|string', // Nuevo campo
+            'image' => 'nullable|image|max:2048',
+            'is_favorite' => 'boolean', // Nuevo campo
             
-            // 1. Manejo de la Imagen
-            $imagePath = null;
-            if ($request->hasFile('image')) {
-                // Guarda en la carpeta 'public/products' y devuelve la ruta
-                $imagePath = $request->file('image')->store('products', 'public');
-            }
-
-            // 2. Crear Producto Padre
-            $product = Product::create([
-                'category_id' => $request->category_id,
-                'name' => $request->name,
-                'measurements' => $request->measurements,
-                'description' => $request->description,
-                'image' => $imagePath, // <--- Guardamos la ruta
-            ]);
-
-            // ... (el código de variantes sigue igual) ...
-            foreach ($request->variants as $variant) {
-                $product->variants()->create([
-                    'material' => $variant['material'],
-                    'color' => $variant['color'],
-                    'stock' => $variant['stock'] ?? 0,
-                    'sku' => $variant['sku'] ?? null,
-                    'price_1' => $variant['price_1'],
-                    'price_2' => $variant['price_2'] ?? null,
-                    'price_3' => $variant['price_3'] ?? null,
-                    'price_4' => $variant['price_4'] ?? null,
-                    'price_5' => $variant['price_5'] ?? null,
-                ]);
-            }
-        });
-
-        return redirect()->route('products.inventory'); // Redirigimos al inventario
-    }
-
-    public function inventory()
-    {
-        // Traemos los productos paginados (de 10 en 10) para que la tabla no sea kilométrica
-        $products = Product::with(['category', 'variants'])->latest()->get();
-
-        return Inertia::render('Products/Inventory', [
-            'products' => $products
-        ]);
-    }
-
-    public function edit($id)
-    {
-        $product = Product::with('variants')->findOrFail($id);
-        
-        return Inertia::render('Products/Edit', [
-            'product' => $product,
-            'categories' => Category::all()
-        ]);
-    }
-
-    public function update(Request $request, $id)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'category_id' => 'required|exists:categories,id',
-            'measurements' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:1000',
-            'image' => 'nullable|image|max:2048', // Opcional, pero si la suben, debe ser imagen válida
-            
-            // Validaciones del Array de Variantes
+            // Validación de Variantes (Solo Material y Precios)
             'variants' => 'required|array|min:1',
-            'variants.*.material' => 'required|string|max:100',
-            'variants.*.color' => 'required|string|max:100',
-            'variants.*.stock' => 'required|numeric|min:0',
-            'variants.*.sku' => 'nullable|string|max:100',
+            'variants.*.material' => 'required|string',
+            'variants.*.sku' => 'nullable|string',
+            'variants.*.stock' => 'required|integer|min:0',
             'variants.*.price_1' => 'required|numeric|min:0',
             'variants.*.price_2' => 'nullable|numeric|min:0',
             'variants.*.price_3' => 'nullable|numeric|min:0',
             'variants.*.price_4' => 'nullable|numeric|min:0',
             'variants.*.price_5' => 'nullable|numeric|min:0',
-        ], [
-            // Mensajes personalizados opcionales para que se entiendan mejor los errores del array
-            'variants.*.material.required' => 'El material es obligatorio en todas las variantes.',
-            'variants.*.stock.min' => 'El stock no puede ser negativo.',
-            'variants.*.price_1.required' => 'El precio 1 es obligatorio.',
         ]);
 
-        $product = Product::findOrFail($id);
-        
-        // 1. Actualizamos datos del padre
-        $dataToUpdate = [
-            'name' => $request->name,
-            'description' => $request->description,
-            'category_id' => $request->category_id,
-            'measurements' => $request->measurements,
-        ];
-
-        if ($request->hasFile('image')) {
-            if ($product->image) {
-                Storage::disk('public')->delete($product->image);
+        DB::transaction(function () use ($request) {
+            // 2. Guardar Imagen
+            $imagePath = null;
+            if ($request->hasFile('image')) {
+                // Usamos el disco public configurado anteriormente
+                $imagePath = $request->file('image')->store('products', 'public');
             }
-            $dataToUpdate['image'] = $request->file('image')->store('products', 'public');
-        }
 
-        $product->update($dataToUpdate);
+            // 3. Crear Producto Padre
+            $product = Product::create([
+                'category_id' => $request->category_id,
+                'name' => $request->name,
+                'description' => $request->description,
+                'measurements' => $request->measurements,
+                'image' => $imagePath,
+                'is_favorite' => $request->boolean('is_favorite'),
+            ]);
 
-        // 2. LOGICA DE VARIANTES CORREGIDA
-        DB::transaction(function () use ($request, $product) {
-            
-            // A. LIMPIEZA: Identificar qué variantes se quitaron en el formulario
-            // Obtenemos solo los IDs que vienen en el request (los que el usuario dejó vivos)
-            $existingIds = collect($request->variants)->pluck('id')->filter()->toArray();
-            
-            // Borramos de la base de datos las variantes que NO vienen en el formulario
-            $product->variants()->whereNotIn('id', $existingIds)->delete();
-
-            // B. ACTUALIZACIÓN / CREACIÓN (Upsert)
+            // 4. Crear Variantes (Sin Color)
             foreach ($request->variants as $variantData) {
-                // updateOrCreate busca por ID. 
-                // Si el ID existe y coincide con el producto, actualiza.
-                // Si el ID es null o no existe, crea uno nuevo.
-                $product->variants()->updateOrCreate(
+                ProductVariant::create([
+                    'product_id' => $product->id,
+                    'material' => $variantData['material'],
+                    'sku' => $variantData['sku'] ?? null,
+                    'stock' => $variantData['stock'],
+                    'price_1' => $variantData['price_1'],
+                    'price_2' => $variantData['price_2'] ?? null,
+                    'price_3' => $variantData['price_3'] ?? null,
+                    'price_4' => $variantData['price_4'] ?? null,
+                    'price_5' => $variantData['price_5'] ?? null,
+                ]);
+            }
+        });
+
+        return redirect()->route('products.index')->with('success', 'Producto creado exitosamente.');
+    }
+
+    public function edit(Product $product)
+    {
+        // Cargamos el producto con sus variantes para el formulario de edición
+        return Inertia::render('Products/Edit', [
+            'product' => $product->load('variants'),
+            'categories' => Category::all()
+        ]);
+    }
+
+    public function update(Request $request, Product $product)
+    {
+        // Validación idéntica al store, pero a veces image es nullable si no se cambia
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'category_id' => 'required|exists:categories,id',
+            'description' => 'nullable|string',
+            'measurements' => 'nullable|string',
+            'image' => 'nullable|image|max:2048',
+            'is_favorite' => 'boolean',
+
+            'variants' => 'required|array|min:1',
+            'variants.*.material' => 'required|string',
+            'variants.*.stock' => 'required|integer|min:0',
+            'variants.*.price_1' => 'required|numeric|min:0',
+        ]);
+
+        DB::transaction(function () use ($request, $product) {
+            // 1. Manejo de Imagen
+            $imagePath = $product->image;
+            if ($request->hasFile('image')) {
+                if ($product->image) {
+                    Storage::disk('public')->delete($product->image);
+                }
+                $imagePath = $request->file('image')->store('products', 'public');
+            }
+
+            // 2. Actualizar Padre
+            $product->update([
+                'category_id' => $request->category_id,
+                'name' => $request->name,
+                'description' => $request->description,
+                'measurements' => $request->measurements,
+                'image' => $imagePath,
+                'is_favorite' => $request->boolean('is_favorite'),
+            ]);
+
+            // 3. Sincronización Inteligente de Variantes (Upsert)
+            // Obtenemos los IDs que vienen del formulario
+            $incomingIds = collect($request->variants)->pluck('id')->filter()->toArray();
+
+            // Borramos las variantes que ya no están en el formulario (si el usuario eliminó una fila)
+            // Opcional: Podrías validar si tiene ventas antes de borrar, 
+            // pero el constraint de la BD (restrict) ya nos protegerá o fallará.
+            $product->variants()->whereNotIn('id', $incomingIds)->delete();
+
+            // Actualizamos o Creamos
+            foreach ($request->variants as $variantData) {
+                ProductVariant::updateOrCreate(
+                    ['id' => $variantData['id'] ?? null], // Busca por ID
                     [
-                        'id' => $variantData['id'] ?? null // Clave de búsqueda
-                    ], 
-                    [
+                        'product_id' => $product->id,
                         'material' => $variantData['material'],
-                        'color' => $variantData['color'],
-                        'stock' => $variantData['stock'] ?? 0,
                         'sku' => $variantData['sku'] ?? null,
+                        'stock' => $variantData['stock'],
                         'price_1' => $variantData['price_1'],
                         'price_2' => $variantData['price_2'] ?? null,
                         'price_3' => $variantData['price_3'] ?? null,
                         'price_4' => $variantData['price_4'] ?? null,
                         'price_5' => $variantData['price_5'] ?? null,
-                        // Importante: Aseguramos que pertenezca al producto (para los nuevos)
-                        'product_id' => $product->id 
                     ]
                 );
             }
         });
 
-        return redirect()->route('products.inventory')->with('success', 'Producto actualizado correctamente.');
+        return redirect()->route('products.index')->with('success', 'Producto actualizado correctamente.');
     }
 
-    public function destroy($id)
+    public function destroy(Product $product)
     {
-        $product = Product::with('variants')->findOrFail($id);
-
-        // 1. REGLA DE ORO: Verificar si alguna variante ya se vendió
-        // Obtenemos los IDs de las variantes de este producto
-        $variantIds = $product->variants->pluck('id');
-
-        // Buscamos si existen en la tabla de ventas
-        $isUsedInSales = SaleDetail::whereIn('product_variant_id', $variantIds)->exists();
-
-        if ($isUsedInSales) {
-            // Si existe, DETENEMOS TODO y regresamos error
-            return back()->withErrors([
-                'error' => 'No se puede eliminar el producto "' . $product->name . '" porque forma parte de una o más ventas registradas en el historial.'
-            ]);
+        // Validamos si tiene ventas históricas antes de borrar
+        // Nota: Al borrar el producto, las variantes se borran en cascada, 
+        // pero la BD impedirá esto si hay ventas ligadas a las variantes.
+        try {
+            if ($product->image) {
+                Storage::disk('public')->delete($product->image);
+            }
+            $product->delete();
+            return redirect()->route('products.index')->with('success', 'Producto eliminado.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'No se puede eliminar este producto porque tiene ventas registradas.');
         }
-
-        // 2. Si no se ha vendido, procedemos al borrado seguro
-        // (Aquí sí aplica el borrado en cascada: Se borra Producto y sus Variantes)
-        $product->delete();
-
-        return back()->with('success', 'Producto eliminado correctamente.');
-    }
-
-    public function destroyVariant($id)
-    {
-        $variant = ProductVariant::findOrFail($id);
-
-        // 1. EL GUARDIA: Verificar si esta variante específica se vendió
-        $isSold = SaleDetail::where('product_variant_id', $id)->exists();
-
-        if ($isSold) {
-            // Importante: regresar con 'error' para que el frontend lo lea
-            return back()->withErrors([
-                'error' => 'No puedes eliminar esta variante ("' . $variant->color . ' - ' . $variant->material . '") porque ya se ha vendido en el pasado.'
-            ]);
-        }
-
-        // 2. Borrar si está limpia
-        $variant->delete();
-
-        return back()->with('success', 'Variante eliminada.');
     }
 }
