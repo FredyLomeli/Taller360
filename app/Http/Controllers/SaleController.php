@@ -23,7 +23,7 @@ class SaleController extends Controller
     public function index(Request $request)
     {
         // Iniciamos la consulta con las relaciones necesarias
-        $query = Sale::with(['client', 'user', 'history'])->latest();
+        $query = Sale::with(['client', 'user', 'details', 'history.user'])->latest();
 
         // Regla de Negocio: Vendedores solo ven lo suyo
         if (Auth::user()->role !== 'admin') {

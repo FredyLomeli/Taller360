@@ -1,6 +1,6 @@
 # 🧠 CONTEXTO TÉCNICO - TALLER 360 (POS SYSTEM)
-**Versión:** 2.1 (POS & Order Builder Completado)
-**Fecha de actualización:** 10 Febrero 2026
+**Versión:** 2.2 (Index de Ventas con Filtros Reactivos)
+**Fecha de actualización:** 11 Febrero 2026
 **Repositorio:** `https://github.com/FredyLomeli/Taller360`
 
 ## 1. 🛠 Stack Tecnológico
@@ -93,27 +93,27 @@ Esta referencia es la **única** autorizada para consultas SQL/Eloquent.
 
 ## 5. 🖥️ Lógica de Frontend (Actualizada)
 * **POS / Order Builder (`Sales/Create.vue`):** ✅ **COMPLETADO**
-    * **Catálogo Visual:** Selección de colores mediante "bolitas" dinámicas según material (MDF, Madera, Melamina) definidas en JS local.
-    * **Ticket Compacto:** Diseño optimizado para ver más ítems, con botón para editar "Notas/Extras" en un modal.
-    * **Modal Checkout V1:** Restaurado diseño visual (encabezado verde, iconos grandes) pero con lógica V2 (Anticipo + Fecha Entrega Opcional).
-    * **Validaciones:** Bloqueo de cantidades negativas y costos extra negativos.
+    * **Catálogo Visual:** Selección de colores mediante "bolitas" dinámicas.
+    * **Checkout V1:** Lógica de anticipos y fecha de entrega.
+* **Gestión de Ventas (`Sales/Index.vue`):** ✅ **COMPLETADO HOY**
+    * **Tabs de Filtrado:** Navegación reactiva para segmentar ventas por `stage` (Todos, Pendientes, Producción, etc.).
+    * **Semaforización:** Implementación de badges de colores según el estado actual de la venta.
+    * **Resumen Dinámico:** Columna de detalles que muestra de forma compacta el producto, `chosen_color` y marca de notas.
+    * **Acciones Integradas:** Botones para cambiar de estado (p. ej. "A Producción") directamente desde la tabla mediante peticiones Inertia.
 
 ---
 
 ## 6. 📍 Hoja de Ruta (Backlog Priorizado)
 
-### 🚀 FASE ACTUAL: Gestión de Pedidos (Kanban)
+### 🚀 FASE ACTUAL: Gestión de Pedidos (Detalle y Salida)
 
-#### 1. 📋 Tablero de Control (`Sales/Index.vue`) - **[EN PROGRESO]**
-* Transformar la tabla simple en un gestor de estados.
-* **Tabs:** Filtrar por `Todos`, `Pendientes`, `Producción`, `Enviados`.
-* **Acciones:** Botón para avanzar etapa ("Pasar a Producción", "Enviar").
-* **Visual:** Mostrar Semaforización de estatus y resumen de notas/colores en la tabla.
-
-#### 2. 📄 Detalles del Pedido (`Sales/Show.vue`)
+#### 1. 📄 Detalles del Pedido (`Sales/Show.vue`) - **[SIGUIENTE PASO]**
 * Mostrar desglose completo incluyendo `chosen_color`, `notes` y `promised_date`.
 * Botón para imprimir **Ticket** y **Nota de Venta**.
 * **Nueva Vista:** "Hoja de Producción" (Impresión limpia para taller sin precios).
+
+#### 2. 📊 Dashboard de Operaciones
+* Resumen de pedidos activos y próximos a vencer según `promised_date`.
 
 #### 3. 📦 Ajustes de Inventario
 * Módulo para registrar entradas (compras) y salidas (mermas) manualmente.

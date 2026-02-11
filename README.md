@@ -1,4 +1,4 @@
-# 🛋️ TALLER 360 - Sistema POS Mueblería (v2.0)
+# 🛋️ TALLER 360 - Sistema POS Mueblería (v2.1)
 
 ![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
@@ -8,9 +8,9 @@
 Sistema de Gestión de Pedidos y Manufactura robusto, diseñado específicamente para mueblerías que fabrican sobre pedido y requieren control detallado de especificaciones (Colores, Materiales, Notas de Taller).
 
 ## 🚀 ESTATUS DEL PROYECTO
-**Versión:** 2.0 (Order & Manufacture)
-**Última Actualización:** 09 Febrero 2026
-**Fase Actual:** Operatividad Completa (Backend + POS).
+**Versión:** 2.1 (Order & Manufacture)
+**Última Actualización:** 10 Febrero 2026
+**Fase Actual:** Operatividad Completa (Backend + POS + Tablero Kanban).
 
 ---
 
@@ -29,6 +29,12 @@ Ya no es solo un POS, es un **Constructor de Pedidos** inteligente:
     * Cálculo de Anticipos y Saldos Pendientes en tiempo real.
     * Bloqueo de cantidades negativas o errores de captura.
 
+### 📋 Tablero de Pedidos (Kanban V2 🚀)
+Gestión completa del ciclo de vida del mueble:
+* **Filtros Dinámicos:** Pestañas de acceso rápido (Cotización, Confirmado, Producción, Enviados, Entregados).
+* **Motor de Transacciones:** Lógica estricta de base de datos; el stock solo se descuenta en el momento exacto en que el pedido pasa a "Enviado". Si se cancela, el stock regresa automáticamente.
+* **Historial de Auditoría:** Línea de tiempo (Timeline) integrada en cada ticket que registra qué usuario movió el pedido de etapa y la fecha exacta.
+
 ### 📦 Gestión de Inventario (Variantes Simplificadas)
 * **Arquitectura Padre-Hijo:** Un producto (ej. "Ropero") tiene variantes por **Material**.
 * **Precios Multi-Nivel:** 5 listas de precios por variante (Público, Mayoreo, Distribuidor).
@@ -46,11 +52,11 @@ Panel de control dinámico con lógica de negocio diferenciada por roles:
 
 ---
 
-## 📝 LISTA DE PENDIENTES (Roadmap v2.1)
+## 📝 LISTA DE PENDIENTES (Roadmap v2.2)
 
 ### 🔴 Prioridad Inmediata
-* **📋 Tablero de Pedidos (Kanban):** Actualizar la vista `Sales/Index` para gestionar los estados del pedido (Pendiente -> Producción -> Enviado -> Entregado).
-* **📄 Hoja de Producción:** Formato de impresión especial para el taller (sin precios, solo medidas, colores y notas).
+* **📦 Refactor de Inventario:** Actualizar el formulario de creación y edición de productos (`Products/Create.vue`) para eliminar el campo de "color" en las variantes y adaptarlo al nuevo modelo V2.
+* **📄 Hoja de Producción:** Formato de impresión en PDF especial para el taller (sin precios, solo medidas, colores y notas de fabricación).
 * **📦 Ajuste de Inventario:** Módulo para registrar entradas (compras) y salidas (mermas) manualmente.
 
 ### 🟡 Fase 2 (Administración)
