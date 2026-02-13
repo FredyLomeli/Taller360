@@ -170,6 +170,21 @@ const sendEmail = (id) => {
                         <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                         Tablero de Pedidos
                     </h2>
+                    <div class="flex gap-3">
+                        <a :href="route('production.plan')" target="_blank" class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow flex items-center transition-colors border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.685 2.685 0 0021 17.25l-5.83-5.83m0 0c.83-.83.83-2.16 0-2.99a2.685 2.685 0 00-2.99 0c-.83.83-2.16.83-2.99 0m6 6l-5.83 5.83c-.83.83-2.16.83-2.99 0a2.685 2.685 0 000 2.99L8.25 21a2.685 2.685 0 002.685-2.685l5.83-5.83zM6.75 6.75h.75v.75h-.75v-.75zM6.75 10.5h.75v.75h-.75v-.75zM10.5 6.75h.75v.75h-.75v-.75zM10.5 10.5h.75v.75h-.75v-.75zM6.75 14.25h.75v.75h-.75v-.75z" />
+                            </svg>
+                            Plan de Taller
+                        </a>
+
+                        <Link :href="route('sales.create')" class="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow flex items-center transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-1">
+                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                            </svg>
+                            Nuevo Pedido
+                        </Link>
+                    </div>
                     
                     <div class="relative w-full md:w-96">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -202,7 +217,10 @@ const sendEmail = (id) => {
                             <tbody class="divide-y divide-gray-100">
                                 <tr v-for="sale in sales?.data || []" :key="sale.id" class="hover:bg-gray-50/50 transition-colors">
                                     <td class="px-6 py-4">
-                                        <span class="block font-bold text-gray-900 text-base">#{{ sale.id.toString().padStart(6, '0') }}</span>
+                                        <Link :href="route('sales.show', sale.id)" class="block font-bold text-blue-600 hover:text-blue-800 hover:underline text-base transition-colors" title="Ver Detalle Completo / Modo Taller">
+                                            #{{ sale.id.toString().padStart(6, '0') }}
+                                        </Link>
+                                        
                                         <span class="text-xs text-gray-400">{{ formatDate(sale.created_at) }}</span>
                                     </td>
                                     <td class="px-6 py-4">

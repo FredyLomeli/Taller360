@@ -13,10 +13,41 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
+use Database\Seeders\ClientSeeder;
+use Database\Seeders\ProductLoadSeeder;
 
 class DatabaseSeeder extends Seeder
 {
+    // Seeders de producción
     public function run(): void
+    {
+        // Reglas de Materiales por Categoría
+        $rulesCategoryMaterial = [
+            'Roperos'               => ['MDF', 'Madera', 'Melamina'],
+            'Trinchers'             => ['Madera', 'MDF'],
+            'Cómodas y Lokers'      => ['MDF', 'Melamina'],
+            'Recámaras y comedores' => ['MDF', 'Madera', 'Melamina'],
+            'Bases'                 => ['MDF', 'Madera'],
+        ];
+
+        $this->call([
+            ClientSeeder::class,
+            ProductLoadSeeder::class,
+        ]);
+
+        echo "👤 Creando usuarios...\n";
+        $admin = User::firstOrCreate(['email' => 'admin@admin.com'], [
+            'name' => 'Administrador Principal', 'password' => Hash::make('password'), 'role' => 'admin', 'email_verified_at' => now(),
+        ]);
+
+        echo "📦 Creando Catálogo...\n";
+        foreach (array_keys($rulesCategoryMaterial) as $catName) {
+            Category::firstOrCreate(['name' => $catName]);
+        }
+    }
+
+    // Seeders de prueba
+    /*public function run(): void
     {
         // Reglas de Materiales por Categoría
         $rulesCategoryMaterial = [
@@ -146,5 +177,5 @@ class DatabaseSeeder extends Seeder
             }
         });
         echo "✅ Base de datos reestructurada lista.\n";
-    }
+    }*/
 }

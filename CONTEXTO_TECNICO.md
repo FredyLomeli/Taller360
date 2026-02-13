@@ -1,6 +1,6 @@
 # 🧠 CONTEXTO TÉCNICO - TALLER 360 (POS SYSTEM)
-**Versión:** 2.2 (Index de Ventas con Filtros Reactivos)
-**Fecha de actualización:** 11 Febrero 2026
+**Versión:** 2.5 (Ciclo Financiero & Producción Completo)
+**Fecha de actualización:** 13 Febrero 2026
 **Repositorio:** `https://github.com/FredyLomeli/Taller360`
 
 ## 1. 🛠 Stack Tecnológico
@@ -8,8 +8,8 @@
 * **Frontend:** Vue 3 (Composition API `<script setup>`) + Inertia.js.
 * **Estilos:** Tailwind CSS.
 * **Base de Datos:** MySQL / MariaDB (InnoDB).
-* **Testing:** Pest PHP.
-* **Librerías:** `dompdf`, `sweetalert2`, `lodash`, `laravel-lang`.
+* **Infraestructura:** Compatible con Hosting Compartido (cPanel/Neubox) mediante `FILESYSTEM_PUBLIC_ROOT`.
+* **Librerías:** `barryvdh/laravel-dompdf`, `sweetalert2`, `lodash`, `laravel-lang`.
 
 ---
 
@@ -18,106 +18,116 @@
 Esta referencia es la **única** autorizada para consultas SQL/Eloquent.
 
 ### 👤 Usuarios y Clientes
-* **`users`**: `id`, `name`, `email` (unique), `password`, `role` (default 'vendedor'), `email_verified_at`, timestamps.
+* **`users`**: `id`, `name`, `email` (unique), `password`, `role` (enum: 'admin', 'vendedor'), `email_verified_at`, timestamps.
 * **`clients`**:
     * `id`, `name` (Nombre corto), `business_name` (Razón Social).
-    * `price_tier` (int 1-5).
-    * **Contacto:** `email` (unique), `phones` (string plural: "33123, 33456").
+    * `price_tier` (int 1-5) -> *Mapeado visualmente como Listas A, B, C, D, E*.
+    * **Contacto:** `email` (unique - *Generado auto si no existe*), `phones` (string).
     * **Dirección:** `street_address`, `neighborhood`, `city`, `state`, `delegation`, `zip_code`.
     * `references` (text).
 
-### 📦 Inventario
+### 📦 Inventario & Producción
 * **`categories`**: `id`, `name`, timestamps.
 * **`products`**:
-    * `id`, `category_id` (FK), `name`, `description`.
+    * `id`, `category_id` (FK), `name` (Modelo), `description`.
     * `measurements` (string), `image` (string).
-    * **`is_favorite`** (boolean) -> *Para monitoreo rápido en Dashboard*.
+    * **`is_favorite`** (boolean) -> *Vital para el widget de Stock Bajo en Dashboard*.
 * **`product_variants`**:
     * `id`, `product_id` (FK -> cascade).
-    * **`material`** (string), `sku` (string, nullable).
-    * `stock` (int). **Nota:** El `color` se eliminó de aquí (ahora es atributo de venta).
+    * **`material`** (string) -> *Ej: MDF, Melamina, Madera*.
+    * `sku` (string, nullable).
+    * `stock` (int) -> *Se descuenta estrictamente al pasar a etapa 'Enviado'*.
     * `price_1` (Público - Obligatorio).
-    * `price_2` a `price_5` (Mayoreo - Opcionales).
+    * `price_2` a `price_5` (Listas de Precios - Opcionales).
 
 ### 💰 Ventas y Pedidos (Core)
 * **`sales`**:
     * `id`, `user_id` (FK), `client_id` (FK - nullable).
-    * `total` (decimal), `paid_amount` (decimal), `change_amount` (decimal).
+    * `total` (decimal), `paid_amount` (decimal - *Acumulado*), `change_amount` (decimal).
     * `payment_method` (string).
     * **`stage`** (enum): `'pedido'`, `'confirmado'`, `'produccion'`, `'enviado'`, `'entregado'`, `'cancelado'`.
     * `promised_date` (date), `is_partial_shipping` (bool).
 * **`sale_details`**:
     * `id`, `sale_id` (FK), `product_variant_id` (FK).
     * `product_name` (Snapshot), `quantity` (int).
-    * **`chosen_color`** (string) -> *Elegido libremente al vender*.
+    * **`chosen_color`** (string) -> *Atributo dinámico de venta*.
     * **`custom_notes`** (text), **`additional_cost`** (decimal).
     * `unit_price`, `subtotal`, `discount_percent`.
 * **`sale_histories`**:
     * `id`, `sale_id` (FK), `user_id` (FK).
-    * `from_stage`, `to_stage`, `notes`.
+    * `from_stage` (string), `to_stage` (string).
+    * `notes` (text).
+    * timestamps -> *Base para reportes de tiempos de producción*.
 
-### ⚙️ Configuración
-* **`settings`**: `key` (string, unique), `value` (text).
-    * Keys actuales: `'allow_negative_stock'`, `'company_name'`, `'company_logo'`.
+### 💳 Pagos y Cobranza (NUEVA TABLA v2.5)
+* **`sale_payments`**:
+    * `id`, `sale_id` (FK), `user_id` (FK).
+    * `amount` (decimal), `payment_method` (string).
+    * `reference` (string), `paid_at` (datetime).
+    * *Propósito:* Bitácora detallada de abonos posteriores al anticipo.
 
 ---
 
-## 3. 🚦 Reglas de Negocio Blindadas (Backend v2.0)
+## 3. 🚦 Reglas de Negocio Blindadas (Backend)
 
 ### 🛡️ Seguridad y Roles
-1.  **Admin (`role: admin`):** Acceso total.
+1.  **Admin (`role: admin`):**
+    * Dashboard Global (KPIs financieros, Stock, Rendimiento Vendedores).
+    * Gestión total de Usuarios y Configuración.
+    * Acceso al Plan Maestro de Producción.
 2.  **Vendedor (`role: vendedor`):**
-    * Acceso a POS (Nuevo Pedido), Clientes y Historial personal.
-    * Restricción de Dashboard global y configuración.
+    * Dashboard Personal (Solo sus ventas y comisiones).
+    * Acceso restringido a POS y Clientes.
+    * No puede ver el Plan Maestro Global (opcional).
 
-### 💰 Lógica de Pedidos (OrderWorkflow)
-1.  **Estados (`stage`):**
-    * `pedido`: Borrador/Cotización. **NO descuenta stock**.
-    * `confirmado`: Se ha dado anticipo. Pasa a cola de producción.
-    * `enviado`: Salió del taller. **AQUÍ se descuenta el stock** (o se valida existencia).
-2.  **Precios Dinámicos:**
-    * Se selecciona automáticamente el precio (1-5) según el `price_tier` del cliente.
-    * Fórmula Total: `(PrecioVariante * Cantidad) + CostoAdicional`.
-    * **Validación Financiera:** No se permiten costos extra negativos ni descuentos mayores al 50%.
+### 🏭 Lógica de Producción (ProductionController)
+* **Agrupación Inteligente:** El sistema busca todos los `sale_details` donde `sale.stage === 'produccion'`.
+* **Consolidación:** Agrupa los resultados por **Nombre de Producto + Material**.
+* **Explosión de Insumos:** Suma las cantidades (`quantity`) de todos los pedidos agrupados para mostrar un solo total a fabricar (ej. "10 Roperos").
 
----
+### 💰 Seguridad Financiera (SalePaymentController)
+* **Validación de Deuda:** Al registrar un abono, el sistema calcula `sale.total - sale.paid_amount`. Si el abono intenta exceder esa deuda, la transacción se bloquea.
+* **Transacción Atómica:** El registro en `sale_payments` y la actualización de `sale.paid_amount` ocurren dentro de una `DB::transaction`.
 
-## 4. 🧪 Estrategia de Testing
-* **Comando:** `php artisan test`
-* **Nuevos Objetivos QA:**
-    * Validar que la creación de pedido (`store`) guarde colores y notas.
-    * Validar que `updateStage` a 'enviado' reste stock correctamente.
-    * Validar que `promised_date` sea opcional.
+### 🌐 Compatibilidad Hosting Compartido
+* **PDFs:** El `SaleController` detecta la variable de entorno `FILESYSTEM_PUBLIC_ROOT` para construir rutas físicas absolutas a las imágenes, evitando bloqueos HTTP.
+* **HTTPS:** `AppServiceProvider` fuerza el esquema HTTPS en producción.
 
 ---
 
-## 5. 🖥️ Lógica de Frontend (Actualizada)
-* **POS / Order Builder (`Sales/Create.vue`):** ✅ **COMPLETADO**
-    * **Catálogo Visual:** Selección de colores mediante "bolitas" dinámicas.
-    * **Checkout V1:** Lógica de anticipos y fecha de entrega.
-* **Gestión de Ventas (`Sales/Index.vue`):** ✅ **COMPLETADO HOY**
-    * **Tabs de Filtrado:** Navegación reactiva para segmentar ventas por `stage` (Todos, Pendientes, Producción, etc.).
-    * **Semaforización:** Implementación de badges de colores según el estado actual de la venta.
-    * **Resumen Dinámico:** Columna de detalles que muestra de forma compacta el producto, `chosen_color` y marca de notas.
-    * **Acciones Integradas:** Botones para cambiar de estado (p. ej. "A Producción") directamente desde la tabla mediante peticiones Inertia.
+## 4. 🖥️ Lógica de Frontend (Actualizada)
+
+### ✅ COMPLETADO
+* **Dashboard Estratégico (`Dashboard.vue`):**
+    * Diseño "One-Page" ajustado al viewport.
+    * **KPIs:** Ingresos, Producción, Envíos, Créditos.
+    * **Filtros:** Selector de fechas global.
+    * **Tablas:** Rendimiento de vendedores y Stock Bajo.
+* **POS / Order Builder (`Sales/Create.vue`):**
+    * Catálogo visual con selectores de colores dinámicos.
+    * Ticket con notas personalizadas y costos extra.
+* **Tablero Kanban (`Sales/Index.vue`):**
+    * Filtros por etapas.
+    * Enlace al **Plan de Taller**.
+    * Folio clicable para ver detalle completo.
+* **Detalle de Venta Híbrido (`Sales/Show.vue`):** [NUEVO v2.5]
+    * **Switch Modo Taller/Oficina:** Oculta precios y muestra especificaciones técnicas.
+    * **Historial de Abonos:** Tabla de pagos recibidos.
+    * **Botones de Acción:** Registrar Abono (Modal) e Imprimir.
+* **Plan de Producción (`Production/Index.vue`):** [NUEVO v2.5]
+    * Vista imprimible de "Explosión de Insumos" consolidada para el taller.
+
+### ⚠️ PENDIENTE / REFACTOR
+* **Formulario de Productos (`Products/Create.vue`):**
+    * **Estado:** 🟡 **Funcional pero Básico**.
+    * **Acción:** Falta integrar la carga de múltiples imágenes (Galería).
 
 ---
 
-## 6. 📍 Hoja de Ruta (Backlog Priorizado)
+## 5. 📍 Hoja de Ruta (Backlog Priorizado)
 
-### 🚀 FASE ACTUAL: Gestión de Pedidos (Detalle y Salida)
-
-#### 1. 📄 Detalles del Pedido (`Sales/Show.vue`) - **[SIGUIENTE PASO]**
-* Mostrar desglose completo incluyendo `chosen_color`, `notes` y `promised_date`.
-* Botón para imprimir **Ticket** y **Nota de Venta**.
-* **Nueva Vista:** "Hoja de Producción" (Impresión limpia para taller sin precios).
-
-#### 2. 📊 Dashboard de Operaciones
-* Resumen de pedidos activos y próximos a vencer según `promised_date`.
-
-#### 3. 📦 Ajustes de Inventario
-* Módulo para registrar entradas (compras) y salidas (mermas) manualmente.
-
-### 🟡 Fase 2 (Administración)
-* **Reportes Excel:** Exportación de ventas filtradas por fecha.
-* **Facturación (CFDI 4.0):** Generación de XML para México.
+### 🟡 Fase 3 (Administración Avanzada)
+1.  **Reporte de Corte de Caja:** Exportación a Excel de ingresos diarios desglosados por método de pago.
+2.  **Ajuste de Inventario Manual:** Interfaz para registrar compras de material (entradas) y mermas (salidas) sin pasar por ventas.
+3.  **Notificaciones por Correo:** Envio automático al cliente cuando su pedido cambia a "Enviado".
+4.  **Facturación (CFDI 4.0):** Generación de XML para México.

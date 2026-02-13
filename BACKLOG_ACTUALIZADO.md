@@ -1,58 +1,67 @@
-# 📋 BACKLOG MAESTRO - TALLER 360 (v2.2)
-**Estado:** En Desarrollo Activo
-**Fecha de Actualización:** 11 Febrero 2026 (Post-Sprint Sales Index)
+# 📋 BACKLOG MAESTRO - TALLER 360 (v2.5)
+**Estado:** Pre-Producción / Listo para Despliegue
+**Fecha de Actualización:** 13 Febrero 2026 (Post-Sprint Finanzas & Manufactura)
 
 ---
 
-## ✅ 1. COMPLETADO HOY (Sprint V2.2)
-*Estas tareas ya fueron programadas, probadas y están en el código base.*
+## ✅ 1. COMPLETADO (Hitos Recientes v2.5)
+*Módulos desplegados y listos para subir a Neubox.*
 
-* **🛠️ Backend Core V2:**
-    * [x] Migración de Base de Datos (Stages, Clientes full, Eliminación Color variante).
-    * [x] Modelos Actualizados (`Sale`, `SaleDetail`, `ProductVariant`).
-    * [x] Controladores Adaptados (`SaleController`, `ClientController`).
-    * [x] Rutas Web limpias (`Route::resource`).
-* **🛒 Nuevo POS (Order Builder):**
-    * [x] Diseño visual de catálogo con categorías y favoritos.
-    * [x] Lógica de **Colores Visuales** (Bolitas JS).
-    * [x] Agrupación de items con Notas y Costos Extras.
-    * [x] Validaciones "Duras" (No negativos, No descuentos > 50%).
-    * [x] Modal de Checkout restaurado (Diseño V1 + Lógica V2).
-* **📋 Tablero de Pedidos (`Sales/Index.vue`):**
-    * [x] Sistema de Tabs reactivos (Pendientes, Producción, Enviados).
-    * [x] Semaforización de estatus y resumen de detalles (Color/Notas) en tabla.
-    * [x] Botones de acción para cambio de `stage` vía Inertia.
-
----
-
-## 🔥 2. PRIORIDAD INMEDIATA (Lo que sigue)
-*Funciones críticas rotas o faltantes para operar el flujo completo.*
-
-### 1. 📄 Detalle del Pedido (`Sales/Show.vue`) - **[SIGUIENTE PASO]**
-* **Requerimiento:** Visualizar la "Hoja de Pedido" completa con los nuevos campos (Notas, Colores) para que el almacén sepa qué surtir.
-* **Extra:** Botón de impresión rápida para el taller.
-
-### 2. 📦 Formulario de Productos (`Products/Create.vue` y `Edit`)
-* **Estado Actual:** ⚠️ **ROTO**. El formulario viejo sigue pidiendo "Color" en las variantes.
-* **Requerimiento:**
-    * Eliminar campo "Color" del formulario.
-    * Agregar Checkbox "Favorito".
-    * Asegurar que guarde solo Material y Precios.
+* **🏭 Plan Maestro de Producción:**
+    * [x] **Explosión de Insumos:** Algoritmo que agrupa pedidos en "Producción" por Modelo + Material.
+    * [x] **Vista de Taller:** Interfaz limpia sin precios para impresión/tablet (`Production/Index.vue`).
+    * [x] **Acceso Directo:** Botón en Sidebar y Tablero Kanban.
+* **💰 Ciclo Financiero (Abonos):**
+    * [x] **Bitácora de Pagos:** Backend (`SalePaymentController`) para registrar abonos parciales.
+    * [x] **Validación de Saldo:** Bloqueo de abonos que excedan la deuda pendiente.
+    * [x] **Interfaz de Cobranza:** Modal de pago y tabla de historial dentro del detalle de venta.
+* **📄 Detalle de Venta Híbrido (`Sales/Show.vue`):**
+    * [x] **Switch de Contexto:** Botón para alternar entre "Modo Oficina" (Financiero) y "Modo Taller" (Técnico).
+    * [x] **Navegación:** Enlaces directos desde el Folio en el Kanban.
+* **🛡️ Optimización Hosting Compartido:**
+    * [x] **PDFs Blindados:** Lógica `FILESYSTEM_PUBLIC_ROOT` para leer logos sin bloqueos HTTP.
+    * [x] **HTTPS Force:** Configuración en `AppServiceProvider` para producción.
+    * [x] **Seeders v2:** Corrección de lectura de CSVs compactos (Precios).
 
 ---
 
-## 🐛 3. BUGS DE PRODUCCIÓN (Deuda Técnica)
-*Errores visuales o funcionales pendientes de corregir.*
+## 🔥 2. PRIORIDAD INMEDIATA (Deuda Técnica Crítica)
+*Lo único que falta para que el sistema sea autosuficiente sin CSVs.*
 
-1.  **🔄 Logout "Inception":** Al cerrar sesión, la Landing Page carga dentro del modal. (Fix: Usar `window.location` en lugar de Inertia link).
-2.  **📄 PDF Sin Imágenes:** Los reportes PDF muestran "X" roja en imágenes. (Fix: Inyectar ruta absoluta del servidor).
-3.  **💵 Formato Moneda (Global):** Asegurar que todos los inputs usen `lang="en-US"` para evitar problemas con comas/puntos.
+### 1. 📦 Refactor Formulario Productos (`Products/Create.vue`) - **[CRÍTICO]**
+* **Estado:** 🛑 **ROTO / DESACTUALIZADO**.
+* **Problema:** El formulario actual intenta guardar el campo `color` (que ya no existe en la tabla productos) y le faltan los campos clave de la v2.
+* **Acción Requerida:**
+    * [ ] Eliminar input "Color" (Ahora es atributo de venta).
+    * [ ] Agregar Select "Material" (MDF, Madera, Melamina) -> Esto define la variante.
+    * [ ] Agregar Checkbox "Favorito" (Vital para el widget de Stock Bajo).
+    * [ ] Permitir carga de imagen (Input File).
+
+### 2. 📉 Reporte de Corte de Caja (Excel)
+* **Estado:** 🚧 **PENDIENTE**.
+* **Objetivo:** El cliente necesita saber cuánto dinero entró hoy.
+* **Acción:**
+    * Crear botón "Exportar Corte" en Dashboard.
+    * Generar Excel sumando `sale_payments` del día filtrado por método (Efectivo vs Banco).
+
+### 3. 📦 Ajuste Manual de Inventario
+* **Estado:** 🚧 **PENDIENTE**.
+* **Problema:** Actualmente el stock solo baja con ventas. No hay forma de "reponer" stock cuando el taller termina de fabricar sin venderlo inmediatamente o registrar mermas.
+* **Acción:** Crear vista simple de "Entradas/Salidas" (+10 / -5).
 
 ---
 
-## 🚀 4. FUTURO CERCANO (Fase 2.5+)
+## 🐛 3. BUGS CONOCIDOS
+*Errores visuales o funcionales detectados.*
 
-1.  **🏭 Dashboard de Producción:** Vista Kanban (Tarjetas arrastrables) para el taller.
-2.  **📦 Ajuste de Inventario Independiente:** Módulo para altas de stock y compras separado del flujo de producción.
-3.  **🚚 Envíos Parciales:** Capacidad de despachar ítems de una misma venta en diferentes momentos.
-4.  **📊 Reportes Excel:** Exportación de ventas y movimientos.
+1.  **🔄 Logout "Inception":** Al cerrar sesión por inactividad (419 Page Expired), el Login carga dentro de un modal o iframe en lugar de redireccionar toda la página. (Fix: Forzar `window.location` en el interceptor de Axios/Inertia).
+2.  **💵 Input Moneda (Safari/iOS):** Validar que los campos de dinero no permitan caracteres no numéricos que rompan el cálculo en dispositivos Apple.
+
+---
+
+## 🚀 4. FUTURO CERCANO (Fase 3.0)
+
+1.  **✉️ Notificaciones Automáticas:** Enviar correo al cliente cuando su pedido pase a estado "Enviado".
+2.  **🧾 Facturación CFDI 4.0:** Integración para timbrado fiscal (México).
+3.  **🚚 Envíos Parciales:** Capacidad de marcar como "Entregado" solo una parte de la orden (ej. Entregar sillas hoy, mesa mañana).
+4.  **📱 PWA:** Convertir el sistema en "App Instalable" para que los choferes puedan marcar entregas desde el celular.

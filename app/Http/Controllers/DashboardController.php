@@ -4,11 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\ProductVariant;
 use App\Models\Sale;
-use App\Models\User; // Importar modelo User
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\DB; // Para consultas complejas
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -16,50 +16,56 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        // 1. FILTRO DE FECHAS
-        // Por defecto usamos "hoy", pero si mandan 'start_date' y 'end_date' usamos eso.
-        // Si solo mandan 'date' (como en el ejemplo anterior), lo convertimos a rango de un día.
-        $startDate = $request->input('start_date', Carbon::today()->format('Y-m-d'));
-        $endDate = $request->input('end_date', Carbon::today()->format('Y-m-d'));
+        // 1. CONFIGURACIÓN DE FECHAS (Más limpio con Carbon)
+        // Si no mandan fechas, usamos el mes actual por defecto (más útil que solo "hoy")
+        $start = $request->input('start_date') ? Carbon::parse($request->input('start_date')) : Carbon::now()->startOfMonth();
+        $end   = $request->input('end_date')   ? Carbon::parse($request->input('end_date'))   : Carbon::now()->endOfMonth();
 
-        // Si usaste el filtro simple 'date' en el frontend anterior, mantenemos compatibilidad:
-        if ($request->has('date')) {
-            $startDate = $request->input('date');
-            $endDate = $request->input('date');
-        }
+        // Ajustamos horas para cubrir el día completo
+        $startDate = $start->startOfDay();
+        $endDate   = $end->endOfDay();
 
         // --- LÓGICA PARA ADMINISTRADOR ---
         if ($user->role === 'admin') {
             
-            // A. DINERO REAL QUE ENTRÓ (Caja)
-            // Sumamos 'paid_amount' de TODAS las ventas (pagadas o crédito) creadas en ese rango.
-            // NOTA: Si registras abonos posteriores en otra tabla, habría que sumar esa tabla también.
-            // Por ahora, basándonos en tu modelo 'Sale', 'paid_amount' es lo que entró al momento de la nota.
-            $incomeTotal = Sale::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->sum('paid_amount');
+            // A. DINERO (Solo ventas válidas: NO canceladas, NO borradores)
+            // Filtramos ventas que NO sean 'pedido' (borrador) ni 'cancelado'
+            $validSales = Sale::whereBetween('created_at', [$startDate, $endDate])
+                ->whereNotIn('stage', ['pedido', 'cancelado']);
 
-            // B. VENTAS A CRÉDITO GENERADAS (Deuda nueva)
-            // Cuánto dinero quedó pendiente de cobrar en este periodo
-            $creditTotal = Sale::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->sum(DB::raw('total - paid_amount')); // Lo que costó menos lo que pagaron
+            // Dinero Cobrado (Caja Real)
+            $incomeTotal = (clone $validSales)->sum('paid_amount');
 
-            // C. CANTIDAD DE TICKETS
-            $countSales = Sale::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->count();
+            // Crédito / Cuentas por Cobrar (Total - Pagado)
+            $creditTotal = (clone $validSales)->sum(DB::raw('total - paid_amount'));
 
-            // D. RENDIMIENTO POR VENDEDOR (Tabla de líderes)
+            // Cantidad de Tickets Válidos
+            $countSales = (clone $validSales)->count();
+
+            // B. OPERATIVIDAD (KPIs de Taller - ¡CRUCIAL PARA V2!)
+            // Estos son totales GLOBALES (sin importar fecha) porque son tareas pendientes actuales
+            $inProduction = Sale::where('stage', 'produccion')->count();
+            $readyToShip  = Sale::where('stage', 'enviado')->count(); // Listos para entregar/cobrar
+
+            // C. RENDIMIENTO POR VENDEDOR
             $sellersStats = User::where('role', 'vendedor')
                 ->withSum(['sales as total_sold' => function($query) use ($startDate, $endDate) {
-                    $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                }], 'paid_amount') // Sumamos lo que realmente cobraron (paid_amount)
+                    $query->whereBetween('created_at', [$startDate, $endDate])
+                          ->whereNotIn('stage', ['pedido', 'cancelado']);
+                }], 'paid_amount')
                 ->withCount(['sales as tickets_count' => function($query) use ($startDate, $endDate) {
-                    $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                    $query->whereBetween('created_at', [$startDate, $endDate])
+                          ->whereNotIn('stage', ['pedido', 'cancelado']);
                 }])
                 ->get();
             
-            // E. PRODUCTOS CON STOCK BAJO (Global)
-            $lowStockProducts = ProductVariant::with('product')
-                ->where('stock', '<', 5)
+            // D. ALERTA DE STOCK (Solo Favoritos)
+            $lowStockProducts = ProductVariant::where('stock', '<=', 5)
+                ->whereHas('product', function ($query) {
+                    // AQUÍ ESTÁ EL FILTRO CLAVE: Solo productos favoritos
+                    $query->where('is_favorite', true);
+                })
+                ->with('product')
                 ->orderBy('stock', 'asc')
                 ->take(5)
                 ->get();
@@ -67,36 +73,35 @@ class DashboardController extends Controller
             return Inertia::render('Dashboard', [
                 'isAdmin' => true,
                 'kpis' => [
-                    'income' => $incomeTotal,      // Dinero en mano (Caja)
-                    'credit_receivable' => $creditTotal, // Crédito otorgado
-                    'tickets' => $countSales
+                    'income' => $incomeTotal,
+                    'credit_receivable' => $creditTotal,
+                    'tickets' => $countSales,
+                    // Agregamos los operativos
+                    'in_production' => $inProduction, 
+                    'ready_to_ship' => $readyToShip
                 ],
                 'sellersStats' => $sellersStats,
                 'lowStockProducts' => $lowStockProducts,
                 'filters' => [
-                    'start_date' => $startDate,
-                    'end_date' => $endDate
+                    'start_date' => $start->format('Y-m-d'),
+                    'end_date' => $end->format('Y-m-d')
                 ]
             ]);
         }
 
         // --- LÓGICA PARA VENDEDOR ---
         else {
-            // El vendedor solo ve SU propio rendimiento
-            
-            // A. SU DINERO INGRESADO
-            $myIncome = Sale::where('user_id', $user->id)
-                ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->sum('paid_amount');
+            // A. SU DINERO (Solo lo cobrado en ventas válidas)
+            $mySales = Sale::where('user_id', $user->id)
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereNotIn('stage', ['pedido', 'cancelado']);
 
-            // B. SUS TICKETS
-            $myTickets = Sale::where('user_id', $user->id)
-                ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->count();
+            $myIncome = (clone $mySales)->sum('paid_amount');
+            $myTickets = (clone $mySales)->count();
 
-            // C. SUS ÚLTIMAS VENTAS (Historial rápido)
+            // B. HISTORIAL RECIENTE
             $recentSales = Sale::where('user_id', $user->id)
-                ->with('client') // Asumiendo relación con cliente
+                ->with('client')
                 ->latest()
                 ->take(5)
                 ->get();
@@ -109,8 +114,8 @@ class DashboardController extends Controller
                 ],
                 'recentSales' => $recentSales,
                 'filters' => [
-                    'start_date' => $startDate,
-                    'end_date' => $endDate
+                    'start_date' => $start->format('Y-m-d'),
+                    'end_date' => $end->format('Y-m-d')
                 ]
             ]);
         }

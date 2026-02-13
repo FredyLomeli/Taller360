@@ -15,13 +15,18 @@ class ProductController extends Controller
     public function index()
     {
         // Cargamos productos con sus variantes y categoría
-        // Agregamos is_favorite a la consulta
         return Inertia::render('Products/Index', [
             'products' => Product::with(['category', 'variants'])
-                ->orderBy('is_favorite', 'desc') // Los favoritos aparecen primero en la lista
+                ->orderBy('is_favorite', 'desc') 
                 ->orderBy('created_at', 'desc')
                 ->get()
         ]);
+    }
+
+    public function toggleFavorite(Product $product)
+    {
+        $product->update(['is_favorite' => !$product->is_favorite]);
+        return back();
     }
 
     public function create()

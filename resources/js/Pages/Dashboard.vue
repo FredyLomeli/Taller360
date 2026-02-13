@@ -1,167 +1,199 @@
 <script setup>
-import { ref, watch } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { router, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head } from '@inertiajs/vue3';
 
-// Recibimos la NUEVA estructura del controlador
 const props = defineProps({
     isAdmin: Boolean,
-    kpis: Object,          // { income, credit_receivable, tickets }
-    sellersStats: Array,   // Solo admin
-    lowStockProducts: Array, // Solo admin
-    recentSales: Array,    // Solo vendedor
-    filters: Object        // { start_date, end_date }
+    kpis: Object,
+    sellersStats: Array,
+    lowStockProducts: Array,
+    recentSales: Array,
+    filters: Object
 });
 
-// Variables reactivas para las fechas
 const form = ref({
     start_date: props.filters.start_date,
     end_date: props.filters.end_date
 });
 
-// Función para aplicar filtro (recarga la página)
 const applyFilter = () => {
     router.get(route('dashboard'), { 
         start_date: form.value.start_date,
         end_date: form.value.end_date 
     }, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true
+        preserveState: true, preserveScroll: true, replace: true
     });
 };
 
-// Formato de moneda
 const formatMoney = (amount) => {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount || 0);
+};
+
+const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+};
+
+const stageColors = {
+    'pedido': 'bg-gray-100 text-gray-600 border-gray-200',
+    'confirmado': 'bg-yellow-100 text-yellow-700 border-yellow-200',
+    'produccion': 'bg-blue-100 text-blue-700 border-blue-200',
+    'enviado': 'bg-purple-100 text-purple-700 border-purple-200',
+    'entregado': 'bg-green-100 text-green-700 border-green-200',
+    'cancelado': 'bg-red-100 text-red-700 border-red-200'
+};
+
+const stageLabels = {
+    'pedido': 'Borrador',
+    'confirmado': 'Confirmado',
+    'produccion': 'Producción',
+    'enviado': 'Listo/Enviado',
+    'entregado': 'Entregado',
+    'cancelado': 'Cancelado'
 };
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head title="Panel Principal" />
 
     <AuthenticatedLayout>
-        <template #header>
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                    {{ isAdmin ? 'Panel de Control' : 'Mis Resultados' }}
-                </h2>
+        <div class="h-[calc(100vh-65px)] overflow-hidden bg-gray-50 flex flex-col p-6">
+            
+            <div class="max-w-7xl mx-auto w-full flex flex-col h-full space-y-7">
                 
-                <div class="flex items-center gap-2 bg-white p-2 rounded shadow-sm">
-                    <span class="text-xs text-gray-500 font-bold uppercase">Periodo:</span>
-                    <input type="date" v-model="form.start_date" @change="applyFilter" 
-                           class="border-none text-sm p-1 focus:ring-0 text-gray-700 font-medium">
-                    <span class="text-gray-400">-</span>
-                    <input type="date" v-model="form.end_date" @change="applyFilter" 
-                           class="border-none text-sm p-1 focus:ring-0 text-gray-700 font-medium">
-                </div>
-            </div>
-        </template>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0">
+                    <h2 class="font-bold text-2xl text-gray-800 flex items-center gap-3">
+                        <div class="p-2.5 bg-blue-50 rounded-xl">
+                            <svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        </div>
+                        {{ isAdmin ? 'Control General' : 'Mis Resultados' }}
+                    </h2>
 
-        <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 border-l-4 border-green-500">
-                        <div class="text-gray-500 text-sm font-medium uppercase">Ingreso Real (Caja)</div>
-                        <div class="text-3xl font-bold text-gray-800 mt-2">{{ formatMoney(kpis.income) }}</div>
-                        <div class="text-xs text-gray-400 mt-1">Cobrado en efectivo/tarjeta</div>
-                    </div>
-
-                    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 border-l-4 border-blue-500">
-                        <div class="text-gray-500 text-sm font-medium uppercase">Ventas Cerradas</div>
-                        <div class="text-3xl font-bold text-gray-800 mt-2">{{ kpis.tickets }}</div>
-                        <div class="text-xs text-gray-400 mt-1">Notas generadas</div>
-                    </div>
-
-                    <div v-if="isAdmin" class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 border-l-4 border-orange-500">
-                        <div class="text-gray-500 text-sm font-medium uppercase">Crédito Otorgado</div>
-                        <div class="text-3xl font-bold text-gray-800 mt-2">{{ formatMoney(kpis.credit_receivable) }}</div>
-                        <div class="text-xs text-gray-400 mt-1">Pendiente de cobro del periodo</div>
+                    <div class="flex items-center gap-5 bg-gray-50 px-5 py-2.5 rounded-2xl border border-gray-200 shadow-inner">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Desde</span>
+                            <input type="date" v-model="form.start_date" @change="applyFilter" 
+                                class="border-none bg-transparent p-0 text-sm font-bold text-gray-700 focus:ring-0 cursor-pointer h-5 w-32">
+                        </div>
+                        <span class="text-gray-300 font-light text-xl">|</span>
+                        <div class="flex flex-col">
+                            <span class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Hasta</span>
+                            <input type="date" v-model="form.end_date" @change="applyFilter" 
+                                class="border-none bg-transparent p-0 text-sm font-bold text-gray-700 focus:ring-0 cursor-pointer h-5 w-32">
+                        </div>
                     </div>
                 </div>
 
-                <div v-if="isAdmin" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
+                    <div class="bg-white shadow-sm rounded-2xl p-6 border-l-4 border-green-500 relative overflow-hidden">
+                        <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Ingreso Cobrado</div>
+                        <div class="text-3xl font-black text-gray-800">{{ formatMoney(kpis.income) }}</div>
+                        <div class="text-[11px] text-gray-400 mt-2">En periodo seleccionado</div>
+                    </div>
+
+                    <div v-if="isAdmin" class="bg-white shadow-sm rounded-2xl p-6 border-l-4 border-blue-500 flex flex-col justify-between">
+                        <div>
+                            <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">En Taller (Activos)</div>
+                            <div class="text-3xl font-black text-gray-800">{{ kpis.in_production }} <span class="text-sm font-bold text-gray-300">pedidos</span></div>
+                        </div>
+                        <Link :href="route('sales.index', { stage: 'produccion' })" class="text-xs text-blue-600 font-bold underline mt-4 hover:text-blue-800">Ver tablero →</Link>
+                    </div>
+
+                    <div v-if="isAdmin" class="bg-white shadow-sm rounded-2xl p-6 border-l-4 border-purple-500 flex flex-col justify-between">
+                        <div>
+                            <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Listos para Entrega</div>
+                            <div class="text-3xl font-black text-gray-800">{{ kpis.ready_to_ship }} <span class="text-sm font-bold text-gray-300">pedidos</span></div>
+                        </div>
+                        <Link :href="route('sales.index', { stage: 'enviado' })" class="text-xs text-purple-600 font-bold underline mt-4 hover:text-purple-800">Gestionar envíos →</Link>
+                    </div>
+
+                    <div v-if="isAdmin" class="bg-white shadow-sm rounded-2xl p-6 border-l-4 border-orange-500">
+                        <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Crédito Pendiente</div>
+                        <div class="text-3xl font-black text-gray-800">{{ formatMoney(kpis.credit_receivable) }}</div>
+                        <div class="text-[11px] text-gray-400 mt-2">Cuentas por cobrar</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0 pb-4">
                     
-                    <div class="bg-white shadow-sm sm:rounded-lg p-6">
-                        <h3 class="font-bold text-lg text-gray-700 mb-4 border-b pb-2">Rendimiento por Vendedor</h3>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm text-left">
-                                <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                    <div class="lg:col-span-2 bg-white shadow-sm rounded-3xl border border-gray-100 flex flex-col min-h-0 overflow-hidden">
+                        <div class="px-7 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                <h3 class="font-bold text-gray-700 uppercase text-xs tracking-widest">Rendimiento de Equipo</h3>
+                            </div>
+                            <span class="text-[10px] font-medium text-gray-400 bg-white px-2 py-1 rounded-lg border border-gray-100">
+                                Total Vendedores: {{ sellersStats.length }}
+                            </span>
+                        </div>
+                        
+                        <div class="overflow-y-auto flex-1 custom-scroll">
+                            <table class="w-full text-sm text-left table-fixed">
+                                <thead class="text-[10px] text-gray-400 uppercase tracking-wider sticky top-0 bg-white border-b border-gray-100 z-10">
                                     <tr>
-                                        <th class="px-3 py-2">Vendedor</th>
-                                        <th class="px-3 py-2 text-right">Tickets</th>
-                                        <th class="px-3 py-2 text-right">Cobrado</th>
+                                        <th class="w-1/2 px-6 py-3 font-semibold">Vendedor</th>
+                                        <th class="w-1/4 px-4 py-3 text-center font-semibold">Tickets</th>
+                                        <th class="w-1/4 px-6 py-3 text-right font-semibold">Total Cobrado</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <tr v-for="seller in sellersStats" :key="seller.id" class="border-b last:border-0 hover:bg-gray-50">
-                                        <td class="px-3 py-3 font-medium text-gray-900">{{ seller.name }}</td>
-                                        <td class="px-3 py-3 text-right">{{ seller.tickets_count }}</td>
-                                        <td class="px-3 py-3 text-right font-bold text-green-600">{{ formatMoney(seller.total_sold) }}</td>
+                                <tbody class="divide-y divide-gray-50">
+                                    <tr v-for="seller in sellersStats" :key="seller.id" class="hover:bg-blue-50/20 transition-all group">
+                                        <td class="px-6 py-3 font-bold text-gray-700 flex items-center gap-3">
+                                            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 flex items-center justify-center font-black text-[10px] shadow-sm border border-blue-200 group-hover:scale-110 transition-transform">
+                                                {{ seller.name.substring(0,2).toUpperCase() }}
+                                            </div>
+                                            <span class="truncate">{{ seller.name }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-center">
+                                            <span class="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                                                {{ seller.tickets_count }}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-3 text-right">
+                                            <span class="font-black text-green-600 tabular-nums">
+                                                {{ formatMoney(seller.total_sold) }}
+                                            </span>
+                                        </td>
                                     </tr>
                                     <tr v-if="sellersStats.length === 0">
-                                        <td colspan="3" class="text-center py-4 text-gray-500">No hay datos en este periodo.</td>
+                                        <td colspan="3" class="px-6 py-12 text-center">
+                                            <div class="flex flex-col items-center gap-2">
+                                                <svg class="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                                                <span class="text-gray-400 font-medium">No hay datos para este periodo</span>
+                                            </div>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <div class="bg-white shadow-sm sm:rounded-lg p-6 border border-red-100">
-                        <div class="flex justify-between items-center mb-4 border-b pb-2">
-                            <h3 class="font-bold text-lg text-red-700">⚠️ Stock Crítico</h3>
-                            <a :href="route('products.inventory')" class="text-xs text-red-500 hover:underline">Ver todo</a>
+                    <div class="bg-white shadow-sm rounded-3xl border border-red-100 flex flex-col min-h-0 overflow-hidden">
+                        <div class="px-6 py-5 bg-red-50/50 border-b border-red-100 flex justify-between items-center shrink-0">
+                            <h3 class="font-bold text-red-800 text-[10px] uppercase tracking-[0.1em] flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                Stock Crítico
+                            </h3>
+                            <Link :href="route('products.index')" class="text-[10px] text-red-600 font-black hover:underline uppercase">Gestionar</Link>
                         </div>
-                        <ul class="space-y-3">
-                            <li v-for="variant in lowStockProducts" :key="variant.id" class="flex justify-between items-center">
-                                <div>
-                                    <div class="font-medium text-gray-800">{{ variant.product.name }}</div>
-                                    <div class="text-xs text-gray-500">{{ variant.material }} - {{ variant.color }}</div>
-                                </div>
-                                <span class="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
-                                    {{ variant.stock }} pzas
-                                </span>
-                            </li>
-                            <li v-if="lowStockProducts.length === 0" class="text-green-600 text-sm">
-                                ¡Todo excelente! No hay productos con stock bajo.
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div v-else class="bg-white shadow-sm sm:rounded-lg p-6">
-                    <h3 class="font-bold text-lg text-gray-700 mb-4">Mis Últimas 5 Ventas</h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-xs text-gray-500 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-2">Folio</th>
-                                    <th class="px-4 py-2">Cliente</th>
-                                    <th class="px-4 py-2">Fecha</th>
-                                    <th class="px-4 py-2 text-right">Total</th>
-                                    <th class="px-4 py-2 text-center">Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="sale in recentSales" :key="sale.id" class="border-b last:border-0">
-                                    <td class="px-4 py-3 font-mono text-gray-600">#{{ sale.id }}</td>
-                                    <td class="px-4 py-3">{{ sale.client?.name || 'Público General' }}</td>
-                                    <td class="px-4 py-3">{{ new Date(sale.created_at).toLocaleDateString() }}</td>
-                                    <td class="px-4 py-3 text-right font-bold">{{ formatMoney(sale.total) }}</td>
-                                    <td class="px-4 py-3 text-center">
-                                        <span :class="{
-                                            'bg-green-100 text-green-800': sale.status === 'pagado',
-                                            'bg-yellow-100 text-yellow-800': sale.status === 'pendiente',
-                                            'bg-red-100 text-red-800': sale.status === 'cancelado'
-                                        }" class="px-2 py-1 rounded-full text-xs font-bold uppercase">
-                                            {{ sale.status }}
-                                        </span>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="overflow-y-auto flex-1 custom-scroll bg-white p-2">
+                            <ul class="divide-y divide-gray-50">
+                                <li v-for="variant in lowStockProducts" :key="variant.id" class="p-5 hover:bg-red-50/50 transition-colors flex justify-between items-center group rounded-2xl">
+                                    <div class="min-w-0">
+                                        <div class="text-sm font-black text-gray-800 truncate mb-1">{{ variant.product.name }}</div>
+                                        <div class="text-[10px] text-gray-400 font-bold uppercase truncate">
+                                            {{ variant.material }} <span v-if="variant.sku" class="text-gray-300 px-1">|</span> {{ variant.sku }}
+                                        </div>
+                                    </div>
+                                    <div class="text-center bg-red-100 px-4 py-1.5 rounded-2xl ml-4">
+                                        <span class="block text-base font-black text-red-600 leading-none">{{ variant.stock }}</span>
+                                        <span class="text-[8px] text-red-400 uppercase font-black tracking-tighter">Pzas</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
@@ -169,3 +201,20 @@ const formatMoney = (amount) => {
         </div>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+/* Scrollbar más fino para no ensuciar el diseño */
+.custom-scroll::-webkit-scrollbar {
+    width: 5px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+    background: #f1f1f1;
+    border-radius: 20px;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+    background: #e2e2e2;
+}
+</style>

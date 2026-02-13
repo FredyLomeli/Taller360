@@ -7,6 +7,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Carbon;
 use App\Models\Sale;
 use App\Observers\SaleObserver;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,5 +27,9 @@ class AppServiceProvider extends ServiceProvider
         Vite::prefetch(concurrency: 3);
         Carbon::setLocale('es');
         Sale::observe(SaleObserver::class);
+
+        if($this->app->environment('production')) {
+            URL::forceScheme('https');
+        }
     }
 }

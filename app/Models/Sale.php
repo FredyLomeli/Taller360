@@ -53,4 +53,9 @@ class Sale extends Model
     {
         return $this->paid_amount >= $this->total;
     }
+
+    public function payments()
+    {
+        return $this->hasMany(SalePayment::class)->latest();
+    }
 }

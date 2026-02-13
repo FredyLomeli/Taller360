@@ -157,13 +157,20 @@ class SaleController extends Controller
         }
     }
 
-    /**
-     * Ver detalle del pedido
-     */
-    public function show(Sale $sale)
+    public function show($id)
     {
-        $sale->load(['details.variant', 'client', 'user', 'history.user']);
-        return Inertia::render('Sales/Show', ['sale' => $sale]);
+        $sale = Sale::with([
+            'client',
+            'user',
+            'details.productVariant.product',
+            'histories.user',
+            'payments' 
+        ])->findOrFail($id);
+
+        return Inertia::render('Sales/Show', [
+            'sale' => $sale,
+            'is_production_mode' => request()->boolean('production')
+        ]);
     }
 
     /**
@@ -255,9 +262,11 @@ class SaleController extends Controller
 
         $logoPath = null;
         if (isset($settings['company_logo']) && $settings['company_logo']) {
-            // Fix para rutas en Hostings Compartidos o Local
-            $logoPath = public_path('storage/' . $settings['company_logo']);
-            // Si usaste el truco del link symbolico personalizado, ajusta aquí si falla.
+            $rootPath = env('FILESYSTEM_PUBLIC_ROOT', public_path('storage'));
+            $logoPath = $rootPath . '/' . $settings['company_logo'];
+            if (!file_exists($logoPath)) {
+                $logoPath = null; 
+            }
         }
 
         $pdf = Pdf::loadView('pdf.sale_note', compact('sale', 'company', 'logoPath'));
@@ -282,7 +291,11 @@ class SaleController extends Controller
 
         $logoPath = null;
         if (isset($settings['company_logo']) && $settings['company_logo']) {
-            $logoPath = public_path('storage/' . $settings['company_logo']);
+            $rootPath = env('FILESYSTEM_PUBLIC_ROOT', public_path('storage'));
+            $logoPath = $rootPath . '/' . $settings['company_logo'];
+            if (!file_exists($logoPath)) {
+                $logoPath = null; 
+            }
         }
 
         // Generar PDF en Memoria

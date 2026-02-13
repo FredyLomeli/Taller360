@@ -10,6 +10,8 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ProductionController;
+use App\Http\Controllers\SalePaymentController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -61,6 +63,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // 5. CLIENTES (Vendedores pueden ver/crear/editar)
     Route::resource('clients', ClientController::class)->except(['destroy']);
 
+    Route::get('/production-plan', [ProductionController::class, 'index'])->name('production.plan');
+
+    Route::post('/sales/{sale}/payment', [SalePaymentController::class, 'store'])
+    ->name('sales.payment.store');
+
     // ==========================================
     //      🛡️ ZONA BLINDADA (SOLO ADMIN)
     // ==========================================
@@ -73,6 +80,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Usamos resource para generar todas las rutas estándar:
         // products.index, create, store, edit, update, destroy
         Route::resource('products', ProductController::class);
+
+        Route::put('products/{product}/favorite', [ProductController::class, 'toggleFavorite'])
+        ->name('products.toggle-favorite');
         
         // Eliminación de variante individual (AJAX)
         // Nota: Agrega este método 'destroyVariant' en ProductController si no existe, 
