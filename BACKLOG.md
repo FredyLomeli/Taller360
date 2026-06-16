@@ -45,44 +45,45 @@
 
 ---
 
-## 🚨 FASE 0 — Seguridad y Dependencias (PRIORIDAD INMEDIATA)
-**Agregada:** Junio 2026, tras auditoría de `npm audit` y `composer show`.
-**Por qué va antes de la Fase 1:** se detectaron versiones sin restricción (`*`) en `composer.json` y un conflicto de peer dependencies entre Vite 7 y `@vitejs/plugin-vue` (que solo soporta Vite 5/6). Resolver esto de raíz evita construir features nuevas sobre una base de build inconsistente.
+## 🚨 FASE 0 — Seguridad y Dependencias ✅ SESIÓN COMPLETADA (Junio 2026)
+**Resultado:** Sesión dedicada completa. Se resolvió el problema estructural de Vite, se actualizó Laravel y ~49 paquetes relacionados, Axios, y dompdf. Todo verificado funcionando (dev, build, y generación real de PDF).
 
 ### 0.1 Fijar versiones sin restricción en `composer.json` ✅ COMPLETADO
-- [x] `barryvdh/laravel-dompdf`: de `*` a `^3.1.1`
-- [x] `laravel-lang/common`: de `*` a `^6.7.1`
-- [x] `composer update --lock` corrido sin cambios reales (las versiones ya coincidían)
+- [x] `barryvdh/laravel-dompdf`: de `*` a versión fija
+- [x] `laravel-lang/common`: de `*` a versión fija
 
 ### 0.2 Actualizar Axios ✅ COMPLETADO
-- [x] De `1.13.2` a `1.15.0` vía `npm install axios@1.15.0 --legacy-peer-deps`
-- [x] Resuelve el bug de denegación de servicio (CVE-2026-25639) y el de CRLF (CVE-2026-40175)
-- ⚠️ Nota: `npm audit` posterior reportó nuevos avisos sobre Axios 1.15.x (prototype pollution, NO_PROXY bypass, etc.). Revisar si hay una versión más reciente disponible al iniciar la Tarea 0.3.
+- [x] Actualizado a la última versión disponible (`npm install axios@latest`, ya sin necesidad de `--legacy-peer-deps`)
+- [x] Confirmado: el conflicto de peer dependencies que exigía la bandera era específico de Vite/plugin-vue, no de Axios
+- [x] Vulnerabilidades de npm audit bajaron de 13 a 11 tras esta actualización
 
-### 0.3 Actualizar entorno de build (Vite + plugin-vue) — 🔴 PENDIENTE, SIGUIENTE SESIÓN
-**El pendiente más importante ahora mismo.** Detectado conflicto real:
-- Tienes `vite@7.3.1` instalado
-- `@vitejs/plugin-vue@5.2.4` solo declara soporte para `vite ^5.0.0 || ^6.0.0`
-- `@tailwindcss/vite` y `laravel-vite-plugin` sí soportan Vite 7, por lo que el conflicto es específicamente con el plugin de Vue
+### 0.3 Actualizar entorno de build (Vite + plugin-vue) ✅ COMPLETADO
+- [x] Causa raíz identificada: `@vitejs/plugin-vue@5.2.4` solo soportaba Vite 5/6, pero el proyecto ya tenía Vite 7.3.1
+- [x] Actualizado a `@vitejs/plugin-vue@6.0.7` (sí soporta Vite 7)
+- [x] `npm run dev` probado: arranca limpio, sin errores
+- [x] `npm run build` probado: 819 módulos transformados, build exitoso para producción
+- ⏸️ Pendiente, no urgente: actualizar Vite/esbuild/rollup a fondo (viven en el entorno de build, no en producción — bajo riesgo real, queda para una sesión futura si se desea)
 
-Qué hacer:
-- [ ] Investigar si existe una versión de `@vitejs/plugin-vue` compatible con Vite 7 (probablemente sí exista una más reciente que la 5.2.4)
-- [ ] Actualizar `@vitejs/plugin-vue` a la versión compatible
-- [ ] Correr `npm run build` y `npm run dev` para confirmar que compila sin errores
-- [ ] Probar manualmente cada vista principal después del cambio: POS, Kanban, Dashboard, Production, Settings
-- [ ] Solo después de esto, evaluar correr `npm audit fix` (NO antes — puede arrastrar cambios mayores de Vite sin control)
+### 0.4 Actualizar Laravel y dependencias relacionadas ✅ COMPLETADO
+- [x] Laravel actualizado de `12.46.0` a `12.62.0` (resuelve CVE-2026-48019, CRLF injection en emails)
+- [x] ~49 paquetes relacionados actualizados automáticamente vía `--with-dependencies` (Symfony, Guzzle, Carbon, League/Flysystem, etc.)
+- [x] Probado manualmente: login, POS, Dashboard cargan correctamente tras el salto
 
-### 0.4 Revisar el resto de alertas de `npm audit`
-Clasificadas por riesgo real (auditoría de Junio 2026):
-- **Producción (importa a clientes):** Axios — cubierto en 0.2, revisar si hay versión más nueva
-- **Build/desarrollo (no llega a producción):** esbuild, vite, rollup, picomatch, postcss, concurrently, shell-quote — se resuelven como parte de 0.3
-- **Dependencias indirectas:** lodash, lodash-es, form-data, qs, follow-redirects — revisar después de 0.3, probablemente se resuelven solas al actualizar los paquetes padre
+### 0.5 Actualizar dompdf ✅ COMPLETADO
+- [x] Actualizado de `3.1.1` a `3.1.2` (junto con `dompdf/dompdf` y dependencias internas)
+- [x] Probado generando una nota de venta real (`/sales/{id}/note`): logo, tabla de productos, descuentos, firma digital y totales se renderizan correctamente
+- [x] Confirmado: el cambio de protocolos `data://` en versiones recientes de dompdf no afecta porque el proyecto usa configuración por defecto (no publicada/personalizada)
 
-### 0.5 Actualizar Laravel (no urgente, pero anotado)
-- Tienes `12.46.0`. La vulnerabilidad CRLF (CVE-2026-48019) se parchó en `12.60.0`
-- Riesgo real bajo (requiere input de email sin sanitizar en un punto de entrada público, que no es tu caso actual), pero conviene actualizar cuando se haga la sesión de build
+### 0.6 Alertas de bajo riesgo — Vigilancia, no acción inmediata
+Detectadas con `composer audit` tras la actualización de Laravel:
+- `phpunit/phpunit` (CVE-2026-24765) — Solo testing, no corre en producción
+- `psy/psysh` (CVE-2026-25129) — Solo la consola `tinker`, no corre en producción
+- `symfony/yaml` (3 CVEs: exponential memory, ReDoS, stack exhaustion) — Viene incluido con Laravel; el proyecto no parsea archivos YAML provenientes de usuarios externos, riesgo práctico bajo
+
+Revisar de nuevo en la próxima sesión de mantenimiento (sugerido: cada 2-3 meses) con `composer audit` y `npm audit`.
 
 ---
+
 
 ## 🔴 FASE 1 — Deuda Técnica Crítica (corto plazo, 1-2 semanas)
 
@@ -93,8 +94,11 @@ No existe `Users/Edit.vue` ni métodos `edit`/`update`. Detalle técnico complet
 - [x] Interceptor agregado en `resources/js/bootstrap.js`
 - [x] Probado: al expirar sesión (419), redirige limpio a `/login` en vez de renderizar el login flotando dentro del dashboard
 
-### 1.3 HTML sucio en `Sales/Index.vue`
-Div mal cerrado en el modal de detalle. No rompe funcionalidad pero hay que limpiarlo.
+### 1.3 HTML sucio en `Sales/Index.vue` ✅ COMPLETADO
+- [x] Identificado: div duplicado en la línea 373 (cierre+apertura mal escritos en una línea, seguido de otra apertura idéntica en la línea 375)
+- [x] Corregido: ahora solo existe un div envolviendo la sección de botones del modal
+- [x] Probado visualmente: el padding duplicado que generaba un leve desalineamiento entre "Historial de Movimientos" y los botones de abajo ya no aparece; todo el contenido quedó consistente con el resto del modal
+- [x] Confirmado que los botones (Nota PDF, Enviar Email, Avanzar Etapa, Cancelar) siguen funcionando correctamente
 
 ### 1.4 Permisos Granulares — Tercer Rol "Producción"
 **Nuevo, alta prioridad.** Hoy el sistema solo distingue `admin` y `vendedor`. Se necesita un tercer rol `produccion` que:
