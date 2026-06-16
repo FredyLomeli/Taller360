@@ -18,6 +18,7 @@ use Database\Seeders\ProductLoadSeeder;
 
 class DatabaseSeeder extends Seeder
 {
+    /*
     // Seeders de producción
     public function run(): void
     {
@@ -45,9 +46,9 @@ class DatabaseSeeder extends Seeder
             Category::firstOrCreate(['name' => $catName]);
         }
     }
-
+*/
     // Seeders de prueba
-    /*public function run(): void
+    public function run(): void
     {
         // Reglas de Materiales por Categoría
         $rulesCategoryMaterial = [
@@ -177,5 +178,5 @@ class DatabaseSeeder extends Seeder
             }
         });
         echo "✅ Base de datos reestructurada lista.\n";
-    }*/
+    }
 }

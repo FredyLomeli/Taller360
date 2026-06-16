@@ -1,117 +1,126 @@
-# 🛋️ TALLER 360 - Sistema POS Mueblería (v2.5)
+# 🛋️ TALLER 360 — Sistema POS Mueblería
 
 ![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
-![Inertia](https://img.shields.io/badge/Inertia-Purple?style=for-the-badge&logo=inertia&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Listo_para_Despliegue-success?style=for-the-badge)
+![Inertia.js](https://img.shields.io/badge/Inertia.js-7855FA?style=for-the-badge&logo=inertia&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Status](https://img.shields.io/badge/Estado-Auditado_y_Casi_Completo-success?style=for-the-badge)
 
-Sistema de Gestión de Pedidos y Manufactura robusto, diseñado específicamente para mueblerías que fabrican sobre pedido. Integra control de producción, monitoreo financiero en tiempo real y gestión inteligente de inventarios.
-
-## 🚀 ESTATUS DEL PROYECTO
-**Versión:** 2.5 (Ciclo Financiero & Producción Completo)
-**Última Actualización:** 13 Febrero 2026
-**Fase Actual:** Pre-Producción (Listo para Hosting Compartido / Neubox).
+Sistema de gestión de pedidos y manufactura diseñado específicamente para **mueblerías que fabrican sobre pedido**. Integra control de producción, ciclo financiero completo (abonos/cobranza) y gestión de inventario por variantes de material.
 
 ---
 
-## ✅ Módulos Terminados y Funcionales
+## 🚀 Estado del Proyecto
 
-### 🏭 Plan Maestro de Producción (NUEVO v2.5 🌟)
-Módulo estratégico para el Jefe de Taller que elimina la necesidad de revisar pedido por pedido:
-* **Agrupación Inteligente:** Consolida todos los pedidos en estatus "Producción" agrupándolos por **Tipo de Mueble + Material**.
-* **Explosión de Insumos:** Muestra el total exacto a fabricar (ej. "10 Roperos Chocolate, 2 Blancos") en una sola tarjeta visual.
-* **Interfaz Limpia:** Vista optimizada para impresión o tablet, sin datos financieros, enfocada 100% en manufactura.
+| Campo | Detalle |
+|-------|---------|
+| **Versión** | 2.5 — Auditado contra código real |
+| **Última auditoría** | Junio 2026 |
+| **Backend** | 100% funcional |
+| **Frontend** | ~95% funcional (falta edición de usuarios) |
+| **Repositorio** | https://github.com/FredyLomeli/Taller360 |
 
-### 💰 Gestión de Abonos y Liquidación (NUEVO v2.5 🌟)
-Cierre del ciclo financiero post-venta:
-* **Bitácora de Pagos:** Registro de abonos parciales (Efectivo, Transferencia, etc.) posteriores al anticipo.
-* **Validación Financiera:** El sistema impide registrar abonos mayores a la deuda pendiente.
-* **Historial:** Tabla detallada de fecha, método y referencia de cada pago recibido en el detalle de la venta.
+> Este README fue regenerado a partir de una auditoría línea por línea de controladores, modelos, middlewares, observer y vistas Vue. Refleja el código real, no solo lo planeado.
 
-### 📄 Detalle de Venta Híbrido (NUEVO v2.5 🌟)
-Visualizador de pedidos con "Switch de Contexto" (`Sales/Show.vue`):
-* **Modo Oficina:** Muestra precios, totales, saldos pendientes y botones de cobranza.
-* **Modo Taller:** Oculta toda la información financiera y transforma la pantalla en una **Orden de Trabajo** con notas técnicas, colores y materiales.
+---
 
-### 🖨️ Motor de Impresión & Hosting (OPTIMIZADO)
-* **PDFs Blindados:** Generación de Notas de Venta y Tickets compatibles con Hostings Compartidos (cPanel/Neubox).
-* **Manejo de Imágenes:** Lógica personalizada para leer logotipos desde rutas físicas (`FILESYSTEM_PUBLIC_ROOT`) evitando bloqueos HTTP.
-* **Seguridad:** Forzado de esquema HTTPS en producción (`AppServiceProvider`).
+## ✅ Módulos Funcionales (Confirmados en código)
 
 ### 📊 Dashboard Estratégico
-Panel de control "One-Page" diseñado para monitoreo sin scroll, adaptado al rol del usuario:
-* **KPIs Financieros y Operativos:** Visualización inmediata de Ingreso Cobrado, Pedidos en Taller, Listos para Entrega y Crédito por Cobrar.
-* **Filtros Temporales:** Selector de rangos de fecha que recalcula métricas al instante.
-* **Alertas de Stock Inteligentes:** Monitoreo automático de variantes con stock bajo (< 5 piezas) solo en productos "Favoritos".
-* **Tabla de Rendimiento:** Leaderboard de vendedores con avatares dinámicos.
+KPIs en tiempo real diferenciados por rol, filtros de fecha, alerta de stock crítico (solo productos favoritos, ≤5 piezas) y tabla de rendimiento de vendedores.
 
-### 🏭 Order Builder (POS v2.0)
-Constructor de Pedidos inteligente orientado a manufactura:
-* **Personalización Visual:** Selector de colores dinámicos y notas de taller ilimitadas por partida.
-* **Precios Dinámicos:** Aplicación automática de tarifas (Tier 1-5) según el cliente seleccionado.
-* **Validaciones:** Control de descuentos, anticipos y saldos pendientes.
+### 🛒 POS — Order Builder
+Catálogo visual con colores dinámicos por material, firma digital del cliente (`vue-signature-pad`), modal para crear cliente sin salir del POS, notas y costos adicionales por partida, precios automáticos según tier del cliente.
 
-### 📋 Tablero de Producción (Kanban)
-Gestión del ciclo de vida del mueble con lógica de inventario estricta:
-* **Flujo:** Cotización -> Confirmado -> Producción -> Enviado -> Entregado -> Cancelado.
-* **Gestión de Stock:**
-    * Descuento automático al pasar a **"Enviado"**.
-    * Retorno automático de stock si se **"Cancela"** un pedido enviado.
-* **Timeline:** Auditoría completa de quién movió el pedido y cuándo.
+### 📋 Tablero Kanban
+Flujo completo `Pedido → Confirmado → Producción → Enviado → Entregado → Cancelado`. Descuento y retorno automático de stock. **Historial completamente automático** vía `SaleObserver` — cada cambio de etapa queda registrado sin intervención manual del controlador.
 
-### 📦 Gestión de Inventario & Datos
-* **Arquitectura:** Producto (Padre) -> Variantes (Material: MDF, Melamina).
-* **Importación Masiva (Seeders Blindados):**
-    * Generación de emails únicos para clientes legacy.
-    * Limpieza de precios (`$2,500.00` -> `2500.00`) y asignación automática de variantes.
-    * Mapeo automático de listas de precios (A, B, C -> 1, 2, 3).
+### 📄 Detalle de Venta Híbrido
+Switch Modo Oficina (financiero) / Modo Taller (técnico, sin precios) en una sola vista.
+
+### 💰 Ciclo de Cobranza
+Abonos parciales con validación de deuda y transacción atómica. Auto-confirmación del pedido si se registra anticipo al crearlo.
+
+### 🏭 Plan Maestro de Producción
+Agrupación por Modelo + Material con desglose por color, vista optimizada para impresión en taller.
+
+### 📦 Gestión de Productos
+CRUD completo con variantes dinámicas, materiales sugeridos según categoría, imagen, marcado de favoritos. Sincronización inteligente de variantes al editar (upsert).
 
 ### 🛡️ Seguridad y Roles
-* **Middlewares Estrictos:** Separación total entre Admin y Vendedor.
-* **Vendedores:** Acceso exclusivo a POS y su historial personal.
-* **Admin:** Acceso total a métricas globales, configuración y gestión de usuarios.
+Middleware `CheckRole` valida acceso por rol en cada ruta protegida. El usuario autenticado se comparte globalmente a todas las vistas Vue vía `HandleInertiaRequests`.
+
+### 🖨️ PDFs y Correo
+Tickets y notas de venta en PDF compatibles con hosting compartido (`FILESYSTEM_PUBLIC_ROOT`). Envío de nota de venta por correo con PDF adjunto en memoria — **ya implementado**, no es una feature futura.
 
 ---
 
-## 📝 LISTA DE PENDIENTES (Roadmap)
+## ⚠️ Pendiente Confirmado
 
-### 🟡 Fase 3 (Administración Avanzada)
-* **📉 Reporte de Corte de Caja:** Exportación de ingresos diarios desglosados por método de pago.
-* **📦 Ajuste de Inventario Manual:** Interfaz para registrar compras de material y mermas sin pasar por ventas.
-* **✉️ Notificaciones Automáticas:** Envio de correo al cliente cuando su pedido pasa a "Enviado".
-* **Facturación (CFDI 4.0):** Generación de XML para México.
+| Prioridad | Tarea | Detalle |
+|-----------|-------|---------|
+| 🔴 Crítico | Edición de Usuarios | No existe `Users/Edit.vue` ni métodos `edit`/`update` en el controlador |
+| 🟠 Alto | Reporte Corte de Caja (Excel) | Feature nueva, no iniciada |
+| 🟠 Alto | Ajuste Manual de Inventario | Feature nueva, no iniciada |
+| 🟡 Medio | Bug Logout "Inception" | Login aparece flotando al expirar sesión (419) |
+| 🟡 Medio | HTML sucio en `Sales/Index.vue` | Div mal cerrado en modal, no rompe funcionalidad |
+| 🔵 Futuro | Notificaciones automáticas, CFDI 4.0, Envíos Parciales, PWA | Ver `BACKLOG.md` |
 
 ---
 
-## 🛠️ Instalación y Carga de Datos
+## 🛠️ Instalación
 
 ### Requisitos
-* PHP 8.2+
-* Node.js & NPM
-* MySQL / MariaDB
+PHP 8.2+, Node.js 18+, MySQL/MariaDB
 
-### A. Instalación Desarrollo Local
-1.  **Clonar repositorio:**
-    ```bash
-    git clone [https://github.com/FredyLomeli/Taller360.git](https://github.com/FredyLomeli/Taller360.git)
-    ```
-2.  **Instalar dependencias:**
-    ```bash
-    composer install
-    npm install
-    ```
-3.  **Configurar Entorno:**
-    * Duplicar `.env.example` a `.env` y configurar BD.
-4.  **Migración:**
-    ```bash
-    php artisan migrate:fresh --seed
-    ```
+### Desarrollo Local
+```bash
+git clone https://github.com/FredyLomeli/Taller360.git
+cd Taller360
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+# Configurar BD en .env
+php artisan migrate:fresh --seed
+php artisan serve
+npm run dev
+```
 
-### B. Configuración Producción (Hosting Compartido / Neubox)
-En el archivo `.env` del servidor:
+### Producción (Neubox / Hosting Compartido)
 ```ini
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=[https://tudominio.com](https://tudominio.com)
-# Ruta física para PDFs (Evita error de imagen rota)
+APP_URL=https://tudominio.com
 FILESYSTEM_PUBLIC_ROOT=/home/usuario/public_html/storage
+```
+```bash
+npm run build
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+---
+
+## 🏗️ Stack Tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| Backend | Laravel 12 (PHP 8.2+) |
+| Frontend | Vue 3 (`<script setup>`) |
+| Puente | Inertia.js |
+| Estilos | Tailwind CSS |
+| Base de Datos | MySQL / MariaDB |
+| PDFs | barryvdh/laravel-dompdf |
+| Firma digital | vue-signature-pad |
+| Alertas UI | SweetAlert2 |
+| Utilidades | Lodash (debounce/throttle) |
+
+---
+
+## 📚 Documentación Relacionada
+
+- `CONTEXTO_TECNICO.md` — Schema de BD, relaciones, rutas y reglas de negocio. **Usar este archivo al retomar el proyecto con cualquier IA.**
+- `BACKLOG.md` — Lista de tareas pendientes con detalle técnico.
+- `GUIA_DE_RUTA.md` — Pasos exactos para completar cada tarea pendiente, en orden recomendado.

@@ -3,9 +3,12 @@ import { ref, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ClientAutocomplete from '@/Components/ClientAutocomplete.vue';
+import { VueSignaturePad } from 'vue-signature-pad';
 import Modal from '@/Components/Modal.vue';
 import Swal from 'sweetalert2';
 import axios from 'axios';
+
+const signaturePad = ref(null);
 
 const props = defineProps({
     products: Array,
@@ -232,24 +235,40 @@ const openPaymentModal = () => {
         Swal.fire({ title: 'Falta Color', text: `Selecciona el color para: ${missingColor.product_name}`, icon: 'warning' }); 
         return; 
     }
+    showPaymentModal.value = true;
     const date = new Date(); date.setDate(date.getDate() + 15);
     paymentForm.value.promised_date = date.toISOString().split('T')[0];
     paymentForm.value.amount_received = 0;
     showPaymentModal.value = true;
+    setTimeout(() => {
+        if (signaturePad.value) {
+            signaturePad.value.resizeCanvas(); // Fuerza al recuadro a tomar su tamaño real
+        }
+    }, 300);
 };
 
 const remainingBalance = computed(() => Math.max(0, cartTotal.value - (parseFloat(paymentForm.value.amount_received) || 0)));
 
 const submitOrder = () => {
+    // Capturamos la firma justo antes de enviar
+    const { isEmpty, data } = signaturePad.value.saveSignature();
+    
+    if (isEmpty) {
+        Swal.fire({ title: 'Falta Firma', text: 'Es obligatorio que el cliente firme para autorizar el pedido.', icon: 'warning' });
+        return;
+    }
+
     const payload = {
         client_id: selectedClient.value.id,
         items: cart.value.map(item => ({
-            variant_id: item.variant_id, quantity: item.quantity, price: item.price, discount_percent: item.discount_percent,
-            chosen_color: item.chosen_color, notes: item.notes, additional_cost: item.additional_cost
+            variant_id: item.variant_id, quantity: item.quantity, price: item.price, 
+            discount_percent: item.discount_percent, chosen_color: item.chosen_color, 
+            notes: item.notes, additional_cost: item.additional_cost
         })),
         payment_method: paymentForm.value.method,
         paid_amount: paymentForm.value.amount_received,
-        promised_date: paymentForm.value.promised_date
+        promised_date: paymentForm.value.promised_date,
+        signature: data // <--- ENVIAMOS EL BASE64 DE LA FIRMA
     };
 
     router.post(route('sales.store'), payload, {
@@ -260,6 +279,10 @@ const submitOrder = () => {
         onError: (e) => Swal.fire('Error', e.error || 'Revisa los datos', 'error')
     });
 };
+
+// Funciones auxiliares para el Pad
+const clearSignature = () => signaturePad.value.clearSignature();
+
 </script>
 
 <template>
@@ -512,6 +535,36 @@ const submitOrder = () => {
                             <p class="text-[10px] text-gray-400 mt-1">Si se deja vacío, se coordinará después con el cliente.</p>
                         </div>
                     </details>
+
+                    <div class="mt-6 mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                Firma de Autorización del Cliente
+                            </label>
+                            <button type="button" @click="clearSignature" class="text-[10px] text-red-500 font-bold hover:underline">
+                                Limpiar Firma
+                            </button>
+                        </div>
+                        
+                        <div class="border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 overflow-hidden relative group">
+                            <VueSignaturePad
+                                width="100%"
+                                height="180px"
+                                ref="signaturePad"
+                                class="cursor-crosshair"
+                                :options="{ 
+                                    penColor: '#1a202c',
+                                    backgroundColor: 'rgba(0,0,0,0)'
+                                }"
+                            />
+                            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none opacity-20 group-focus-within:opacity-0 transition-opacity">
+                                <p class="text-[10px] text-gray-400 font-medium border-t border-gray-300 pt-1 px-4">X _______________________</p>
+                            </div>
+                        </div>
+                        <p class="text-[9px] text-gray-400 mt-2 italic text-center">
+                            Al firmar, el cliente acepta el diseño, materiales y fecha estimada de entrega.
+                        </p>
+                    </div>
 
                     <div class="flex gap-3">
                         <button 

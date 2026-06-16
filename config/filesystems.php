@@ -40,7 +40,9 @@ return [
 
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
+            // CAMBIO AQUÍ: Primero busca la ruta de Neubox en el .env, 
+            // si no la encuentra, usa la ruta por defecto de Laravel.
+            'root' => env('FILESYSTEM_PUBLIC_ROOT', storage_path('app/public')),
             'url' => rtrim(env('APP_URL'), '/').'/storage',
             'visibility' => 'public',
             'throw' => false,

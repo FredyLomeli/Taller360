@@ -20,6 +20,7 @@ return new class extends Migration
             $table->decimal('paid_amount', 10, 2)->default(0);
             $table->decimal('change_amount', 10, 2)->default(0);
             $table->string('payment_method')->default('Efectivo'); // Efectivo, Tarjeta, Transferencia
+            $table->longText('signature')->nullable(); // Firma digital del cliente (base64)
             // NUEVO: FLUJO DE ESTADOS
             // pedido: Borrador / Cotización
             // confirmado: Cliente aprobó (Anticipo)

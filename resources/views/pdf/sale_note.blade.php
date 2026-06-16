@@ -144,10 +144,10 @@
         <table class="header-table">
             <tr>
                 <td class="logo-section">
-                    @if($logoPath)
-                        <img src="{{ $logoPath }}" class="logo-img">
+                    @if(isset($logoBase64) && $logoBase64)
+                        <img src="{{ $logoBase64 }}" style="width: 150px; height: auto;">
                     @else
-                        <div style="width: 80px; height: 80px; background: #eee; text-align: center; line-height: 80px; color: #999;">SIN LOGO</div>
+                        <h1 style="color: #333;">{{ $company['name'] }}</h1>
                     @endif
                 </td>
                 
@@ -162,7 +162,7 @@
 
                 <td class="invoice-details">
                     <div class="folio-box">
-                        <div style="font-size: 10px; color: #555;">NOTA DE VENTA</div>
+                        <div style="font-size: 10px; color: #555;">ORDEN DE PEDIDO</div>
                         <div class="folio-number">#{{ str_pad($sale->id, 6, '0', STR_PAD_LEFT) }}</div>
                         <br>
                         <div>Fecha: {{ $sale->created_at->format('d/m/Y') }}</div>
@@ -198,64 +198,112 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach($sale->details as $item)
-                <tr>
-                    <td class="text-center">{{ $item->quantity }}</td>
-                    <td>
-                        {{ $item->product_name }}
-                        
-                        @if(isset($item->description))
-                            <br><span style="font-size: 10px; color: #666;">{{ Str::limit($item->description, 50) }}</span>
-                        @endif
-
-                        @if($item->discount_percent > 0)
-                            <br>
-                            <span style="font-size: 10px; color: #d32f2f;">
-                                Descuento: {{ $item->discount_percent }}% 
-                                (Ahorras: ${{ number_format( ($item->unit_price / (1 - ($item->discount_percent/100))) - $item->unit_price , 2) }})
-                            </span>
-                        @endif
-                    </td>
-                    <td class="text-right">
-                        @if($item->discount_percent > 0)
-                            @php 
-                                $originalPrice = $item->unit_price / (1 - ($item->discount_percent / 100)); 
-                            @endphp
-                            <span style="text-decoration: line-through; color: #999; font-size: 10px;">
-                                ${{ number_format($originalPrice, 2) }}
-                            </span>
-                            <br>
-                        @endif
-                        ${{ number_format($item->unit_price, 2) }}
-                    </td>
-                    <td class="text-right font-bold">${{ number_format($item->subtotal, 2) }}</td>
-                </tr>
-                @endforeach
                 
-                @for($i = 0; $i < max(0, 5 - count($sale->details)); $i++)
-                <tr>
-                    <td style="color: white;">.</td>
-                    <td></td><td></td><td></td>
+                @foreach($sale->details as $item)
+                @php
+                    // CÁLCULOS MATEMÁTICOS CLAROS PARA EL CLIENTE
+                    
+                    // 1. Reversión: Obtenemos el precio original antes del descuento
+                    // Si no hay descuento, el original es el mismo que unit_price
+                    $originalUnitPrice = ($item->discount_percent > 0) 
+                        ? $item->unit_price / (1 - ($item->discount_percent / 100)) 
+                        : $item->unit_price;
+
+                    // 2. Importe total del renglón = (PrecioFinal * Cantidad) + Adicional
+                    $rowSubtotal = ($item->unit_price * $item->quantity) + $item->additional_cost;
+                @endphp
+
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td class="text-center" style="vertical-align: middle; font-weight: bold; font-size: 13px; width: 8%;">
+                        {{ $item->quantity }}
+                    </td>
+                    
+                    <td style="width: 52%;">
+                        {{-- Nombre del Producto y Color en la misma línea --}}
+                        <div style="font-weight: bold; font-size: 11px;">
+                            {{ $item->product_name }} -
+                            <span style="background: #eee; color: #777; font-weight: normal; font-size: 10px; margin-left: 5px;">
+                                Color: {{ $item->chosen_color }}
+                            </span>
+                        </div>
+
+                        {{-- Detalles indentados con viñeta para orden --}}
+                        <div style="margin-left: 10px; margin-top: 3px; line-height: 1.2;">
+                            @if(!empty($item->custom_notes))
+                                <div style="font-size: 9px; color: #555;">
+                                    <span style="color: #1a4d2e;"></span> <strong>Nota:</strong> {{ $item->custom_notes }}
+                                </div>
+                            @endif
+
+                            @if($item->additional_cost > 0)
+                                <div style="font-size: 9px; color: #1a4d2e;">
+                                    <span style="color: #1a4d2e;"></span> <strong>Cargo Adicional:</strong> ${{ number_format($item->additional_cost, 2) }}
+                                </div>
+                            @endif
+                        </div>
+                    </td>
+                    
+                    {{-- COLUMNA DE PRECIO UNITARIO REDISEÑADA --}}
+                    <td class="text-right" style="width: 20%; vertical-align: middle;">
+                        @if($item->discount_percent > 0)
+                            <div style="font-size: 10px; color: #999; text-decoration: line-through;">
+                                ${{ number_format($originalUnitPrice, 2) }}
+                            </div>
+                            <div style="display: inline-block; background: #ffebee; color: #d32f2f; font-size: 8px; font-weight: bold; padding: 1px 4px; border-radius: 3px; margin: 2px 0;">
+                                DESCUENTO {{ $item->discount_percent }}%
+                            </div>
+                        @endif
+                        <div style="font-weight: bold; font-size: 12px; color: #000; margin-top: 1px;">
+                            ${{ number_format($item->unit_price, 2) }}
+                        </div>
+                    </td>
+
+                    {{-- COLUMNA DE IMPORTE --}}
+                    <td class="text-right" style="width: 20%; vertical-align: middle; font-weight: bold; font-size: 13px; color: #1a4d2e;">
+                        ${{ number_format($rowSubtotal, 2) }}
+                    </td>
                 </tr>
-                @endfor
+            @endforeach
+                
             </tbody>
         </table>
 
         <div>
             <div style="width: 55%; float: left;">
                 <p><strong>Método de Pago:</strong> {{ ucfirst($sale->payment_method) }}</p>
-                <p><strong>Estado:</strong> 
-                    <span style="color: {{ $sale->status == 'pagado' ? 'green' : 'red' }}; font-weight: bold; text-transform: uppercase;">
-                        {{ $sale->status }}
+                <p><strong>Estado del Pedido:</strong> 
+                    <span style="font-weight: bold; text-transform: uppercase; color: #1a4d2e;">
+                        {{-- Traducimos el 'stage' para el cliente --}}
+                        @if($sale->stage == 'pedido') COTIZACIÓN / PEDIDO
+                        @elseif($sale->stage == 'confirmado') CONFIRMADO / EN COLA
+                        @elseif($sale->stage == 'produccion') EN FABRICACIÓN
+                        @elseif($sale->stage == 'enviado') EN RUTA DE ENTREGA
+                        @elseif($sale->stage == 'entregado') ENTREGADO
+                        @else {{ $sale->stage }}
+                        @endif
                     </span>
                 </p>
 
-                <table class="signatures">
+                <table class="signatures" style="width: 100%; margin-top: 40px;">
                     <tr>
-                        <td>
-                            <div class="sign-line">
-                                Firma de Conformidad<br>
-                                <span style="font-size: 9px; font-weight: normal;">Recibí la mercancía a mi entera satisfacción</span>
+                        <td style="text-align: center;">
+                            <div style="width: 250px; margin: 0 auto; position: relative;">
+                                {{-- Renderizamos la firma digital si existe --}}
+                                @if(isset($sale->signature) && $sale->signature)
+                                    <img src="{{ $sale->signature }}" style="width: 200px; height: auto; margin-bottom: -15px;">
+                                @else
+                                    {{-- Espacio en blanco si no hay firma para que no se pegue el texto --}}
+                                    <div style="height: 60px;"></div>
+                                @endif
+                                
+                                <div class="sign-line" style="width: 100%;">
+                                    <strong>FIRMA DE CONFORMIDAD</strong><br>
+                                    <p style="font-size: 9px; color: #666; font-style: italic;">
+                                        Al firmar esta Orden de Pedido, el cliente autoriza el inicio de fabricación de los muebles 
+                                        con las especificaciones (materiales y colores) aquí descritas. Los tiempos de entrega 
+                                        pueden variar según la complejidad del proceso artesanal.
+                                    </p>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -316,7 +364,7 @@
         <div class="footer">
             {{ $company['footer_text'] ?? '¡Gracias por su compra!' }}
             <br>
-            Este documento es una representación impresa de una nota de venta.
+            Este documento es una representación impresa de una orden de pedido.
         </div>
     </div>
 </body>

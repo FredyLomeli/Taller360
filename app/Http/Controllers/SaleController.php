@@ -86,6 +86,7 @@ class SaleController extends Controller
             'items.*.chosen_color' => 'required|string', // Nuevo v2.0
             
             'payment_method' => 'required|string',
+            'signature' => 'required|string',
             'paid_amount' => 'required|numeric|min:0', // Anticipo
             'promised_date' => 'nullable|date',
         ]);
@@ -102,6 +103,7 @@ class SaleController extends Controller
                     'paid_amount' => $request->paid_amount,
                     'change_amount' => 0, // Se calcula abajo
                     'payment_method' => $request->payment_method,
+                    'signature' => $request->signature,
                     'stage' => 'pedido', // SIEMPRE inicia como pedido
                     'promised_date' => $request->promised_date,
                 ]);
@@ -260,16 +262,28 @@ class SaleController extends Controller
             'footer_text' => $settings['ticket_footer_text'] ?? ''
         ];
 
-        $logoPath = null;
+        $logoBase64 = null;
+        
         if (isset($settings['company_logo']) && $settings['company_logo']) {
+            // Intentamos obtener la ruta desde el .env o desde el public_path estándar
             $rootPath = env('FILESYSTEM_PUBLIC_ROOT', public_path('storage'));
-            $logoPath = $rootPath . '/' . $settings['company_logo'];
-            if (!file_exists($logoPath)) {
-                $logoPath = null; 
+            $fullPath = $rootPath . '/' . $settings['company_logo'];
+
+            // Si la ruta del .env no existe, probamos la ruta pública clásica
+            if (!file_exists($fullPath)) {
+                $fullPath = public_path('storage/' . $settings['company_logo']);
+            }
+
+            // Si el archivo existe, lo convertimos a Base64
+            if (file_exists($fullPath)) {
+                $type = pathinfo($fullPath, PATHINFO_EXTENSION);
+                $data = file_get_contents($fullPath);
+                $logoBase64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
             }
         }
 
-        $pdf = Pdf::loadView('pdf.sale_note', compact('sale', 'company', 'logoPath'));
+        // Enviamos 'logoBase64' a la vista
+        $pdf = Pdf::loadView('pdf.sale_note', compact('sale', 'company', 'logoBase64'));
         $pdf->setPaper('letter', 'portrait');
 
         return $pdf->stream('nota-venta-'.$sale->id.'.pdf');

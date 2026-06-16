@@ -22,6 +22,7 @@
     },
     "dependencies": {
         "lodash": "^4.17.21",
-        "sweetalert2": "^11.26.17"
+        "sweetalert2": "^11.26.17",
+        "vue-signature-pad": "^3.0.2"
     }
 }

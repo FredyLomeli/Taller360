@@ -16,6 +16,7 @@ class Sale extends Model
         'paid_amount',
         'change_amount',
         'payment_method',
+        'signature',
         'stage',             // Nuevo (enum)
         'promised_date',     // Nuevo
         'is_partial_shipping' // Nuevo
