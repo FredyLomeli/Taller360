@@ -370,8 +370,6 @@ const sendEmail = (id) => {
                     </div>
                 </div>
 
-                </div> <div class="p-6 border-t border-gray-100 bg-white">
-
                 <div class="p-6 border-t border-gray-100 bg-white">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
                         <a :href="route('sales.printNote', selectedSale.id)" target="_blank" class="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md transition-all active:scale-95">
