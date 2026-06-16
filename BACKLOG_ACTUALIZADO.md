@@ -45,13 +45,53 @@
 
 ---
 
+## 🚨 FASE 0 — Seguridad y Dependencias (PRIORIDAD INMEDIATA)
+**Agregada:** Junio 2026, tras auditoría de `npm audit` y `composer show`.
+**Por qué va antes de la Fase 1:** se detectaron versiones sin restricción (`*`) en `composer.json` y un conflicto de peer dependencies entre Vite 7 y `@vitejs/plugin-vue` (que solo soporta Vite 5/6). Resolver esto de raíz evita construir features nuevas sobre una base de build inconsistente.
+
+### 0.1 Fijar versiones sin restricción en `composer.json` ✅ COMPLETADO
+- [x] `barryvdh/laravel-dompdf`: de `*` a `^3.1.1`
+- [x] `laravel-lang/common`: de `*` a `^6.7.1`
+- [x] `composer update --lock` corrido sin cambios reales (las versiones ya coincidían)
+
+### 0.2 Actualizar Axios ✅ COMPLETADO
+- [x] De `1.13.2` a `1.15.0` vía `npm install axios@1.15.0 --legacy-peer-deps`
+- [x] Resuelve el bug de denegación de servicio (CVE-2026-25639) y el de CRLF (CVE-2026-40175)
+- ⚠️ Nota: `npm audit` posterior reportó nuevos avisos sobre Axios 1.15.x (prototype pollution, NO_PROXY bypass, etc.). Revisar si hay una versión más reciente disponible al iniciar la Tarea 0.3.
+
+### 0.3 Actualizar entorno de build (Vite + plugin-vue) — 🔴 PENDIENTE, SIGUIENTE SESIÓN
+**El pendiente más importante ahora mismo.** Detectado conflicto real:
+- Tienes `vite@7.3.1` instalado
+- `@vitejs/plugin-vue@5.2.4` solo declara soporte para `vite ^5.0.0 || ^6.0.0`
+- `@tailwindcss/vite` y `laravel-vite-plugin` sí soportan Vite 7, por lo que el conflicto es específicamente con el plugin de Vue
+
+Qué hacer:
+- [ ] Investigar si existe una versión de `@vitejs/plugin-vue` compatible con Vite 7 (probablemente sí exista una más reciente que la 5.2.4)
+- [ ] Actualizar `@vitejs/plugin-vue` a la versión compatible
+- [ ] Correr `npm run build` y `npm run dev` para confirmar que compila sin errores
+- [ ] Probar manualmente cada vista principal después del cambio: POS, Kanban, Dashboard, Production, Settings
+- [ ] Solo después de esto, evaluar correr `npm audit fix` (NO antes — puede arrastrar cambios mayores de Vite sin control)
+
+### 0.4 Revisar el resto de alertas de `npm audit`
+Clasificadas por riesgo real (auditoría de Junio 2026):
+- **Producción (importa a clientes):** Axios — cubierto en 0.2, revisar si hay versión más nueva
+- **Build/desarrollo (no llega a producción):** esbuild, vite, rollup, picomatch, postcss, concurrently, shell-quote — se resuelven como parte de 0.3
+- **Dependencias indirectas:** lodash, lodash-es, form-data, qs, follow-redirects — revisar después de 0.3, probablemente se resuelven solas al actualizar los paquetes padre
+
+### 0.5 Actualizar Laravel (no urgente, pero anotado)
+- Tienes `12.46.0`. La vulnerabilidad CRLF (CVE-2026-48019) se parchó en `12.60.0`
+- Riesgo real bajo (requiere input de email sin sanitizar en un punto de entrada público, que no es tu caso actual), pero conviene actualizar cuando se haga la sesión de build
+
+---
+
 ## 🔴 FASE 1 — Deuda Técnica Crítica (corto plazo, 1-2 semanas)
 
 ### 1.1 Edición de Usuarios
 No existe `Users/Edit.vue` ni métodos `edit`/`update`. Detalle técnico completo en `GUIA_DE_RUTA.md`.
 
-### 1.2 Bug Logout "Inception"
-Login aparece flotando al expirar sesión (419). Fix de 5 líneas en `bootstrap.js`.
+### 1.2 Bug Logout "Inception" ✅ COMPLETADO
+- [x] Interceptor agregado en `resources/js/bootstrap.js`
+- [x] Probado: al expirar sesión (419), redirige limpio a `/login` en vez de renderizar el login flotando dentro del dashboard
 
 ### 1.3 HTML sucio en `Sales/Index.vue`
 Div mal cerrado en el modal de detalle. No rompe funcionalidad pero hay que limpiarlo.
