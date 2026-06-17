@@ -87,8 +87,12 @@ Revisar de nuevo en la próxima sesión de mantenimiento (sugerido: cada 2-3 mes
 
 ## 🔴 FASE 1 — Deuda Técnica Crítica (corto plazo, 1-2 semanas)
 
-### 1.1 Edición de Usuarios
-No existe `Users/Edit.vue` ni métodos `edit`/`update`. Detalle técnico completo en `GUIA_DE_RUTA.md`.
+### 1.1 Edición de Usuarios ✅ COMPLETADO
+- [x] `UserController.php`: agregados métodos `edit` y `update`, con `Rule::unique()->ignore()` para permitir guardar sin conflicto de email propio
+- [x] Password opcional al editar: si se deja en blanco, no se modifica la contraseña actual
+- [x] Nueva vista `Users/Edit.vue`, con el mismo estilo que `Users/Create.vue`, formulario precargado con los datos del usuario
+- [x] Link "Editar" agregado en `Users/Index.vue`, junto al botón de Eliminar
+- [x] Probado: edición de nombre/email/rol sin tocar password, y cambio de password funcionando correctamente
 
 ### 1.2 Bug Logout "Inception" ✅ COMPLETADO
 - [x] Interceptor agregado en `resources/js/bootstrap.js`
