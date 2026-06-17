@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class UserController extends Controller
@@ -42,6 +43,44 @@ class UserController extends Controller
         ]);
 
         return redirect()->route('users.index')->with('success', 'Usuario creado correctamente.');
+    }
+
+    // Mostrar formulario de edición
+    public function edit(User $user)
+    {
+        return Inertia::render('Users/Edit', [
+            'user' => $user
+        ]);
+    }
+
+    // Actualizar usuario existente
+    public function update(Request $request, User $user)
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
+            'role' => 'required|in:admin,vendedor',
+        ];
+
+        // El password es opcional al editar: solo se valida si el usuario escribió algo
+        if ($request->filled('password')) {
+            $rules['password'] = ['confirmed', Rules\Password::defaults()];
+        }
+
+        $validated = $request->validate($rules);
+
+        $user->name = $validated['name'];
+        $user->email = $validated['email'];
+        $user->role = $validated['role'];
+
+        // Solo cambiamos el password si el usuario escribió uno nuevo
+        if ($request->filled('password')) {
+            $user->password = Hash::make($validated['password']);
+        }
+
+        $user->save();
+
+        return redirect()->route('users.index')->with('success', 'Usuario actualizado correctamente.');
     }
 
     // Eliminar usuario (Opcional, pero útil)

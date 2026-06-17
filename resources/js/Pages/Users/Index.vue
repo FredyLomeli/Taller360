@@ -63,6 +63,7 @@ const deleteUser = (userId, name) => {
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <Link :href="route('users.edit', user.id)" class="text-blue-600 hover:text-blue-900">Editar</Link>
                                     <button @click="deleteUser(user.id, user.name)" class="text-red-600 hover:text-red-900 ml-4">Eliminar</button>
                                 </td>
                             </tr>
