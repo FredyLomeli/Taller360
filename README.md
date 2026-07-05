@@ -4,9 +4,9 @@
 ![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
 ![Inertia.js](https://img.shields.io/badge/Inertia.js-7855FA?style=for-the-badge&logo=inertia&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Status](https://img.shields.io/badge/Estado-Auditado_y_Casi_Completo-success?style=for-the-badge)
+![Status](https://img.shields.io/badge/Estado-v2.6_Logística_Integrada-success?style=for-the-badge)
 
-Sistema de gestión de pedidos y manufactura diseñado específicamente para **mueblerías que fabrican sobre pedido**. Integra control de producción, ciclo financiero completo (abonos/cobranza) y gestión de inventario por variantes de material.
+Sistema de gestión de pedidos y manufactura diseñado específicamente para **mueblerías que fabrican sobre pedido**. Integra control de producción, ciclo financiero completo, gestión de inventario por variantes de material y **módulo de logística y embarques parciales**.
 
 ---
 
@@ -14,57 +14,66 @@ Sistema de gestión de pedidos y manufactura diseñado específicamente para **m
 
 | Campo | Detalle |
 |-------|---------|
-| **Versión** | 2.5 — Auditado contra código real |
-| **Última auditoría** | Junio 2026 |
+| **Versión** | 2.6 — Módulo de Logística Integrado |
+| **Última actualización** | Julio 2026 |
 | **Backend** | 100% funcional |
-| **Frontend** | ~95% funcional (falta edición de usuarios) |
+| **Frontend** | ~98% funcional |
 | **Repositorio** | https://github.com/FredyLomeli/Taller360 |
-
-> Este README fue regenerado a partir de una auditoría línea por línea de controladores, modelos, middlewares, observer y vistas Vue. Refleja el código real, no solo lo planeado.
 
 ---
 
-## ✅ Módulos Funcionales (Confirmados en código)
+## ✅ Módulos Funcionales
 
 ### 📊 Dashboard Estratégico
-KPIs en tiempo real diferenciados por rol, filtros de fecha, alerta de stock crítico (solo productos favoritos, ≤5 piezas) y tabla de rendimiento de vendedores.
+KPIs en tiempo real diferenciados por rol. Admin ve métricas globales; Vendedor ve sus propios números. Roles sin dashboard propio (`produccion`, `inventario`, `supervisor`, `financiero`) ven una pantalla de bienvenida limpia hasta que se construya su módulo en la Fase 3.
 
 ### 🛒 POS — Order Builder
-Catálogo visual con colores dinámicos por material, firma digital del cliente (`vue-signature-pad`), modal para crear cliente sin salir del POS, notas y costos adicionales por partida, precios automáticos según tier del cliente.
+Catálogo visual con colores dinámicos por material, firma digital del cliente, modal para crear cliente sin salir del POS, notas y costos adicionales por partida, precios automáticos según tier del cliente (Listas A-E).
 
 ### 📋 Tablero Kanban
-Flujo completo `Pedido → Confirmado → Producción → Enviado → Entregado → Cancelado`. Descuento y retorno automático de stock. **Historial completamente automático** vía `SaleObserver` — cada cambio de etapa queda registrado sin intervención manual del controlador.
+Flujo completo `Pedido → Confirmado → Producción → Enviado → Entregado → Cancelado`. Descuento y retorno automático de stock. Historial completamente automático vía `SaleObserver`.
 
 ### 📄 Detalle de Venta Híbrido
-Switch Modo Oficina (financiero) / Modo Taller (técnico, sin precios) en una sola vista.
+Switch Modo Oficina (financiero) / Modo Taller (técnico, sin precios) en una sola vista. Historial de abonos y modal de cobranza integrados.
 
 ### 💰 Ciclo de Cobranza
 Abonos parciales con validación de deuda y transacción atómica. Auto-confirmación del pedido si se registra anticipo al crearlo.
 
 ### 🏭 Plan Maestro de Producción
-Agrupación por Modelo + Material con desglose por color, vista optimizada para impresión en taller.
+Agrupación por Modelo + Material con desglose por color. Vista optimizada para impresión en taller. *(Pendiente: filtro por semana usando `promised_date` — Tarea 2.1)*
 
-### 📦 Gestión de Productos
-CRUD completo con variantes dinámicas, materiales sugeridos según categoría, imagen, marcado de favoritos. Sincronización inteligente de variantes al editar (upsert).
+### 🚚 Logística y Embarques (NUEVO v2.6)
+Control total de flotilla. Permite:
+- Registrar cuándo el taller termina piezas físicas (`production_completions`) sin cambiar el estado del pedido.
+- Agrupar piezas de múltiples pedidos en un solo viaje (`shipments`).
+- Envíos parciales: una venta de 5 piezas puede enviarse en 2 o más viajes distintos (`sale_deliveries`).
+- Generar remisión PDF para el chofer (`shipment_manifest.blade.php`).
+- Confirmar entrega y evaluar cierre automático del pedido.
+
+### 📦 Gestión de Productos e Inventario
+CRUD completo con variantes dinámicas por material, imagen, marcado de favoritos. Sincronización inteligente de variantes al editar (upsert). Alerta de stock crítico en Dashboard (≤ 5 piezas, solo favoritos).
 
 ### 🛡️ Seguridad y Roles
-Middleware `CheckRole` valida acceso por rol en cada ruta protegida. El usuario autenticado se comparte globalmente a todas las vistas Vue vía `HandleInertiaRequests`.
+6 roles implementados: `admin`, `vendedor`, `produccion`, `inventario`, `supervisor`, `financiero`. Middleware `CheckRole` con parámetros variádicos. Cada rol redirige a su pantalla correcta al iniciar sesión.
 
 ### 🖨️ PDFs y Correo
-Tickets y notas de venta en PDF compatibles con hosting compartido (`FILESYSTEM_PUBLIC_ROOT`). Envío de nota de venta por correo con PDF adjunto en memoria — **ya implementado**, no es una feature futura.
+Ticket de venta, nota de venta y remisión de embarque. Compatible con hosting compartido (`FILESYSTEM_PUBLIC_ROOT`). Envío de nota por correo con PDF adjunto en memoria.
 
 ---
 
-## ⚠️ Pendiente Confirmado
+## ⚠️ Pendiente
 
-| Prioridad | Tarea | Detalle |
-|-----------|-------|---------|
-| 🔴 Crítico | Edición de Usuarios | No existe `Users/Edit.vue` ni métodos `edit`/`update` en el controlador |
-| 🟠 Alto | Reporte Corte de Caja (Excel) | Feature nueva, no iniciada |
-| 🟠 Alto | Ajuste Manual de Inventario | Feature nueva, no iniciada |
-| 🟡 Medio | Bug Logout "Inception" | Login aparece flotando al expirar sesión (419) |
-| 🟡 Medio | HTML sucio en `Sales/Index.vue` | Div mal cerrado en modal, no rompe funcionalidad |
-| 🔵 Futuro | Notificaciones automáticas, CFDI 4.0, Envíos Parciales, PWA | Ver `BACKLOG.md` |
+| Prioridad | Tarea | Fase |
+|-----------|-------|------|
+| 🟠 Alto | Filtro semanal en Plan de Producción (`promised_date`) | 2.1 |
+| 🟡 Medio | Dashboard de Producción (sin dinero, solo piezas y fechas) | 3 |
+| 🟡 Medio | Dashboard Financiero (cartera vencida, ingresos) | 3 |
+| 🟡 Medio | Selector de vista para Admin | 3 |
+| 🟢 Futuro | Catálogo público + link personalizado por cliente | 4 |
+| 🔵 Futuro | Precios dinámicos por flete (distancia + capacidad) | 5 |
+| 🟣 Final | Reportes PDF (financiero, producción, embarques) | 6 |
+| 🐛 Bug | Input de moneda en Safari/iOS | — |
+| 🐛 Bug | `formatDate` sin usar en `Production/Index.vue` | — |
 
 ---
 
@@ -121,6 +130,6 @@ php artisan view:cache
 
 ## 📚 Documentación Relacionada
 
-- `CONTEXTO_TECNICO.md` — Schema de BD, relaciones, rutas y reglas de negocio. **Usar este archivo al retomar el proyecto con cualquier IA.**
-- `BACKLOG.md` — Lista de tareas pendientes con detalle técnico.
-- `GUIA_DE_RUTA.md` — Pasos exactos para completar cada tarea pendiente, en orden recomendado.
+- `CONTEXTO_TECNICO.md` — Schema de BD, relaciones, rutas y reglas de negocio. **Compartir con IA al retomar el proyecto.**
+- `BACKLOG.md` — Lista de tareas pendientes con detalle técnico por fase.
+- `GUIA_DE_RUTA.md` — Pasos exactos para completar cada tarea, en orden recomendado.
