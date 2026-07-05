@@ -11,6 +11,10 @@ use Inertia\Inertia;
 
 class UserController extends Controller
 {
+    // Lista única de roles válidos del sistema.
+    // Si en el futuro se agrega un rol nuevo, solo se cambia aquí.
+    const VALID_ROLES = 'admin,vendedor,produccion,inventario,supervisor,financiero';
+
     // Mostrar lista de usuarios
     public function index()
     {
@@ -31,7 +35,7 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'role' => 'required|in:admin,vendedor', // Aseguramos que solo sean roles válidos
+            'role' => 'required|in:' . self::VALID_ROLES, // Aseguramos que solo sean roles válidos
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
@@ -59,7 +63,7 @@ class UserController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|in:admin,vendedor',
+            'role' => 'required|in:' . self::VALID_ROLES,
         ];
 
         // El password es opcional al editar: solo se valida si el usuario escribió algo

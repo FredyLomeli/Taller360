@@ -11,13 +11,17 @@ class CheckRole
     /**
      * Handle an incoming request.
      *
+     * Usa parámetros variádicos (...$roles) — la forma estándar de Laravel
+     * para pasar múltiples valores a un middleware.
+     *
+     * Con 'role:admin,produccion', Laravel convierte automáticamente
+     * 'admin,produccion' en el array ['admin', 'produccion'].
+     *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
-    public function handle(Request $request, Closure $next, string $role): Response
+    public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        // Si no está logueado o su rol no coincide con el requerido
-        if (! $request->user() || $request->user()->role !== $role) {
-            // Lo mandamos al dashboard o mostramos error 403
+        if (! $request->user() || ! in_array($request->user()->role, $roles)) {
             abort(403, 'No tienes permiso para acceder a esta sección.');
         }
 

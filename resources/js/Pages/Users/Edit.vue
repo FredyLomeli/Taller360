@@ -48,6 +48,10 @@ const submit = () => {
                             <label class="block font-medium text-sm text-gray-700">Rol de Acceso</label>
                             <select v-model="form.role" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 mt-1">
                                 <option value="vendedor">Vendedor (Solo Ventas)</option>
+                                <option value="produccion">Producción (Solo Taller, sin precios)</option>
+                                <option value="inventario">Inventario (Stock de producto terminado, sin precios)</option>
+                                <option value="supervisor">Supervisor de Taller (Producción + Inventario + Embarques, sin precios)</option>
+                                <option value="financiero">Financiero (Cobranza y cartera vencida)</option>
                                 <option value="admin">Administrador (Acceso Total)</option>
                             </select>
                             <div v-if="form.errors.role" class="text-red-500 text-xs mt-1">{{ form.errors.role }}</div>

@@ -7,6 +7,17 @@ const props = defineProps({
     users: Array
 });
 
+// Mapa de roles: etiqueta visible y color del badge para cada uno.
+// Si se agrega un rol nuevo en el futuro, solo se agrega aquí una línea más.
+const roleBadges = {
+    admin:      { label: 'Administrador',      classes: 'bg-purple-100 text-purple-800' },
+    vendedor:   { label: 'Vendedor',            classes: 'bg-green-100 text-green-800' },
+    produccion: { label: 'Producción',          classes: 'bg-orange-100 text-orange-800' },
+    inventario: { label: 'Inventario',          classes: 'bg-yellow-100 text-yellow-800' },
+    supervisor: { label: 'Supervisor de Taller',classes: 'bg-blue-100 text-blue-800' },
+    financiero: { label: 'Financiero',          classes: 'bg-pink-100 text-pink-800' },
+};
+
 const deleteUser = (userId, name) => {
     Swal.fire({
         title: '¿Eliminar Usuario?',
@@ -57,9 +68,9 @@ const deleteUser = (userId, name) => {
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span 
                                         class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                        :class="user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'"
+                                        :class="roleBadges[user.role]?.classes ?? 'bg-gray-100 text-gray-800'"
                                     >
-                                        {{ user.role === 'admin' ? 'Administrador' : 'Vendedor' }}
+                                        {{ roleBadges[user.role]?.label ?? user.role }}
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

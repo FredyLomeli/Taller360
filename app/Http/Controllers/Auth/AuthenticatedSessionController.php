@@ -33,7 +33,18 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // Calculamos la pantalla de inicio según el rol.
+        // redirect()->away() fuerza una recarga completa de página, evitando que
+        // Inertia haga peticiones XHR intermedias que chocan con el middleware de roles.
+        $homeRoute = match (Auth::user()->role) {
+            'produccion' => route('production.plan'),
+            default      => route('dashboard'),
+        };
+
+        // Respetamos si el usuario intentó entrar a una URL específica antes del login
+        $intendedUrl = session()->pull('url.intended', $homeRoute);
+
+        return redirect()->away($intendedUrl);
     }
 
     /**
@@ -47,6 +58,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        // Usamos away() para forzar recarga completa de página,
+        // evitando que Inertia renderice la página pública dentro del layout autenticado.
+        return redirect()->away('/');
     }
 }
