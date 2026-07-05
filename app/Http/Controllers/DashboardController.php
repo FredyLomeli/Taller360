@@ -90,7 +90,7 @@ class DashboardController extends Controller
         }
 
         // --- LÓGICA PARA VENDEDOR ---
-        else {
+        elseif ($user->role === 'vendedor') {
             // A. SU DINERO (Solo lo cobrado en ventas válidas)
             $mySales = Sale::where('user_id', $user->id)
                 ->whereBetween('created_at', [$startDate, $endDate])
@@ -113,6 +113,24 @@ class DashboardController extends Controller
                     'tickets' => $myTickets
                 ],
                 'recentSales' => $recentSales,
+                'filters' => [
+                    'start_date' => $start->format('Y-m-d'),
+                    'end_date' => $end->format('Y-m-d')
+                ]
+            ]);
+        }
+
+        // --- ROLES SIN DASHBOARD PROPIO TODAVÍA ---
+        // produccion, inventario, supervisor, financiero llegan aquí
+        // hasta que la Fase 3 construya sus dashboards especializados.
+        // Por ahora ven una pantalla limpia de bienvenida, sin datos financieros.
+        else {
+            return Inertia::render('Dashboard', [
+                'isAdmin' => false,
+                'isOtherRole' => true,
+                'role' => $user->role,
+                'kpis' => [],
+                'recentSales' => [],
                 'filters' => [
                     'start_date' => $start->format('Y-m-d'),
                     'end_date' => $end->format('Y-m-d')

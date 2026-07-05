@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import Swal from 'sweetalert2';
 import Modal from '@/Components/Modal.vue';
 
 const props = defineProps({
@@ -62,6 +63,47 @@ const formatMoney = (amount) => {
 const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('es-MX', { 
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit' 
+    });
+};
+
+// --- LÓGICA DE EMBARQUES / ENTREGAS ---
+const deliveryData = ref({});
+
+const submitDelivery = (detailId, maxToDeliver, productName) => {
+    const qty = parseInt(deliveryData.value[detailId]);
+
+    if (!qty || qty < 1) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una cantidad mayor a 0.' });
+        return;
+    }
+
+    if (qty > maxToDeliver) {
+        Swal.fire({ icon: 'error', title: 'Error', text: `Solo faltan ${maxToDeliver} piezas por entregar de este modelo.` });
+        return;
+    }
+
+    Swal.fire({
+        title: '¿Confirmar salida de almacén?',
+        text: `¿Dar salida a ${qty} piezas de ${productName}? Se descontarán del inventario inmediatamente.`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#16a34a',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Sí, entregar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            router.post(route('sales.deliveries.store'), {
+                sale_detail_id: detailId,
+                quantity: qty
+            }, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    deliveryData.value[detailId] = ''; 
+                    Swal.fire({ icon: 'success', title: '¡Entregado!', text: 'El inventario se ha actualizado.', timer: 2000, showConfirmButton: false });
+                }
+            });
+        }
     });
 };
 </script>
@@ -192,6 +234,37 @@ const formatDate = (dateString) => {
                                         <div v-if="item.custom_notes" class="mt-2 p-2 bg-yellow-50 text-yellow-800 text-sm italic rounded border border-yellow-200 flex items-start gap-2">
                                             <span>📝</span>
                                             <span>{{ item.custom_notes }}</span>
+                                        </div>
+                                        <!-- INTERFAZ DE ENVÍOS PARCIALES -->
+                                        <div v-if="!productionMode" class="mt-4 pt-3 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                            <div class="text-xs">
+                                                <span class="text-gray-500 font-bold uppercase tracking-wider block mb-1">Progreso de Entrega</span>
+                                                <span class="font-black text-lg text-gray-800">{{ item.delivered_quantity || 0 }}</span> 
+                                                <span class="text-gray-500">de {{ item.quantity }} enviadas</span>
+                                                
+                                                <span v-if="(item.delivered_quantity || 0) === item.quantity" class="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">
+                                                    ✓ Completado
+                                                </span>
+                                            </div>
+
+                                            <div v-if="(item.quantity - (item.delivered_quantity || 0)) > 0" class="flex items-center gap-2 bg-gray-50 p-1.5 rounded border border-gray-200 shadow-sm">
+                                                <span class="text-xs font-bold text-gray-600 ml-1">Salida:</span>
+                                                <input 
+                                                    type="number" 
+                                                    v-model="deliveryData[item.id]" 
+                                                    min="1" 
+                                                    :max="item.quantity - (item.delivered_quantity || 0)"
+                                                    class="w-14 h-7 p-1 text-center border-gray-300 rounded text-xs focus:ring-green-500 font-bold" 
+                                                    placeholder="Cant."
+                                                >
+                                                <button 
+                                                    @click="submitDelivery(item.id, item.quantity - (item.delivered_quantity || 0), item.product_name)" 
+                                                    class="bg-green-600 hover:bg-green-700 text-white w-7 h-7 flex items-center justify-center rounded font-bold transition shadow-sm"
+                                                    title="Registrar Salida de Almacén"
+                                                >
+                                                    ✓
+                                                </button>
+                                            </div>
                                         </div>
                                     </td>
 

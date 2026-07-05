@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import axios from 'axios';
 const showingProductMenu = ref(false);
 const showingClientMenu = ref(false);
 const showingUsersMenu = ref(false);
@@ -19,6 +20,11 @@ const toggleSidebar = () => {
         showingClientMenu.value = false;
         showingUsersMenu.value = false;
     }
+};
+// <-- Nueva función de logout
+const logout = async () => {
+    await axios.post(route('logout'));
+    window.location.href = '/'; // Fuerza la recarga limpia de la página
 };
 </script>
 
@@ -57,15 +63,13 @@ const toggleSidebar = () => {
                     <span v-show="isSidebarOpen" class="ml-3">Dashboard</span>
                 </Link>
 
-                <Link :href="route('production.plan')" 
-                      class="flex items-center px-3 py-3 rounded-lg transition-colors whitespace-nowrap mb-2"
-                      :class="{'bg-green-700 text-white': route().current('production.plan'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('production.plan')}"
-                      title="Plan de Producción"
+                <Link :href="route('sales.create')" 
+                      class="flex items-center px-3 py-3 rounded-lg transition-colors whitespace-nowrap mb-4"
+                      :class="{'bg-green-600 text-white shadow-lg': route().current('sales.create'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('sales.create')}"
+                      title="Punto de Venta"
                 >
-                    <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-                    </svg>
-                    <span v-show="isSidebarOpen" class="ml-3">Plan de Taller</span>
+                    <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    <span v-show="isSidebarOpen" class="ml-3 font-bold">Punto de Venta</span>
                 </Link>
 
                 <Link :href="route('sales.index')" 
@@ -77,13 +81,26 @@ const toggleSidebar = () => {
                     <span v-show="isSidebarOpen" class="ml-3">Reporte de Ventas</span>
                 </Link>
 
-                <Link :href="route('sales.create')" 
-                      class="flex items-center px-3 py-3 rounded-lg transition-colors whitespace-nowrap mb-4"
-                      :class="{'bg-green-600 text-white shadow-lg': route().current('sales.create'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('sales.create')}"
-                      title="Punto de Venta"
+                <Link :href="route('production.plan')" 
+                      class="flex items-center px-3 py-3 rounded-lg transition-colors whitespace-nowrap mb-2"
+                      :class="{'bg-green-700 text-white': route().current('production.plan'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('production.plan')}"
+                      title="Plan de Producción"
                 >
-                    <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                    <span v-show="isSidebarOpen" class="ml-3 font-bold">Punto de Venta</span>
+                    <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                    </svg>
+                    <span v-show="isSidebarOpen" class="ml-3">Plan de Taller</span>
+                </Link>
+
+                <Link :href="route('shipments.index')" 
+                    class="flex items-center px-3 py-3 rounded-lg transition-colors whitespace-nowrap mb-2"
+                    :class="{'bg-green-700 text-white': route().current('shipments.*'), 'text-green-100 hover:bg-green-800 hover:text-white': !route().current('shipments.*')}"
+                    title="Logística y Embarques"
+                >
+                    <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                    </svg>
+                    <span v-show="isSidebarOpen" class="ml-3">Logística</span>
                 </Link>
 
                 <div class="border-t border-green-800 my-2"></div>
@@ -163,7 +180,7 @@ const toggleSidebar = () => {
                     </div>
                     <div v-show="isSidebarOpen" class="ml-3 whitespace-nowrap overflow-hidden">
                         <p class="text-sm font-bold text-white">{{ $page.props.auth.user.name }}</p>
-                        <Link :href="route('logout')" method="post" as="button" class="text-xs text-green-300 hover:text-white">Cerrar Sesión</Link>
+                        <button @click="logout" class="text-xs text-green-300 hover:text-white">Cerrar Sesión</button>
                     </div>
                 </div>
             </div>

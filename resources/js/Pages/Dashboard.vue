@@ -6,6 +6,8 @@ import { Head } from '@inertiajs/vue3';
 
 const props = defineProps({
     isAdmin: Boolean,
+    isOtherRole: Boolean,
+    role: String,
     kpis: Object,
     sellersStats: Array,
     lowStockProducts: Array,
@@ -59,7 +61,25 @@ const stageLabels = {
     <Head title="Panel Principal" />
 
     <AuthenticatedLayout>
-        <div class="h-[calc(100vh-65px)] overflow-hidden bg-gray-50 flex flex-col p-6">
+
+        <!-- PANTALLA TEMPORAL PARA ROLES SIN DASHBOARD PROPIO AÚN -->
+        <div v-if="isOtherRole" class="h-[calc(100vh-65px)] flex items-center justify-center bg-gray-50">
+            <div class="text-center max-w-md">
+                <div class="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                    <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-black text-gray-800 mb-3">Bienvenido al sistema</h2>
+                <p class="text-gray-500 text-sm leading-relaxed">
+                    Tu panel especializado está en construcción. 
+                    Usa el menú de navegación para acceder a tus módulos disponibles.
+                </p>
+            </div>
+        </div>
+
+        <!-- DASHBOARD NORMAL (admin y vendedor) -->
+        <div v-else class="h-[calc(100vh-65px)] overflow-hidden bg-gray-50 flex flex-col p-6">
             
             <div class="max-w-7xl mx-auto w-full flex flex-col h-full space-y-7">
                 
@@ -125,7 +145,7 @@ const stageLabels = {
                                 <h3 class="font-bold text-gray-700 uppercase text-xs tracking-widest">Rendimiento de Equipo</h3>
                             </div>
                             <span class="text-[10px] font-medium text-gray-400 bg-white px-2 py-1 rounded-lg border border-gray-100">
-                                Total Vendedores: {{ sellersStats.length }}
+                                Total Vendedores: {{ sellersStats?.length ?? 0 }}
                             </span>
                         </div>
                         
@@ -139,7 +159,7 @@ const stageLabels = {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-50">
-                                    <tr v-for="seller in sellersStats" :key="seller.id" class="hover:bg-blue-50/20 transition-all group">
+                                    <tr v-for="seller in (sellersStats ?? [])" :key="seller.id" class="hover:bg-blue-50/20 transition-all group">
                                         <td class="px-6 py-3 font-bold text-gray-700 flex items-center gap-3">
                                             <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 flex items-center justify-center font-black text-[10px] shadow-sm border border-blue-200 group-hover:scale-110 transition-transform">
                                                 {{ seller.name.substring(0,2).toUpperCase() }}
@@ -157,7 +177,7 @@ const stageLabels = {
                                             </span>
                                         </td>
                                     </tr>
-                                    <tr v-if="sellersStats.length === 0">
+                                    <tr v-if="!sellersStats?.length">
                                         <td colspan="3" class="px-6 py-12 text-center">
                                             <div class="flex flex-col items-center gap-2">
                                                 <svg class="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
@@ -180,7 +200,7 @@ const stageLabels = {
                         </div>
                         <div class="overflow-y-auto flex-1 custom-scroll bg-white p-2">
                             <ul class="divide-y divide-gray-50">
-                                <li v-for="variant in lowStockProducts" :key="variant.id" class="p-5 hover:bg-red-50/50 transition-colors flex justify-between items-center group rounded-2xl">
+                                <li v-for="variant in (lowStockProducts ?? [])" :key="variant.id" class="p-5 hover:bg-red-50/50 transition-colors flex justify-between items-center group rounded-2xl">
                                     <div class="min-w-0">
                                         <div class="text-sm font-black text-gray-800 truncate mb-1">{{ variant.product.name }}</div>
                                         <div class="text-[10px] text-gray-400 font-bold uppercase truncate">
@@ -199,6 +219,8 @@ const stageLabels = {
 
             </div>
         </div>
+        <!-- FIN v-else dashboard normal -->
+
     </AuthenticatedLayout>
 </template>
 

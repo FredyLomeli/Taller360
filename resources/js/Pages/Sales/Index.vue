@@ -79,12 +79,12 @@ const advanceStage = (id, currentStage) => {
         confirmTitle = '¿Pasar a Producción?';
         confirmText = 'El taller podrá ver este pedido para comenzarlo.';
         btnText = 'Sí, a producción';
-    } else if (currentStage === 'produccion') {
+    } /*else if (currentStage === 'produccion') {
         nextStage = 'enviado';
         confirmTitle = '¿Marcar como Enviado?';
         confirmText = 'El pedido ha salido del taller. Se descontará el inventario.';
         btnText = 'Sí, enviar';
-    } else if (currentStage === 'enviado') {
+    } */else if (currentStage === 'enviado') {
         nextStage = 'entregado';
         confirmTitle = '¿Marcar como Entregado?';
         confirmText = 'El cliente ya recibió su mercancía.';
