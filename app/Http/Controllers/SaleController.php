@@ -24,8 +24,21 @@ class SaleController extends Controller
      */
     public function index(Request $request)
     {
-        // Iniciamos la consulta con las relaciones necesarias
-        $query = Sale::with(['client', 'user', 'details', 'history.user'])->latest();
+        // 1 y 2. Iniciamos la consulta seleccionando SOLO los campos necesarios
+        // EXCLUIMOS explícitamente 'signature'
+        $query = Sale::select([
+            'id', 'user_id', 'client_id', 'total', 'paid_amount', 'change_amount', 
+            'payment_method', 'stage', 'promised_date', 'is_partial_shipping', 
+            'created_at', 'updated_at'
+        ])
+        ->with([
+            // Solo traemos id y name del cliente (asegúrate de incluir los campos que uses en tu frontend)
+            'client:id,name', 
+            'user:id,name', 
+            // Cargamos details y history completos porque los necesitas para el modal
+            'details', 
+            'history.user:id,name'
+        ])->latest();
 
         // Regla de Negocio: Vendedores solo ven lo suyo
         if (Auth::user()->role !== 'admin') {
