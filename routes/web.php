@@ -21,20 +21,11 @@ use Illuminate\Support\Facades\Auth;
 |--------------------------------------------------------------------------
 */
 
-// --- RUTA PÚBLICA (Landing Page) ---
+// --- RUTA PÚBLICA (Catálogo / Landing Page) ---
 Route::get('/', function () {
-    if (Auth::check()) {
-        // Cada rol tiene su "pantalla de inicio" correcta.
-        // admin y vendedor van al Dashboard; producción va directo a su Plan.
-        // Cuando se construyan los módulos de inventario/supervisor/financiero,
-        // sus redirecciones se agregan aquí.
-        return match (Auth::user()->role) {
-            'produccion' => redirect()->route('production.plan'),
-            default => redirect()->route('dashboard'),
-        };
-    }
-    return view('welcome');
-});
+    // Cualquier visitante que entre a la raíz verá el catálogo público
+    return view('catalogo.index');
+})->name('home');
 
 // --- RUTAS AUTENTICADAS ---
 Route::middleware(['auth', 'verified'])->group(function () {
