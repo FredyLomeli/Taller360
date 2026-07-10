@@ -154,6 +154,16 @@ Documentado como regla de negocio ("si se cancela un embarque antes de confirmar
 
 ### 2.4 Embarques como Entidad Propia ✅ COMPLETADO (bugs #6, #7, #8, #9 corregidos hoy; #2, #4, #5 aún pendientes)
 
+### ⏳ Bug #2 — Doble mecanismo de descuento de stock — EN PROGRESO (Julio 2026)
+
+**Parte 1 de 3 — ✅ RESUELTA:** se eliminó el descuento/retorno de stock de `SaleController::updateStage()`. Además, por decisión explícita del cliente ("hay que hacerlo bien desde el inicio"), `enviado` y `entregado` **ya no son seleccionables a mano** desde el Kanban — el `validate()` de `updateStage()` solo acepta `pedido,confirmado,produccion,cancelado`. Ambos estados ahora dependen exclusivamente del módulo de Embarques.
+
+> 🚨 **HUECO TEMPORAL A CERRAR ANTES DE PRODUCCIÓN — decisión consciente del cliente, no un descuido:** mientras no se implemente la Parte 3 (recolección por el cliente, ver 2.5.3 abajo), **no existe ningún camino, ni siquiera para Admin, para cerrar una venta de mostrador el mismo día.** El cliente confirmó que este caso es "casi nulo, muy raro", y aceptó el hueco a cambio de no dejar una puerta trasera manual en el Kanban. **No se te olvide:** este hueco se cierra solo cuando 2.5.3 esté implementado — hasta entonces, cualquier venta de mostrador real que llegue no tiene forma de marcarse como entregada en el sistema.
+
+**Parte 2 de 3 — ⏳ PENDIENTE:** transición automática a `enviado` al crear el primer Embarque de un pedido (en `ShipmentController::store()`), y corrección de `confirmDelivery()` para que revise **todas** las líneas del pedido antes de marcarlo `entregado` (hoy solo revisa la línea que se está entregando en ese momento — bug adicional detectado en conversación).
+
+**Parte 3 de 3 — ⏳ PENDIENTE:** ver Tarea 2.5.3 abajo (recolección propia vs. cliente).
+
 ### 2.5 Mejoras al módulo de Embarques
 
 **2.5.1 — Filtro por cliente al armar embarque — ✅ CORREGIDO (ver Bug #8 arriba)**
@@ -161,6 +171,21 @@ El controlador ya soporta `client_ids[]`. Pendiente: agregar el selector multi-c
 
 **2.5.2 — Notas de entrega individuales por pedido dentro de un mismo embarque — parcialmente implementado**
 `ShipmentController::printManifest()` ya agrupa las entregas por pedido/cliente. Falta fusionar la plantilla `shipment_manifest.blade.php` real (no compartida en la auditoría) con la lógica de agrupación — hay una versión de referencia (`reference_shipment_manifest.blade.php`) para integrar.
+
+**2.5.3 — Recolección propia vs. recolección por el cliente (DECIDIDO con cliente, Julio 2026) — ⏳ PENDIENTE DE IMPLEMENTAR**
+Caso de negocio: venta de mostrador / cliente que recoge en el momento (poco frecuente pero existe). En vez de crear un tercer mecanismo de stock aparte, se reusa el módulo de Embarques con una variante:
+
+- Nuevo campo en `shipments`: `pickup_type` (`'flota_propia'` por default / `'recoleccion_cliente'`).
+- `driver_name` y `license_plate` se siguen capturando en **ambos** casos (se guardan los datos del chofer sin importar si es de la empresa o del cliente).
+- Si `pickup_type = 'recoleccion_cliente'`: el Embarque se crea directo con `status = 'entregado'` y `delivered_at = now()` en el mismo `store()` — no pasa por `en_transito` ni necesita una confirmación de entrega posterior. El stock se descuenta igual que cualquier otro embarque (misma validación de lockForUpdate del Bug #6).
+- Si es `flota_propia`: comportamiento actual sin cambios (`en_transito` → confirmar entrega después).
+- **Tratar como decisión tomada, no como propuesta abierta** — si en la práctica el cliente pide ajustes, se hacen sobre esta base, pero se avanza con este diseño para no bloquear el resto del proyecto.
+
+**Qué hace falta:**
+- [ ] Migración: `pickup_type` en `shipments` (string, default `'flota_propia'`).
+- [ ] `ShipmentController::store()`: si `pickup_type === 'recoleccion_cliente'`, crear el Shipment ya con `status = 'entregado'`/`delivered_at = now()` en vez de `en_transito`, y ejecutar en la misma transacción la misma lógica de cierre de pedido que hoy vive en `confirmDelivery()` (evitar duplicar esa lógica — lo ideal es extraerla a un método privado reusable por ambos).
+- [ ] `Shipments/Create.vue`: checkbox u opción "Recolección en mostrador (cliente se lleva el pedido)" que mande el flag y oculte/simplifique destino si aplica.
+- [ ] Una vez implementado, cierra el hueco temporal del Bug #2 documentado arriba.
 
 ---
 

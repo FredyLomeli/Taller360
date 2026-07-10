@@ -201,7 +201,7 @@ class SaleController extends Controller
     public function updateStage(Request $request, Sale $sale)
     {
         $request->validate([
-            'stage' => 'required|in:pedido,confirmado,produccion,enviado,entregado,cancelado'
+            'stage' => 'required|in:pedido,confirmado,produccion,cancelado'
         ]);
 
         $newStage = $request->stage;
@@ -211,29 +211,6 @@ class SaleController extends Controller
 
         try {
             DB::transaction(function () use ($sale, $newStage, $oldStage) {
-                
-                // CASO A: Salida de Almacén (Enviado) -> RESTAR STOCK
-                if ($newStage === 'enviado' && $oldStage !== 'enviado' && $oldStage !== 'entregado') {
-                    $allowNegative = Setting::where('key', 'allow_negative_stock')->value('value');
-
-                    foreach ($sale->details as $detail) {
-                        $variant = ProductVariant::lockForUpdate()->find($detail->product_variant_id);
-                        
-                        if (!$allowNegative && $variant->stock < $detail->quantity) {
-                            throw new \Exception("Stock insuficiente de {$detail->product_name} para enviar.");
-                        }
-                        $variant->decrement('stock', $detail->quantity);
-                    }
-                }
-
-                // CASO B: Cancelación de un pedido YA enviado -> DEVOLVER STOCK
-                if ($newStage === 'cancelado' && ($oldStage === 'enviado' || $oldStage === 'entregado')) {
-                    foreach ($sale->details as $detail) {
-                        ProductVariant::where('id', $detail->product_variant_id)
-                            ->increment('stock', $detail->quantity);
-                    }
-                }
-
                 // Actualizamos el estado (El Observer guardará el historial)
                 $sale->update(['stage' => $newStage]);
             });
