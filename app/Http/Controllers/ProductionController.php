@@ -28,7 +28,7 @@ class ProductionController extends Controller
                             ->orWhereNull('promised_date');
                       });
             })
-            // AQUI ESTABA EL ERROR: Cambiamos 'productVariant.product' por 'variant.product'
+            ->withSum('completions as completed_quantity', 'quantity_completed')
             ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->sortBy(function ($item) {
@@ -61,8 +61,14 @@ class ProductionController extends Controller
                 'total_needed' => $group->sum('quantity'),
                 'total_completed' => $group->sum('completed_quantity') ?? 0,
                 'in_stock' => $group->first()->variant->stock ?? 0,
-                'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0) - ($group->first()->variant->stock ?? 0)),
+                'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0)),
             ];
+        })
+        ->sortBy(function ($group) {
+            // 0 = urgente (falta fabricar), 1 = listo para embarcar, 2 = ya resuelto/embarcado
+            $priority = $group['pending_to_fabricate'] > 0 ? 0 : ($group['in_stock'] > 0 ? 1 : 2);
+            $earliestDate = collect($group['orders'])->min('promised_date') ?? '9999-12-31';
+            return sprintf('%d-%s', $priority, $earliestDate);
         });
 
         return Inertia::render('Production/Index', [

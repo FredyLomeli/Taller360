@@ -1,10 +1,15 @@
 # 🗺️ GUÍA DE RUTA — TALLER 360
-**Actualizada:** Julio 2026 (post-auditoría de código real)
+**Actualizada:** Julio 2026 (post-auditoría + sesión de implementación en vivo)
 
 ---
 
 ## Estado actual en una línea
-> El sistema base, seguridad/roles y el módulo de logística ya están construidos, **pero la auditoría de código encontró 5 bugs críticos de consistencia de inventario y producción que hay que resolver antes de construir los Dashboards de Fase 3** (esos dashboards van a mostrar datos derivados de justamente lo que está roto hoy). El filtro semanal de producción (antes "próxima tarea") ya está implementado.
+> Se implementó y probó en vivo el Bug #1 (Plan de Producción) más 4 bugs nuevos encontrados en Embarques al probar (inventario negativo, validación de stock compartido en el frontend, filtro de clientes que no se ejecutaba, y carga innecesaria de firma/precios). Los bugs originales #2, #3, #4 y #5 (doble descuento de stock, `storeDelivery` roto, rol en Embarques, cancelación) **siguen pendientes**. Detalle completo en `BACKLOG.md`, sección "Sesión de Implementación en Vivo".
+
+## Flujo de Git para lo que sigue (lanzamiento: miércoles)
+- Trabajar en una rama separada para el resto de estos fixes (`fix/produccion-embarques-inventario` o similar), aunque no sea la costumbre — son cambios de dinero/inventario a días de producción, y una rama da margen para probar el checklist completo antes de tocar `master`.
+- Separar en commits por bug (no un commit único del día) — si algo falla en la prueba final, se puede revertir un commit puntual sin afectar el resto.
+- Después del lanzamiento, retomar el hábito normal de trabajar en `master` si así lo prefiere el equipo — esto aplica solo a esta ventana de cambios críticos.
 
 ---
 

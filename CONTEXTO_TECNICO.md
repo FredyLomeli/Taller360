@@ -171,6 +171,14 @@ SaleDetail    → belongsTo(Sale)
                 y `$detail->variant`. Si algún desarrollador nuevo asume `productVariant`, el eager-load fallará
                 silenciosamente (relación no encontrada) o lanzará error según el contexto. AJUSTAR EN CUALQUIER
                 DOCUMENTO O PROMPT que diga `productVariant`.
+
+                ⚠️ OJO — esto es distinto de la columna cruda: en el JSON que Inertia manda al frontend, el campo
+                de la llave foránea es `product_variant_id` (así se llama la columna real en `sale_details`), NO
+                `variant_id`. Causó un bug real en `Shipments/Create.vue` (Julio 2026): el código armaba
+                `{ sale_detail_id, quantity, variant_id: detail.variant_id }` con un campo que no existe —
+                `detail.variant_id` era `undefined`, confirmado con Vue Devtools. Resumen para no repetir el error:
+                `variant` = nombre de la relación Eloquent (`$detail->variant`). `product_variant_id` = nombre de
+                la columna/llave foránea cruda (`detail.product_variant_id` en el frontend).
               → hasMany(ProductionCompletion) ['completions']
               → hasMany(SaleDelivery) ['deliveries']
 SaleHistory   → belongsTo(User)
@@ -216,7 +224,7 @@ Setting       → getValue(), setValue(), getAll()  [métodos estáticos]
 
 ## 5. Reglas de Negocio Críticas
 
-### 🚨 Flujo de Stock — DOS mecanismos activos en paralelo (bug arquitectónico)
+### 🚨 Flujo de Stock — DOS mecanismos activos en paralelo (⏳ bug arquitectónico, aún PENDIENTE de corregir)
 
 El sistema tiene **dos caminos independientes** que descuentan/regresan stock, y ninguno sabe del otro:
 
@@ -224,36 +232,31 @@ El sistema tiene **dos caminos independientes** que descuentan/regresan stock, y
 1. Al mover una venta a `stage = 'enviado'`: resta `detail.quantity` de `product_variants.stock` para cada línea de la venta completa.
 2. Al cancelar una venta que estaba en `enviado` o `entregado`: regresa el stock.
 
-**Camino B — Embarques (`ShipmentController::store`, v2.6, lo documentado como "oficial"):**
-1. Al crear un embarque: resta `item.quantity` de `product_variants.stock` por cada línea incluida en ese viaje específico (puede ser parcial).
+**Camino B — Embarques (`ShipmentController::store`, v2.6, ya con validación de stock — ver abajo):**
+1. Al crear un embarque: valida y resta `item.quantity` de `product_variants.stock` por cada línea incluida en ese viaje específico (puede ser parcial).
 2. Al confirmar entrega: NO toca stock (ya se restó al crear el embarque).
 
-**Riesgo:** nada impide que ambos caminos se disparen para el mismo pedido. Si alguien mueve una venta a `enviado` desde el Kanban (Camino A) Y además se arma un embarque para esas mismas piezas (Camino B), el stock se descuenta dos veces. La documentación anterior (`CONTEXTO_TECNICO.md` v2.5) solo describía el Camino B como si fuera el único activo — **no lo es**. Se recomienda decidir un solo camino "fuente de verdad" y neutralizar el otro (ver Backlog).
+**Riesgo:** nada impide que ambos caminos se disparen para el mismo pedido. Si alguien mueve una venta a `enviado` desde el Kanban (Camino A) Y además se arma un embarque para esas mismas piezas (Camino B), el stock se descuenta dos veces. **Decisión ya tomada con el equipo, pendiente de implementar:** el paso a `enviado` debe volverse automático al crear el primer Embarque del pedido (no un cambio manual desde el Kanban), y se debe quitar el descuento de stock de `updateStage()` por completo.
 
-### 🚨 Bug confirmado — El Plan de Producción no descuenta correctamente lo ya fabricado tras un envío parcial
+### ✅ RESUELTO Y PROBADO — El Plan de Producción no descontaba lo ya fabricado tras un envío parcial
 
-Ubicación: `ProductionController::index()` (la pantalla interactiva, no el PDF).
+Ubicación: `ProductionController::index()` (la pantalla interactiva, no el PDF). Causa: `completed_quantity` nunca se cargaba ahí (sí en `printReport()`), así que `pending_to_fabricate` terminaba dependiendo solo de `quantity - stock_actual`, y el stock baja con cada embarque — cada envío parcial hacía que la pantalla volviera a pedir piezas ya fabricadas.
 
+**Fix aplicado y confirmado con datos reales:**
 ```php
-// index() NO carga esto (a diferencia de printReport(), que sí lo hace):
-// ->withSum('completions as completed_quantity', 'quantity_completed')
+// index() ahora carga esto (igual que ya hacía printReport()):
+->withSum('completions as completed_quantity', 'quantity_completed')
 
-'total_completed' => $group->sum('completed_quantity') ?? 0,   // SIEMPRE es 0 en index()
-'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0) - ($group->first()->variant->stock ?? 0)),
+// La fórmula ya NO resta stock:
+'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0)),
+'in_stock' => $group->first()->variant->stock ?? 0, // se muestra aparte, informativo
 ```
 
-Como `completed_quantity` nunca se carga en `index()`, la fórmula real que ve el usuario en pantalla es efectivamente:
-```
-pendiente_por_fabricar = cantidad_necesaria − stock_actual
-```
+**Mejoras de UX agregadas al confirmar el fix (Julio 2026):**
+- Badge de estatus en `Production/Index.vue` ahora distingue 4 casos, no 3: sin fabricar, parcial, listo para embarcar, y **fabricado y ya embarcado** (antes este último se veía igual que "sin fabricar", porque el badge solo comparaba contra `in_stock`, que vuelve a 0 tras embarcar).
+- `$grouped` se ordena (`sortBy`) para que lo pendiente aparezca primero y lo ya resuelto (fabricado + embarcado) quede al final de la lista — evita que producción interprete como urgente algo que ya está cerrado.
 
-Y `stock_actual` **baja con cada embarque**, incluso parcial. Resultado observado y confirmado: un pedido de 10 piezas, ya fabricado al 100%, al enviarse parcialmente (ej. 3 de 10) hace que la pantalla vuelva a mostrar piezas "pendientes por fabricar" que en realidad ya existen y solo están en tránsito o en bodega esperando el siguiente viaje.
-
-**Corrección necesaria:**
-1. Agregar `->withSum('completions as completed_quantity', 'quantity_completed')` en `index()`, igual que ya existe en `printReport()`.
-2. `pending_to_fabricate` debe depender **únicamente** de `quantity - completed_quantity`. El campo `in_stock` (`variant.stock`) debe dejar de restarse de esta fórmula — es un dato distinto (piezas físicamente disponibles ahora, afectadas por envíos) y debe mostrarse aparte, no mezclado, idealmente alimentando el KPI "listas para embarcar" de la Fase 3.1.
-
-### 🚨 Bug confirmado — `storeDelivery()` está roto (columnas inexistentes)
+### ⏳ PENDIENTE — `storeDelivery()` está roto (columnas inexistentes)
 
 `SaleController::storeDelivery()` (ruta `sales.deliveries.store`) intenta:
 ```php
@@ -264,12 +267,48 @@ SaleDelivery::create([
     'delivered_at' => now(),        // ❌ columna no existe en sale_deliveries
 ]);
 ```
-La tabla `sale_deliveries` (migración real) solo tiene `shipment_id` (obligatorio, sin `nullable()`), `sale_detail_id`, `quantity_delivered`. Esta llamada truena en cualquier escenario. Es probable que este método sea un remanente de una versión anterior al módulo de Embarques (v2.6), reemplazado de facto por `ShipmentController::store()`, y que nunca se limpió ni se desconectó de la ruta.
+La tabla `sale_deliveries` (migración real) solo tiene `shipment_id` (obligatorio, sin `nullable()`), `sale_detail_id`, `quantity_delivered`. Esta llamada truena en cualquier escenario. Es probable que este método sea un remanente de una versión anterior al módulo de Embarques (v2.6). **Aún no se ha tocado en la implementación en vivo.**
 
-### Flujo de Stock — Recomendación de documentación (una vez corregido)
-1. Al crear/confirmar pedido: stock NO se toca.
-2. Al marcar piezas como terminadas (`production_completions`): stock SUBE en `product_variants`.
-3. Al crear embarque (`shipments.store`): stock BAJA de forma transaccional. **Este debe ser el único camino de salida de stock** — desactivar el descuento en `SaleController::updateStage`.
+### ✅ RESUELTO Y PROBADO — Inventario podía quedar negativo al armar un embarque
+
+Encontrado por el cliente probando el sistema (no estaba en la auditoría original de código). `ShipmentController::store()` nunca validaba stock real antes de descontar — cada línea del formulario se validaba de forma aislada contra el pedido, no contra el stock físico compartido entre pedidos distintos del mismo producto. Ejemplo real: producto con 5 en stock, 2 pedidos de 10 c/u, el formulario dejaba cargar 5+5 y el resultado era -5 en inventario.
+
+**Fix aplicado (backend, dentro de la transacción de `store()`):**
+```php
+$allowNegative = Setting::where('key', 'allow_negative_stock')->value('value');
+
+foreach ($request->items as $item) {
+    $detail = SaleDetail::with('variant')->findOrFail($item['sale_detail_id']);
+
+    if ($detail->variant) {
+        // lockForUpdate re-lee el stock ya actualizado por líneas anteriores de este
+        // mismo foreach (o por otro usuario armando un embarque al mismo tiempo).
+        $variant = ProductVariant::lockForUpdate()->find($detail->variant->id);
+
+        if (!$allowNegative && $variant->stock < $item['quantity']) {
+            throw new \Exception("Stock insuficiente de {$detail->product_name}. Disponible real: {$variant->stock}, solicitado: {$item['quantity']}.");
+        }
+        $variant->decrement('stock', $item['quantity']);
+    }
+    // ... SaleDelivery::create(...), SaleHistory::create(...) ...
+}
+```
+Todo el `store()` está envuelto en `try/catch` que devuelve el error a Inertia (`back()->withErrors(...)`) en vez de dejarlo subir como error 500 sin control. En el frontend, `Shipments/Create.vue` necesita un `onError` en el `form.post(...)` para mostrar ese mensaje (ver más abajo).
+
+**Fix complementario (frontend, `Shipments/Create.vue`):** el formulario también validaba cada línea de forma aislada contra `detail.variant?.stock` (el número fijo cargado al abrir la página), sin saber que otra línea del mismo formulario ya había apartado parte de ese mismo stock compartido. Se agregó un `computed` (`consumedByVariant`) que suma cuánto se ha cargado de cada `product_variant_id` entre todas las líneas del formulario, y `getAvailableToSend()` resta eso antes de calcular el máximo de cada línea — así el segundo pedido del mismo producto ya no puede exceder lo que dejó libre el primero. **Ojo con el nombre del campo:** la columna real es `product_variant_id`, no `variant_id` — el primer intento de este fix usó el nombre equivocado y no filtraba nada.
+
+### ⚠️ Patrón de rendimiento a vigilar en todo el proyecto — modelos completos viajando sin usarse
+
+Se detectó que `ShipmentController::create()`, `index()` y `show()` cargaban el modelo `Sale` completo (incluida `signature`, un base64 que puede pesar varios KB por venta) y precios (`unit_price`, `subtotal`, `total`) sin que ninguna de esas vistas los usara — se confirmó revisando línea por línea qué campos consume cada `.vue` real. Ya corregido en esos tres métodos con `select()` explícito.
+
+**Regla adoptada:** cualquier `with('sale')`, `with('client')` o `Sale::with(...)` sin `select()` explícito es sospechoso por default. Antes de decidir qué columnas traer, hay que revisar qué usa el `.vue` real — no asumir. **Pendiente de aplicar esta misma revisión a `ProductionController` y cualquier otro controlador que toque `Sale` — no se ha hecho todavía**, es la siguiente barrida de rendimiento recomendada.
+
+**Excepción intencional:** `ShipmentController::printManifest()` sí necesita precios completos (la remisión que firma el cliente los requiere) y se dejó sin restringir a propósito — un PDF generado en servidor nunca viaja como JSON al navegador, así que no aplica el mismo riesgo de exposición de datos que en las pantallas Inertia.
+
+### Flujo de Stock — Meta a alcanzar (parcialmente implementado)
+1. Al crear/confirmar pedido: stock NO se toca. ✅ ya es así.
+2. Al marcar piezas como terminadas (`production_completions`): stock SUBE en `product_variants`. ✅ ya es así.
+3. Al crear embarque (`shipments.store`): stock BAJA de forma transaccional, con validación contra stock real. ✅ ya corregido (ver arriba). **Pendiente:** que sea el único camino de salida de stock — todavía coexiste con el Camino A del Kanban.
 4. Cancelar un embarque antes de confirmar entrega: **pendiente de implementar** (no existe hoy).
 
 ### Roles y Redirección al Login

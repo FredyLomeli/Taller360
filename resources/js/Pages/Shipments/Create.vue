@@ -16,37 +16,48 @@ const form = useForm({
     items: [] 
 });
 
+const consumedByVariant = computed(() => {
+    const map = {};
+    for (const item of form.items) {
+        map[item.product_variant_id] = (map[item.product_variant_id] || 0) + item.quantity;
+    }
+    return map;
+});
+
 const getAvailableToSend = (detail) => {
     const pending = detail.quantity - (detail.delivered_quantity || 0);
     const stock = detail.variant?.stock || 0;
-    return Math.min(pending, stock);
+
+    const currentLineQty = form.items.find(i => i.sale_detail_id === detail.id)?.quantity || 0;
+    const takenByOtherLines = (consumedByVariant.value[detail.product_variant_id] || 0) - currentLineQty;
+
+    const remainingSharedStock = Math.max(0, stock - takenByOtherLines);
+    return Math.min(pending, remainingSharedStock);
 };
 
 const updateItem = (detail, event) => {
-    // 1. Limpiar el valor (forzar a 0 si borran o ponen negativo)
     let qty = parseInt(event.target.value) || 0;
     if (qty < 0) qty = 0;
 
-    // 2. Definir el máximo absoluto para este registro en particular
-    const maxAvailable = Math.min(
-        detail.quantity - (detail.delivered_quantity || 0), 
-        detail.variant?.stock || 0
-    );
+    const maxAvailable = getAvailableToSend(detail);
 
-    // 3. Validar contra el máximo absoluto
     if (qty > maxAvailable) {
         qty = maxAvailable;
         event.target.value = qty;
-        Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'Máximo alcanzado', text: `Solo tienes ${maxAvailable} disponibles.`, showConfirmButton: false, timer: 1500 });
+
+        const pending = detail.quantity - (detail.delivered_quantity || 0);
+        const reason = maxAvailable < pending
+            ? 'ya apartaste piezas de este producto en otro pedido del viaje'
+            : 'es lo máximo que este pedido necesita';
+        Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'Máximo alcanzado', text: `Solo quedan ${maxAvailable} disponibles (${reason}).`, showConfirmButton: false, timer: 2000 });
     }
 
-    // 4. Sincronizar con el formulario (sin filtros globales complicados)
     const existingIndex = form.items.findIndex(i => i.sale_detail_id === detail.id);
     if (qty > 0) {
         if (existingIndex >= 0) {
             form.items[existingIndex].quantity = qty;
         } else {
-            form.items.push({ sale_detail_id: detail.id, quantity: qty, variant_id: detail.variant_id });
+            form.items.push({ sale_detail_id: detail.id, quantity: qty, product_variant_id: detail.product_variant_id });
         }
     } else if (existingIndex >= 0) {
         form.items.splice(existingIndex, 1);
@@ -73,6 +84,13 @@ const submit = () => {
             form.post(route('shipments.store'), {
                 onSuccess: () => {
                     Swal.fire({ icon: 'success', title: '¡Buen Viaje!', text: 'El embarque está en ruta.', timer: 2000, showConfirmButton: false });
+                },
+                onError: (errors) => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'No se pudo generar el embarque',
+                        text: errors.error || 'Revisa el stock disponible e intenta de nuevo.'
+                    });
                 }
             });
         }

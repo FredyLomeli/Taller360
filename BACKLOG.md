@@ -33,45 +33,91 @@
 
 ---
 
-## 🆘 BUGS CRÍTICOS DETECTADOS EN AUDITORÍA (Julio 2026) — ATACAR ANTES DE FASE 3
+## 🛠️ SESIÓN DE IMPLEMENTACIÓN EN VIVO — Julio 2026
 
-Estos no estaban en ninguna versión previa del backlog. Se detectaron al auditar el código real contra la documentación. Se recomienda resolverlos antes de construir los Dashboards de Fase 3, porque varios alimentan directamente esos dashboards (producción y cartera).
+A diferencia de la auditoría inicial (que solo revisó código sin ejecutarlo), esta sección documenta cambios hechos **bug por bug, en el código real del proyecto, con pruebas manuales confirmadas por el equipo** en su propio entorno. Se trabajó directo sobre el proyecto real (no sobre el zip de auditoría), por eso el detalle de archivos/líneas puede diferir levemente de la sección de auditoría original más abajo.
 
-### 🔴 #1 — Plan de Producción no descuenta correctamente lo ya fabricado tras un envío parcial
-**Confirmado y reproducible.** `ProductionController::index()` (la pantalla interactiva) nunca carga `completed_quantity` (falta `->withSum('completions as completed_quantity', ...)`, que sí existe en `printReport()`). Como resultado, la fórmula de "pendiente por fabricar" termina restando solo el stock actual, que baja con cada embarque — así que cada envío parcial hace que el sistema *vuelva a pedir* piezas que ya estaban fabricadas.
+### ✅ Bug #1 — Plan de Producción no descontaba lo ya fabricado — RESUELTO Y PROBADO
+`ProductionController::index()` no cargaba `completed_quantity`; la fórmula de pendientes terminaba restando solo stock (que baja con cada embarque). Fix aplicado: `->withSum('completions as completed_quantity', 'quantity_completed')` + fórmula `pending_to_fabricate = quantity - completed_quantity` (ya sin restar stock). Mismo fix replicado en `printReport()`. **Confirmado con datos reales:** un pedido totalmente fabricado y parcialmente embarcado ya no vuelve a pedirse producir.
 
-**Qué hacer:**
-- [ ] Agregar `->withSum('completions as completed_quantity', 'quantity_completed')` en `ProductionController::index()`.
-- [ ] Cambiar la fórmula de `pending_to_fabricate` para que dependa **solo** de `quantity - completed_quantity`, sin restar `in_stock`.
-- [ ] Mostrar `in_stock` como un dato aparte ("piezas listas en bodega, esperando embarque"), no mezclado con lo pendiente por fabricar. Esto además alimenta directamente el KPI de Fase 3.1 ("Piezas terminadas listas para embarcar").
+**Mejoras de UX agregadas en la misma sesión (no eran parte del bug original, se detectaron al probar):**
+- El badge de estatus (`Production/Index.vue`) solo comparaba contra `in_stock`, así que un producto ya fabricado y ya embarcado (stock en 0) se mostraba como "🛠️ Fabricar Todo" — igual que uno nunca fabricado. Se agregó un 4º estado: "📦 Fabricado y Embarcado".
+- Se agregó `sortBy` en el backend para que los grupos con piezas pendientes aparezcan primero y los ya fabricados/embarcados hasta abajo — evita que producción vea como "urgente" algo que ya está resuelto.
 
-### 🔴 #2 — Doble mecanismo de descuento de stock (Kanban vs. Embarques)
+### ⏳ Bug #2 — Doble mecanismo de descuento de stock (Kanban vs. Embarques) — PENDIENTE
+`SaleController::updateStage()` todavía resta/regresa stock al mover a `enviado`/`cancelado`, en paralelo a `ShipmentController::store()`. No se ha tocado en esta ronda de implementación en vivo. Ligado a la decisión de cuándo pasar un pedido a "Enviado" (ver más abajo, "Decisiones pendientes").
+
+### ⏳ Bug #3 — `storeDelivery()` roto (columnas inexistentes) — PENDIENTE
+Sigue intentando guardar `user_id`/`delivered_at` en `sale_deliveries`, columnas que no existen. No se ha tocado en esta ronda.
+
+### ⏳ Bug #4 — Rutas de Embarques sin restricción de rol — PENDIENTE
+`/shipments/*` sigue sin `role:...`. No se ha tocado en esta ronda.
+
+### ⏳ Bug #5 — Falta cancelación de embarque — PENDIENTE
+No existe `cancel()` en `ShipmentController`. No se ha tocado en esta ronda.
+
+### 🆕 Bug #6 — Inventario podía quedar negativo al armar un embarque — ✅ RESUELTO Y PROBADO
+**Encontrado por el cliente probando el sistema, no en la auditoría original.** `ShipmentController::store()` nunca validaba stock antes de descontar. Ejemplo real detectado: Faraón con 5 en stock, 2 pedidos de 10 c/u — el formulario dejaba cargar hasta 5 **por cada pedido**, resultando en -5 al guardar.
+
+**Fix aplicado (backend):** dentro de la transacción de `store()`, `ProductVariant::lockForUpdate()->find(...)` + validar contra `Setting::allow_negative_stock` antes de cada `decrement()`, envuelto en `try/catch` que devuelve el error a Inertia en vez de un 500 sin control.
+
+### 🆕 Bug #7 — Validación de stock en el formulario de Embarque era ciega entre líneas — ✅ RESUELTO Y PROBADO
+`Shipments/Create.vue` — `getAvailableToSend()` calculaba el máximo de cada línea solo contra `detail.variant?.stock` (el número fijo que llegó del servidor al cargar la página), sin saber que otra línea del mismo formulario ya había "apartado" parte de ese mismo stock compartido (mismo producto/material en dos pedidos distintos).
+
+**Fix aplicado (frontend):** `consumedByVariant` (computed) suma cuánto se ha cargado de cada `product_variant_id` entre todas las líneas del formulario; `getAvailableToSend()` resta eso antes de calcular el máximo de cada línea. El mensaje de aviso ahora distingue si el límite viene del pedido o del stock compartido con otro pedido.
+
+**Nota de la sesión:** el primer intento de este fix usó `detail.variant_id`, campo que no existe — la columna real es `product_variant_id` (confirmado con Vue Devtools). Quedó corregido en la versión final.
+
+### 🆕 Bug #8 — Filtro por cliente (Fase 2.5.1) nunca se ejecutaba — ✅ RESUELTO Y PROBADO
+`ShipmentController::create()` no recibía `Request $request` en su firma, así que `$clientIds` no existía en ningún lado. `if (!empty($clientIds))` no truena en PHP (variable indefinida se trata como vacía), así que el filtro simplemente nunca se activaba — sin ningún error visible. Fix: agregar `Request $request` a la firma y `$clientIds = $request->input('client_ids', [])`.
+
+### 🆕 Bug #9 (rendimiento) — Firma del cliente y precios viajaban sin usarse en varias pantallas de Embarques — ✅ RESUELTO
+`create()`, `index()` y `show()` de `ShipmentController` cargaban el modelo `Sale` completo (incluida `signature`, un base64 que puede pesar varios KB por venta) y precios (`unit_price`, `subtotal`, `total`) sin que ninguna de esas vistas los usara. Se restringieron las columnas con `select()` explícito en los tres métodos. **Se dejó `printManifest()` intacta a propósito** — ahí sí se necesitan los precios completos para la remisión que firma el cliente; ese PDF nunca viaja como JSON al navegador, así que no aplica el mismo riesgo de exposición de datos.
+
+**Regla adoptada para el resto del proyecto:** cualquier `with('sale')` o `with('client')` sin `select()` explícito es sospechoso por default — hay que verificar primero qué usa el `.vue` real antes de decidir qué columnas traer. Pendiente aplicar esta misma revisión a `ProductionController` y otros lugares que toquen `Sale` (no se ha hecho todavía).
+
+### 📌 Decisiones pendientes, discutidas pero no implementadas todavía
+- **¿Cuándo pasa un pedido a `stage = 'enviado'`?** Se acordó que debería ser automático al crear el primer Embarque (no manual desde el Kanban), y que `confirmDelivery()` solo debería marcar `entregado` cuando **todas** las líneas del pedido estén completas (hoy revisa la línea individual, no el pedido completo — es un bug adicional detectado en conversación, aún no implementado).
+- **Fecha compromiso editable al confirmar pedido / mandar a producción** (no solo al crear) — solicitado por el cliente, pendiente de implementar, se planeó hacerlo junto con el Bug #2 por tocar el mismo método.
+- **Dashboard de avance por usuario** — anotado para Fase 3, no urgente.
+- **Columna "Ya Embarcado" en el reporte de Producción** — mejora de UX sugerida por el cliente al ver el reporte agrupado; no urgente, el badge de 4 estados ya resuelve la confusión principal.
+
+---
+
+## Auditoría original (código sin ejecutar, referencia histórica — ver estado real arriba)
+
+Los siguientes 5 bugs fueron detectados en la primera auditoría del zip compartido. La sección de arriba ("Sesión de Implementación en Vivo") es la fuente de verdad sobre qué se corrigió realmente en el proyecto — esta sección se conserva como referencia del análisis original.
+
+### 🔴 #1 — Plan de Producción no descuenta correctamente lo ya fabricado tras un envío parcial — ✅ CONFIRMADO Y CORREGIDO EN VIVO (ver arriba)
+
+### 🔴 #2 — Doble mecanismo de descuento de stock (Kanban vs. Embarques) — ⏳ PENDIENTE
 `SaleController::updateStage()` sigue restando/regresando stock al mover una venta a `enviado`/`cancelado`, en paralelo a `ShipmentController::store()`. Nada impide que ambos se disparen sobre el mismo pedido y se reste el doble.
 
 **Qué hacer:**
 - [ ] Decidir un único camino de salida de stock (recomendado: solo Embarques, ya que soporta envíos parciales reales).
 - [ ] Quitar el descuento/retorno de stock de `updateStage()` — dejar que ese método solo cambie el `stage` y deje el historial (que ya hace vía Observer).
-- [ ] Auditar si el paso a `enviado` en el Kanban debe seguir existiendo como estado manual, o si ahora ese cambio de stage debería derivarse automáticamente de los embarques confirmados.
+- [ ] Implementar la transición automática a `enviado` al crear el primer Embarque del pedido (decisión ya tomada, ver sección de arriba).
+- [ ] Corregir `confirmDelivery()` para que revise **todas** las líneas del pedido antes de marcarlo `entregado`, no solo la línea que se está entregando en ese momento (bug adicional detectado, no en la auditoría original).
 
-### 🔴 #3 — `storeDelivery()` está roto (columnas inexistentes)
+### 🔴 #3 — `storeDelivery()` está roto (columnas inexistentes) — ⏳ PENDIENTE
 `SaleController::storeDelivery()` (ruta `sales.deliveries.store`) intenta guardar `user_id` y `delivered_at` en `sale_deliveries`, columnas que no existen en esa tabla (solo tiene `shipment_id`, `sale_detail_id`, `quantity_delivered`). Cualquier llamada a este endpoint truena.
 
 **Qué hacer:**
 - [ ] Confirmar si este método sigue usándose desde algún botón en el frontend (parece remanente pre-Embarques v2.6).
 - [ ] Si ya no se usa: eliminar el método y su ruta.
-- [ ] Si se sigue usando: decidir si debe redirigir a crear un `shipment` de una sola línea, o agregar las columnas faltantes a `sale_deliveries` (rompería el diseño actual donde toda entrega SIEMPRE pertenece a un embarque).
+- [ ] Si se sigue usando: decidir si debe redirigir a crear un `shipment` de una sola línea, o agregar las columnas faltantes a `sale_deliveries`.
 
-### 🟠 #4 — Rutas de Embarques sin restricción de rol
+### 🟠 #4 — Rutas de Embarques sin restricción de rol — ⏳ PENDIENTE
 `/shipments/*` no está dentro de ningún `role:...` — cualquier usuario autenticado puede crear/confirmar embarques hoy.
 
 **Qué hacer:**
 - [ ] Envolver el grupo de rutas de Embarques en `role:admin,inventario` (según la matriz de roles definida en `CONTEXTO_TECNICO.md` sección 9).
 
-### 🟡 #5 — Falta cancelación de embarque
+### 🟡 #5 — Falta cancelación de embarque — ⏳ PENDIENTE
 Documentado como regla de negocio ("si se cancela un embarque antes de confirmar entrega, el stock regresa") pero no implementado — no hay método ni ruta.
 
 **Qué hacer:**
-- [ ] Agregar `shipments.cancel` (ruta + método), transaccional: regresa stock de cada `sale_delivery` del embarque, borra o marca el embarque como `cancelado`, deja rastro en `sale_histories`.
+- [ ] Agregar `shipments.cancel` (ruta + método), transaccional: regresa stock de cada `sale_delivery` del embarque, marca el embarque como `cancelado`, deja rastro en `sale_histories`.
 
 ---
 
@@ -97,29 +143,24 @@ Documentado como regla de negocio ("si se cancela un embarque antes de confirmar
 
 ## 🟠 FASE 2 — Producción Semanal y Trazabilidad (95% Completa)
 
-### 2.1 Plan de Producción Semanal — ✅ COMPLETADO (confirmado en auditoría, no estaba marcado antes)
+### 2.1 Plan de Producción Semanal — ✅ COMPLETADO
 `ProductionController@index` ya filtra por `promised_date` con `startWeek`/`endWeek`, incluyendo atrasados y sin fecha. Falta solo:
-- [ ] Confirmar en `Production/Index.vue` si ya existen los botones "← Semana anterior" / "Semana siguiente →" (no se auditó ese archivo en esta sesión).
+- [ ] Confirmar en `Production/Index.vue` si ya existen los botones "← Semana anterior" / "Semana siguiente →".
 - [ ] Agregar toggle "Ver todo acumulado" si no existe.
 
-### 2.2 Registro de Piezas Terminadas ✅ COMPLETADO (con bug — ver #1 arriba)
+### 2.2 Registro de Piezas Terminadas ✅ COMPLETADO Y CORREGIDO (ver Bug #1 arriba)
 
-### 2.3 Envíos Parciales ✅ COMPLETADO (con bug — ver #3 arriba, método legado roto)
+### 2.3 Envíos Parciales ✅ COMPLETADO (con bug — ver #3 arriba, método legado roto, aún pendiente)
 
-### 2.4 Embarques como Entidad Propia ✅ COMPLETADO (con bugs — ver #2, #4, #5 arriba)
+### 2.4 Embarques como Entidad Propia ✅ COMPLETADO (bugs #6, #7, #8, #9 corregidos hoy; #2, #4, #5 aún pendientes)
 
-### 2.5 Mejoras al módulo de Embarques (NUEVO — solicitado Julio 2026)
+### 2.5 Mejoras al módulo de Embarques
 
-**2.5.1 — Filtro por cliente al armar embarque**
-En `Shipments/Create.vue` / `ShipmentController::create()`, agregar la posibilidad de seleccionar uno o varios clientes y que la lista de pedidos embarcables (`shippableSales`) se filtre solo a esos clientes. Si no se selecciona ningún cliente, se muestra el listado completo (comportamiento actual). Esto permite priorizar clientes preferentes al armar la ruta del día.
-- [ ] Agregar selector multi-cliente en `Shipments/Create.vue` (puede reusar el buscador de clientes que ya existe en otras vistas).
-- [ ] `ShipmentController::create()` acepta `client_ids[]` opcional por query string y filtra `$sales` por `whereIn('client_id', $clientIds)` cuando venga poblado.
+**2.5.1 — Filtro por cliente al armar embarque — ✅ CORREGIDO (ver Bug #8 arriba)**
+El controlador ya soporta `client_ids[]`. Pendiente: agregar el selector multi-cliente en `Shipments/Create.vue` (el backend está listo, falta la UI para elegirlos).
 
-**2.5.2 — Notas de entrega individuales por pedido dentro de un mismo embarque**
-Hoy `printManifest()` genera **un solo PDF** con todo el viaje mezclado. Si el viaje lleva pedidos de varios clientes, el chofer no tiene cómo hacer firmar la entrega de cada cliente por separado.
-- [ ] Modificar `ShipmentController::printManifest()` (o agregar un método nuevo) para agrupar las `deliveries` del embarque por `sale_id`/cliente y generar **una nota de entrega por pedido**, cada una con su propio total, sus propias piezas, y un campo "Recibido por / Firma".
-- [ ] Salida recomendada: un solo PDF combinado con un salto de página por pedido (más simple de imprimir de una vez para el chofer), o un PDF por pedido descargable individualmente desde `Shipments/Show.vue`. A definir según preferencia operativa.
-- [ ] Reusar/adaptar la plantilla `shipment_manifest.blade.php` existente, parametrizada para recibir un solo pedido a la vez, y una vista "wrapper" que la repita por cada pedido del embarque.
+**2.5.2 — Notas de entrega individuales por pedido dentro de un mismo embarque — parcialmente implementado**
+`ShipmentController::printManifest()` ya agrupa las entregas por pedido/cliente. Falta fusionar la plantilla `shipment_manifest.blade.php` real (no compartida en la auditoría) con la lógica de agrupación — hay una versión de referencia (`reference_shipment_manifest.blade.php`) para integrar.
 
 ---
 

@@ -173,7 +173,10 @@ const submitCompletion = (detailId, maxQuantity) => {
                                         </div>
                                     </div>
                                     
-                                    <span v-if="group.in_stock >= group.total_needed" class="bg-green-100 text-green-700 border border-green-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
+                                    <span v-if="group.pending_to_fabricate === 0 && group.in_stock === 0" class="bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
+                                        📦 Fabricado y Embarcado
+                                    </span>
+                                    <span v-else-if="group.pending_to_fabricate === 0" class="bg-green-100 text-green-700 border border-green-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
                                         ✅ Listo para Embarque
                                     </span>
                                     <span v-else-if="group.in_stock > 0" class="bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
