@@ -79,17 +79,6 @@ const advanceStage = (id, currentStage) => {
         confirmTitle = '¿Pasar a Producción?';
         confirmText = 'El taller podrá ver este pedido para comenzarlo.';
         btnText = 'Sí, a producción';
-    } /*else if (currentStage === 'produccion') {
-        nextStage = 'enviado';
-        confirmTitle = '¿Marcar como Enviado?';
-        confirmText = 'El pedido ha salido del taller. Se descontará el inventario.';
-        btnText = 'Sí, enviar';
-    } */else if (currentStage === 'enviado') {
-        nextStage = 'entregado';
-        confirmTitle = '¿Marcar como Entregado?';
-        confirmText = 'El cliente ya recibió su mercancía.';
-        btnText = 'Sí, entregado';
-    }
 
     if (!nextStage) return;
 
@@ -388,16 +377,18 @@ const sendEmail = (id) => {
                             </template>
                         </button>
 
-                        <button v-if="['pedido', 'confirmado', 'produccion', 'enviado'].includes(selectedSale.stage)" 
+                        <button v-if="['pedido', 'confirmado'].includes(selectedSale.stage)" 
                             @click="advanceStage(selectedSale.id, selectedSale.stage)"
                             class="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200 transition-all active:scale-95">
                             <span>
                                 {{ selectedSale.stage === 'pedido' ? 'Confirmar Pedido' : 
-                                   selectedSale.stage === 'confirmado' ? 'A Producción' : 
-                                   selectedSale.stage === 'produccion' ? 'Marcar Enviado' : 'Marcar Entregado' }}
+                                   selectedSale.stage === 'confirmado' ? 'A Producción' : }}
                             </span>
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
                         </button>
+                        <p v-if="['produccion', 'enviado'].includes(selectedSale.stage)" class="text-xs text-gray-400 italic px-2">
+                            El siguiente paso se registra automáticamente al crear/confirmar un Embarque.
+                        </p>
                     </div>
 
                     <div class="flex justify-end mt-4">

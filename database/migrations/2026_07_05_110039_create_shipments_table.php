@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('destination')->nullable();
             $table->string('status')->default('en_transito'); // 'en_transito', 'entregado', 'cancelado'
             $table->timestamp('shipped_at')->nullable();
+            $table->string('pickup_type')->default('flota_propia');
             $table->timestamp('delivered_at')->nullable();
             $table->text('notes')->nullable();
             $table->foreignId('user_id')->constrained(); // Almacenista que registró la salida

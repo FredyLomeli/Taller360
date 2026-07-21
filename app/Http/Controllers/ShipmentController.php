@@ -79,25 +79,30 @@ class ShipmentController extends Controller
             'driver_name' => 'required|string',
             'license_plate' => 'required|string',
             'destination' => 'required|string',
+            'pickup_type' => 'nullable|in:flota_propia,recoleccion_cliente',
             'items' => 'required|array',
         ]);
 
+        $isCounterPickup = ($request->input('pickup_type', 'flota_propia') === 'recoleccion_cliente');
+
         try {
-            DB::transaction(function () use ($request) {
+            DB::transaction(function () use ($request, $isCounterPickup) {
                 // 1. Crear el Viaje
                 $shipment = Shipment::create([
                     'driver_name' => $request->driver_name,
                     'license_plate' => $request->license_plate,
                     'destination' => $request->destination,
-                    'status' => 'en_transito',
+                    'pickup_type' => $request->input('pickup_type', 'flota_propia'),
+                    'status' => $isCounterPickup ? 'entregado' : 'en_transito',
                     'shipped_at' => now(),
+                    'delivered_at' => $isCounterPickup ? now() : null,
                     'user_id' => auth()->id(),
                 ]);
 
                 $allowNegative = Setting::where('key', 'allow_negative_stock')->value('value');
 
                 foreach ($request->items as $item) {
-                    $detail = SaleDetail::with('variant')->findOrFail($item['sale_detail_id']);
+                    $detail = SaleDetail::with(['variant', 'sale'])->findOrFail($item['sale_detail_id']);
 
                     if ($detail->variant) {
 
@@ -117,21 +122,29 @@ class ShipmentController extends Controller
                         'quantity_delivered' => $item['quantity'],
                     ]);
 
+                    if ($isCounterPickup) {
+                        $this->closeOrderIfComplete($detail);
+                    } elseif (!in_array($detail->sale->stage, ['enviado', 'entregado'])) {
+                        $detail->sale->update(['stage' => 'enviado']);
+                    }
+
                     // 4. Registro en el Historial del Pedido (Sin cambiar el stage global)
                     SaleHistory::create([
                         'sale_id' => $detail->sale_id,
                         'user_id' => auth()->id(),
-                        'to_stage' => $detail->sale->stage, // Mantenemos el stage actual
-                        'notes' => "📦 Envío #{$shipment->id}: {$item['quantity']} unidades de {$detail->product_name}"
+                        'to_stage' => $detail->sale->fresh()->stage,
+                        'notes' => $isCounterPickup
+                            ? "🏬 Recolección en mostrador: {$item['quantity']} unidades de {$detail->product_name}"
+                            : "📦 Envío #{$shipment->id}: {$item['quantity']} unidades de {$detail->product_name}"
                     ]);
                 }
             });
             
             return redirect()->route('shipments.index')->with('success', 'Embarque registrado y stock descontado.');
-            } 
-            catch (\Exception $e) {
-                return back()->withErrors(['error' => $e->getMessage()]);
-            }
+        } 
+        catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     public function show($id)
@@ -155,6 +168,45 @@ class ShipmentController extends Controller
         $shipment = Shipment::with(['deliveries.saleDetail.sale.client'])->findOrFail($id);
         $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment'));
         return $pdf->stream('remision-viaje-'.$shipment->id.'.pdf');
+    }
+    
+    /**
+     * Revisa TODAS las líneas del pedido (no solo la que se acaba de entregar) y lo marca
+     * 'entregado' únicamente si el 100% de cada línea ya se entregó. Reutilizado tanto por
+     * confirmDelivery() (flota propia) como por store() (recolección en mostrador).
+     */
+    private function closeOrderIfComplete(SaleDetail $detail): void
+    {
+        $sale = $detail->sale()->with(['details' => function ($q) {
+            $q->withSum('deliveries as delivered_quantity', 'quantity_delivered');
+        }])->first();
+
+        $allDelivered = $sale->details->every(function ($d) {
+            return ($d->delivered_quantity ?? 0) >= $d->quantity;
+        });
+
+        if ($allDelivered) {
+            $sale->update(['stage' => 'entregado']);
+        }
+    }
+
+    public function confirmDelivery($id)
+    {
+        $shipment = Shipment::with('deliveries.saleDetail')->findOrFail($id);
+
+        if ($shipment->status !== 'en_transito') {
+            return back()->withErrors(['error' => 'Este embarque no está en tránsito.']);
+        }
+
+        DB::transaction(function () use ($shipment) {
+            $shipment->update(['status' => 'entregado', 'delivered_at' => now()]);
+
+            foreach ($shipment->deliveries as $delivery) {
+                $this->closeOrderIfComplete($delivery->saleDetail);
+            }
+        });
+
+        return back()->with('success', 'Viaje marcado como entregado.');
     }
 
 }
