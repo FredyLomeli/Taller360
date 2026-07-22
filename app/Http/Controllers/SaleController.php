@@ -32,11 +32,9 @@ class SaleController extends Controller
             'created_at', 'updated_at'
         ])
         ->with([
-            // Solo traemos id y name del cliente (asegúrate de incluir los campos que uses en tu frontend)
             'client:id,name', 
             'user:id,name', 
-            // Cargamos details y history completos porque los necesitas para el modal
-            'details', 
+            'details.variant:id,material,measurements',
             'history.user:id,name'
         ])->latest();
 
@@ -134,8 +132,8 @@ class SaleController extends Controller
                     SaleDetail::create([
                         'sale_id' => $sale->id,
                         'product_variant_id' => $variant->id,
-                        // Snapshot del nombre + material
-                        'product_name' => $variant->product->name . ' (' . $variant->material . ')',
+                        // Snapshot del nombre + material + medidas al momento de la venta
+                        'product_name' => $variant->product->name . ' (' . $variant->material . ' - ' . $variant->measurements . ')',
                         'quantity' => $item['quantity'],
                         
                         // Nuevos campos V2.0
@@ -181,7 +179,9 @@ class SaleController extends Controller
             // Agregamos la suma de las entregas a los detalles
             'details' => function($query) {
                 $query->with(['variant.product'])
-                      ->withSum('deliveries as delivered_quantity', 'quantity_delivered');
+                    ->withSum(['deliveries as delivered_quantity' => function ($dq) {
+                        $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
+                    }], 'quantity_delivered');
             }, 
             'history', 
             'payments'
@@ -334,41 +334,5 @@ class SaleController extends Controller
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
-    }
-
-    public function storeDelivery(Request $request)
-    {
-        $request->validate([
-            'sale_detail_id' => 'required|exists:sale_details,id',
-            'quantity' => 'required|integer|min:1',
-        ]);
-
-        $saleDetail = SaleDetail::with(['variant', 'sale'])->findOrFail($request->sale_detail_id);
-
-        DB::transaction(function () use ($saleDetail, $request) {
-            // 1. Registramos quién y cuántas piezas entregó al cliente
-            SaleDelivery::create([
-                'sale_detail_id' => $saleDetail->id,
-                'quantity_delivered' => $request->quantity,
-                'user_id' => auth()->id(),
-                'delivered_at' => now(),
-            ]);
-
-            // 2. ¡Sale del almacén! Restamos el stock
-            $saleDetail->variant->decrement('stock', $request->quantity);
-
-            // 3. Dejamos huella en la bitácora del pedido
-            SaleHistory::create([
-                'sale_id' => $saleDetail->sale_id,
-                'user_id' => auth()->id(),
-                'to_stage' => $saleDetail->sale->stage, // Mantiene la etapa actual
-                'notes' => "Embarque: Salida de {$request->quantity} piezas de {$saleDetail->product_name}"
-            ]);
-            
-            // Opcional a futuro: Aquí podríamos validar si YA se entregó el 100% del pedido 
-            // para cambiar automáticamente el stage de la venta a "Entregado".
-        });
-
-        return back()->with('success', 'Salida de almacén registrada correctamente.');
     }
 }

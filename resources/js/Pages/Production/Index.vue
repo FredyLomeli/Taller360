@@ -157,7 +157,9 @@ const submitCompletion = (detailId, maxQuantity) => {
                                 
                                 <td class="px-6 py-4 align-top">
                                     <div class="font-bold text-gray-800 text-sm">{{ group.name }}</div>
-                                    <div class="text-[10px] text-gray-400 uppercase font-bold mt-0.5">Mat: {{ group.material }}</div>
+                                    <div class="text-[10px] text-gray-400 uppercase font-bold mt-0.5">
+                                        Mat: {{ group.material }} <span v-if="group.measurements" class="text-gray-300">|</span> {{ group.measurements }}
+                                    </div>
                                 </td>
 
                                 <td class="px-6 py-4 align-top text-center">

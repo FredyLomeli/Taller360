@@ -18,6 +18,33 @@ const confirmDelivery = (id) => {
         }
     });
 };
+
+const cancelShipment = (id) => {
+    Swal.fire({
+        title: '¿Cancelar este embarque?',
+        text: "El stock se regresará al inventario y el pedido volverá a su estado anterior.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        confirmButtonText: 'Sí, cancelar embarque',
+        cancelButtonText: 'No, mantenerlo'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            router.patch(route('shipments.cancel', id), {}, {
+                onSuccess: () => Swal.fire({ icon: 'success', title: 'Cancelado', text: 'Stock restituido correctamente.', timer: 2000, showConfirmButton: false }),
+                onError: (errors) => Swal.fire('Error', errors.error || 'No se pudo cancelar.', 'error')
+            });
+        }
+    });
+};
+
+// Nuevo: decide si se puede cancelar
+const canCancel = (ship) => {
+    if (ship.status === 'cancelado') return false;
+    if (ship.status === 'en_transito') return true;
+    // Solo mostrador puede cancelarse después de 'entregado'
+    return ship.status === 'entregado' && ship.pickup_type === 'recoleccion_cliente';
+};
 </script>
 
 <template>
@@ -55,9 +82,12 @@ const confirmDelivery = (id) => {
                                 <td class="px-6 py-4 font-bold">{{ ship.driver_name }} <br><span class="text-xs text-gray-400 font-normal">{{ ship.license_plate }}</span></td>
                                 <td class="px-6 py-4">{{ ship.destination }}</td>
                                 <td class="px-6 py-4 text-center">
-                                    <span :class="ship.status === 'entregado' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'" 
-                                          class="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                                        {{ ship.status === 'en_transito' ? 'En Ruta' : 'Entregado' }}
+                                    <span :class="{
+                                            'bg-orange-100 text-orange-700': ship.status === 'en_transito',
+                                            'bg-green-100 text-green-700': ship.status === 'entregado',
+                                            'bg-red-100 text-red-700': ship.status === 'cancelado'
+                                        }" class="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                        {{ ship.status === 'en_transito' ? 'En Ruta' : ship.status === 'entregado' ? 'Entregado' : 'Cancelado' }}
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 text-center flex justify-center gap-3">
@@ -72,6 +102,9 @@ const confirmDelivery = (id) => {
                                     </a>
 
                                     <!-- Botón de Confirmar entrega -->
+                                    <button v-if="canCancel(ship)" @click="cancelShipment(ship.id)" class="text-red-500 font-bold hover:underline ml-2">
+                                        Cancelar
+                                    </button>
                                     <button v-if="ship.status === 'en_transito'" @click="confirmDelivery(ship.id)" class="text-green-600 font-bold hover:underline ml-2">
                                         Confirmar Entrega
                                     </button>

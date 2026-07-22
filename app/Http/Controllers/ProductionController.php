@@ -17,7 +17,7 @@ class ProductionController extends Controller
         $startWeek = $request->input('start_date')
             ? Carbon::parse($request->input('start_date'))->startOfWeek()
             : Carbon::now()->startOfWeek();
-            
+
         $endWeek = $startWeek->copy()->endOfWeek();
 
         // 1. Buscamos lo de esta semana + TODO LO ATRASADO + Los sin fecha
@@ -35,15 +35,17 @@ class ProductionController extends Controller
                 return $item->sale->promised_date ?? '9999-12-31';
             });
 
-        // 3. Agrupación 
-        $grouped = $items->groupBy(function ($item) {
-            // TAMBIEN CAMBIAMOS AQUI: $item->variant->material
-            return $item->product_name . ' - ' . ($item->variant->material ?? 'Estándar');
-        })->map(function ($group) {
+        // 3. Agrupación — FIX (Julio 2026): se agrupa por product_variant_id (identidad
+        // real de la variante) en vez de reconstruir "product_name + material" a mano.
+        // Antes, dos variantes del mismo producto/material pero distinta medida se
+        // mezclaban en un solo grupo, sumando cantidades de productos físicos distintos.
+        $grouped = $items->groupBy('product_variant_id')->map(function ($group) {
+            $variant = $group->first()->variant;
+
             return [
                 'name' => $group->first()->product_name,
-                // Y AQUI: $group->first()->variant->material
-                'material' => $group->first()->variant->material ?? 'Estándar',
+                'material' => $variant->material ?? 'Estándar',
+                'measurements' => $variant->measurements ?? null, // NUEVO
                 'total_quantity' => $group->sum('quantity'),
                 'breakdown' => $group->groupBy('chosen_color'),
                 'orders' => $group->map(function($detail) {
@@ -60,7 +62,7 @@ class ProductionController extends Controller
                 'details' => $group,
                 'total_needed' => $group->sum('quantity'),
                 'total_completed' => $group->sum('completed_quantity') ?? 0,
-                'in_stock' => $group->first()->variant->stock ?? 0,
+                'in_stock' => $variant->stock ?? 0,
                 'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0)),
             ];
         })
@@ -80,12 +82,10 @@ class ProductionController extends Controller
         ]);
     }
 
-    // app/Http/Controllers/ProductionController.php
-
     public function storeCompletion(Request $request)
     {
         $request->validate(['sale_detail_id' => 'required|exists:sale_details,id', 'quantity' => 'required|integer|min:1']);
-        
+
         $saleDetail = SaleDetail::with(['variant', 'sale'])->findOrFail($request->sale_detail_id);
 
         DB::transaction(function () use ($saleDetail, $request) {
@@ -117,7 +117,7 @@ class ProductionController extends Controller
         $startWeek = $request->input('start_date')
             ? \Carbon\Carbon::parse($request->input('start_date'))->startOfWeek()
             : \Carbon\Carbon::now()->startOfWeek();
-            
+
         $endWeek = $startWeek->copy()->endOfWeek();
 
         $items = \App\Models\SaleDetail::whereHas('sale', function ($query) use ($endWeek) {
@@ -137,24 +137,26 @@ class ProductionController extends Controller
                 return $item->sale->promised_date ?? '9999-12-31';
             });
 
-        $grouped = $items->groupBy(function ($item) {
-            return $item->product_name . ' - ' . ($item->variant->material ?? 'Estándar');
-        })->map(function ($group) {
+        // FIX (Julio 2026): mismo cambio que en index() — agrupar por product_variant_id,
+        // no por texto reconstruido, para no mezclar variantes de distinta medida.
+        $grouped = $items->groupBy('product_variant_id')->map(function ($group) {
+            $variant = $group->first()->variant;
             $totalNeeded = $group->sum('quantity');
             $totalCompleted = $group->sum('completed_quantity') ?? 0;
-            $inStock = $group->first()->variant->stock ?? 0;
 
             return [
                 'name' => $group->first()->product_name,
-                'material' => $group->first()->variant->material ?? 'Estándar',
+                'material' => $variant->material ?? 'Estándar',
+                'measurements' => $variant->measurements ?? null, // NUEVO
                 'total_needed' => $totalNeeded,
-                'in_stock' => $inStock,
-                'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted - $inStock),
-                'details' => $group 
+                'in_stock' => $variant->stock ?? 0,
+                // FIX Bug #1 (se había quedado pendiente en este método): ya no resta
+                // in_stock — pending_to_fabricate depende solo de necesario vs. fabricado.
+                'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted),
+                'details' => $group
             ];
         });
 
-        // Retornamos una vista en blanco (sin el menú de navegación lateral)
         return \Inertia\Inertia::render('Production/Print', [
             'productionQueue' => $grouped,
             'reportDate' => now()->format('d/m/Y H:i'),

@@ -1,8 +1,33 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { router, Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import Swal from 'sweetalert2';
 
-defineProps({ shipment: Object });
+const props = defineProps({ shipment: Object });
+
+const canCancel = computed(() => {
+    if (props.shipment.status === 'cancelado') return false;
+    if (props.shipment.status === 'en_transito') return true;
+    return props.shipment.status === 'entregado' && props.shipment.pickup_type === 'recoleccion_cliente';
+});
+
+const cancelShipment = () => {
+    Swal.fire({
+        title: '¿Cancelar este embarque?',
+        text: "El stock se regresará al inventario.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        confirmButtonText: 'Sí, cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            router.patch(route('shipments.cancel', props.shipment.id), {}, {
+                onSuccess: () => Swal.fire({ icon: 'success', title: 'Cancelado', timer: 2000, showConfirmButton: false })
+            });
+        }
+    });
+};
 </script>
 
 <template>
@@ -16,10 +41,19 @@ defineProps({ shipment: Object });
                         <div>
                             <h2 class="text-2xl font-black text-gray-800">Detalle de Embarque #{{ shipment.id.toString().padStart(4, '0') }}</h2>
                             <p class="text-gray-600 font-medium mt-1">Chofer: {{ shipment.driver_name }} | Placas: {{ shipment.license_plate }}</p>
-                            <!-- Fecha y hora del registro -->
                             <p class="text-sm text-gray-500 mt-2 font-bold">Fecha de registro: {{ new Date(shipment.created_at).toLocaleString('es-MX') }}</p>
                         </div>
-                        <Link :href="route('shipments.index')" class="text-sm font-bold text-gray-500 hover:text-gray-800 transition">Regresar</Link>
+                        <div class="flex items-center gap-4">
+                            <span :class="{
+                                    'bg-orange-100 text-orange-700': shipment.status === 'en_transito',
+                                    'bg-green-100 text-green-700': shipment.status === 'entregado',
+                                    'bg-red-100 text-red-700': shipment.status === 'cancelado'
+                                }" class="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                {{ shipment.status }}
+                            </span>
+                            <button v-if="canCancel" @click="cancelShipment" class="text-sm font-bold text-red-500 hover:text-red-700">Cancelar Embarque</button>
+                            <Link :href="route('shipments.index')" class="text-sm font-bold text-gray-500 hover:text-gray-800 transition">Regresar</Link>
+                        </div>
                     </div>
                 </div>
 

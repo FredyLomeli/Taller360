@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
-import { computed, ref } from 'vue'; // <--- Importamos 'ref' para controlar el modal
+import { computed, ref } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
@@ -10,12 +10,12 @@ const props = defineProps({
 });
 
 // --- VARIABLE PARA EL MODAL DE IMAGEN ---
-const showImageModal = ref(false); // Empieza cerrado (falso)
+const showImageModal = ref(false); 
 
 // --- 1. REGLAS DE NEGOCIO ---
 const categoryRules = {
     'Roperos':               ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-    'Trinchers':             ['Madera', 'Madera y MDF enchapado', 'MDF'],
+    'Trincheros':            ['Madera', 'Madera y MDF enchapado', 'MDF'],
     'Cómodas y Lokers':      ['MDF', 'Madera y MDF enchapado', 'Melamina'],
     'Recámaras y comedores': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
     'Bases':                 ['MDF', 'Madera']
@@ -26,13 +26,13 @@ const form = useForm({
     _method: 'PUT',
     name: props.product.name,
     category_id: props.product.category_id,
-    measurements: props.product.measurements,
     description: props.product.description,
     is_favorite: Boolean(props.product.is_favorite),
     image: null,
     variants: props.product.variants.map(v => ({
         id: v.id,
         material: v.material,
+        measurements: v.measurements,
         sku: v.sku,
         stock: v.stock,
         price_1: v.price_1,
@@ -56,11 +56,52 @@ const availableMaterials = computed(() => {
     return ['MDF', 'Madera', 'Melamina', 'MDF Enchapado', 'Pino', 'Parota', 'Tzalam']; 
 });
 
-// --- 4. ACCIONES ---
+const imageUrl = computed(() => {
+    if (!props.product.image) {
+        return '/storage/products/plantilla.jpg';
+    }
+    if (props.product.image.startsWith('http') || props.product.image.startsWith('/')) {
+        return props.product.image;
+    }
+    if (props.product.image.startsWith('products/')) {
+        return '/storage/' + props.product.image;
+    }
+    return '/storage/products/' + props.product.image;
+});
+
+const handleImageError = (event) => {
+    event.target.src = '/storage/products/plantilla.jpg';
+};
+
+// --- 4. ACCIONES Y LIMPIEZA DE PRECIOS CON PUNTO ---
+const formatPriceInput = (variant, field, event) => {
+    let value = event.target.value;
+    // Reemplaza automáticamente cualquier coma por punto si la escriben
+    value = value.replace(/,/g, '.');
+    // Permite solo números y un único punto decimal
+    value = value.replace(/[^0-9.]/g, '');
+    
+    // Evita múltiples puntos decimales
+    const parts = value.split('.');
+    if (parts.length > 2) {
+        value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    variant[field] = value;
+};
+
 const addVariant = () => {
     form.variants.push({ 
-        id: null, material: '', sku: '', stock: 0, 
-        price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null 
+        id: null, 
+        material: '', 
+        measurements: '', 
+        sku: '', 
+        stock: 0, 
+        price_1: 0, 
+        price_2: null, 
+        price_3: null, 
+        price_4: null, 
+        price_5: null 
     });
 };
 
@@ -81,8 +122,8 @@ const submit = () => {
         Swal.fire('Faltan datos', 'Revisa Nombre y Categoría.', 'warning');
         return;
     }
-    if (form.variants.some(v => !v.material || v.price_1 <= 0)) {
-        Swal.fire('Variantes incompletas', 'Todas requieren MATERIAL y PRECIO PÚBLICO.', 'error');
+    if (form.variants.some(v => !v.material || !v.measurements || v.price_1 <= 0)) {
+        Swal.fire('Variantes incompletas', 'Todas requieren MATERIAL, MEDIDAS y PRECIO PÚBLICO.', 'error');
         return;
     }
     form.post(route('products.update', props.product.id), {
@@ -122,42 +163,39 @@ const sanitizeNumber = (variant, field) => {
                 <form @submit.prevent="submit" class="space-y-6">
                     
                     <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                        <h3 class="text-sm font-bold text-blue-600 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Información General</h3>
+                        <h3 class="text-sm font-bold text-green-600 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Información General</h3>
                         
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Nombre del Modelo <span class="text-red-500">*</span></label>
-                                <input v-model="form.name" type="text" class="w-full border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm">
+                                <input v-model="form.name" type="text" class="w-full border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 shadow-sm">
                                 <span v-if="form.errors.name" class="text-red-500 text-xs mt-1">{{ form.errors.name }}</span>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Categoría <span class="text-red-500">*</span></label>
-                                <select v-model="form.category_id" class="w-full border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm cursor-pointer">
+                                <select v-model="form.category_id" class="w-full border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 shadow-sm cursor-pointer">
                                     <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
                                 </select>
                                 <p v-if="selectedCategoryName" class="text-[10px] text-blue-500 mt-1 font-bold">✓ Materiales disponibles: {{ selectedCategoryName }}</p>
                             </div>
 
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Medidas</label>
-                                <input v-model="form.measurements" type="text" class="w-full border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-                            </div>
+                            <div></div>
 
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Descripción</label>
-                                <textarea v-model="form.description" rows="2" class="w-full border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm"></textarea>
+                                <textarea v-model="form.description" rows="2" class="w-full border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 shadow-sm"></textarea>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Fotografía</label>
-                                <input @change="handleImageUpload" type="file" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                                <input @change="handleImageUpload" type="file" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer">
                                 
-                                <div v-if="props.product.image" class="mt-2 flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200">
-                                    <img :src="'/storage/' + props.product.image" class="w-10 h-10 object-cover rounded border border-gray-300 shadow-sm">
-                                    <span class="text-xs text-gray-600 font-bold">Imagen actual</span>
+                                <div class="mt-2 flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                    <img :src="imageUrl" @error="handleImageError" class="w-10 h-10 object-cover rounded border border-gray-300 shadow-sm">
+                                    <span class="text-xs text-gray-600 font-bold">{{ props.product.image ? 'Imagen actual' : 'Usando plantilla' }}</span>
                                     
-                                    <button type="button" @click="showImageModal = true" class="text-[10px] text-blue-600 underline ml-auto font-bold hover:text-blue-800 cursor-pointer">
+                                    <button type="button" @click="showImageModal = true" class="text-[10px] text-green-600 underline ml-auto font-bold hover:text-green-800 cursor-pointer">
                                         🔍 Ver Grande
                                     </button>
                                 </div>
@@ -202,28 +240,44 @@ const sanitizeNumber = (variant, field) => {
 
                                 <div class="p-5 bg-white">
                                     <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start mb-4">
-                                        <div class="md:col-span-4">
+                                        <div class="md:col-span-3">
                                             <label class="block text-xs font-bold text-gray-600 mb-1">Material <span class="text-red-500">*</span></label>
                                             <div v-if="!form.category_id" class="text-xs text-orange-500 p-2 bg-orange-50 rounded border border-orange-100">⚠ Categoría requerida.</div>
-                                            <select v-else v-model="variant.material" class="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 cursor-pointer">
+                                            <select v-else v-model="variant.material" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 cursor-pointer">
                                                 <option v-if="variant.material && !availableMaterials.includes(variant.material)" :value="variant.material">{{ variant.material }} (Archivado)</option>
                                                 <option value="" disabled>Seleccionar Material...</option>
                                                 <option v-for="mat in availableMaterials" :key="mat" :value="mat">{{ mat }}</option>
                                             </select>
                                         </div>
+                                        
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs font-bold text-gray-600 mb-1">Medidas <span class="text-red-500">*</span></label>
+                                            <input v-model="variant.measurements" type="text" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500" placeholder="Ej: 1.50m">
+                                        </div>
+
                                         <div class="md:col-span-2">
                                             <label class="block text-xs font-bold text-gray-500 mb-1">SKU / Código</label>
-                                            <input v-model="variant.sku" type="text" class="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 text-gray-600">
+                                            <input v-model="variant.sku" type="text" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600">
                                         </div>
+                                        
                                         <div class="md:col-span-2">
                                             <label class="block text-xs font-bold text-gray-500 mb-1">Stock</label>
-                                            <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 text-gray-600">
+                                            <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600">
                                         </div>
-                                        <div class="md:col-span-4">
+                                        
+                                        <!-- PRECIO PÚBLICO (P1) convertido a text con control estricto de punto -->
+                                        <div class="md:col-span-3">
                                             <label class="block text-xs font-bold text-green-700 mb-1">Precio Público (P1) <span class="text-red-500">*</span></label>
                                             <div class="relative">
                                                 <span class="absolute left-3 top-2 text-gray-500 font-bold">$</span>
-                                                <input v-model="variant.price_1" type="number" min="0" step="0.50" @blur="sanitizeNumber(variant, 'price_1')" class="w-full pl-7 text-sm border-green-300 bg-green-50 rounded-lg focus:ring-green-500 font-bold text-gray-900 shadow-sm">
+                                                <input 
+                                                    :value="variant.price_1" 
+                                                    @input="formatPriceInput(variant, 'price_1', $event)" 
+                                                    type="text" 
+                                                    inputmode="decimal" 
+                                                    class="w-full pl-7 text-sm border-green-300 bg-green-50 rounded-lg focus:ring-green-500 font-bold text-gray-900 shadow-sm"
+                                                    placeholder="0.00"
+                                                >
                                             </div>
                                         </div>
                                     </div>
@@ -235,7 +289,15 @@ const sanitizeNumber = (variant, field) => {
                                                 <label class="block text-[9px] text-gray-500 mb-1">Precio {{ i + 1 }}</label>
                                                 <div class="relative rounded-md shadow-sm">
                                                     <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400 text-xs">$</span>
-                                                    <input v-model="variant[`price_${i+1}`]" type="number" step="0.50" class="block w-full rounded border-gray-300 pl-5 text-xs focus:border-blue-500 focus:ring-blue-500" placeholder="0.00">
+                                                    <!-- LISTAS ADICIONALES (Precio 2 a 5) convertidas a text con punto forzado -->
+                                                    <input 
+                                                        :value="variant[`price_${i+1}`]" 
+                                                        @input="formatPriceInput(variant, `price_${i+1}`, $event)" 
+                                                        type="text" 
+                                                        inputmode="decimal" 
+                                                        class="block w-full rounded border-gray-300 pl-5 text-xs focus:border-green-500 focus:ring-green-500" 
+                                                        placeholder="0.00"
+                                                    >
                                                 </div>
                                             </div>
                                         </div>
@@ -246,7 +308,7 @@ const sanitizeNumber = (variant, field) => {
                     </div>
 
                     <div class="flex justify-end pt-4 pb-12">
-                        <button type="submit" :disabled="form.processing" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <button type="submit" :disabled="form.processing" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                             <svg v-if="!form.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                             <svg v-else class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                             {{ form.processing ? 'Guardando...' : 'Actualizar Producto' }}
@@ -263,12 +325,12 @@ const sanitizeNumber = (variant, field) => {
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
 
-                <img :src="'/storage/' + props.product.image" :alt="props.product.name" class="w-full h-auto max-h-[85vh] object-contain rounded-lg shadow-2xl border border-gray-700">
+                <img :src="imageUrl" @error="handleImageError" :alt="props.product.name" class="w-full h-auto max-h-[85vh] object-contain rounded-lg shadow-2xl border border-gray-700">
                 
                 <div class="text-center mt-4 text-white font-bold text-lg tracking-wide">{{ props.product.name }}</div>
             </div>
         </div>
-        </AuthenticatedLayout>
+    </AuthenticatedLayout>
 </template>
 
 <style scoped>

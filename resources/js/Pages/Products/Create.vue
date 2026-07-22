@@ -9,10 +9,9 @@ const props = defineProps({
 });
 
 // --- 1. REGLAS DE NEGOCIO (Materiales por Categoría) ---
-// Estas llaves deben coincidir con los nombres en tu Base de Datos
 const categoryRules = {
     'Roperos':               ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-    'Trinchers':             ['Madera', 'Madera y MDF enchapado', 'MDF'],
+    'Trincheros':            ['Madera', 'Madera y MDF enchapado', 'MDF'],
     'Cómodas y Lokers':      ['MDF', 'Madera y MDF enchapado', 'Melamina'],
     'Recámaras y comedores': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
     'Bases':                 ['MDF', 'Madera']
@@ -22,42 +21,46 @@ const categoryRules = {
 const form = useForm({
     name: '',
     category_id: '',
-    measurements: '',
     description: '',
     image: null,
     is_favorite: false,
     variants: [
-        { material: '', sku: '', stock: 0, price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null }
+        { material: '', measurements: '', sku: '', stock: 0, price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null }
     ]
 });
 
 // --- 3. LÓGICA COMPUTADA (Filtros) ---
-
-// Paso A: Detectar el NOMBRE de la categoría seleccionada (porque el select usa IDs)
 const selectedCategoryName = computed(() => {
     const category = props.categories.find(c => c.id == form.category_id);
     return category ? category.name : null;
 });
 
-// Paso B: Devolver solo los materiales permitidos para esa categoría
 const availableMaterials = computed(() => {
     if (!selectedCategoryName.value) return [];
-    
-    // Si la categoría exacta existe en las reglas, devolvemos sus materiales.
-    // Si no (ej. creaste una categoría nueva 'Sillas'), devolvemos una lista genérica para no bloquearte.
     const rules = categoryRules[selectedCategoryName.value];
-    
     if (rules) return rules;
-
-    // Fallback por si la categoría no está en la lista dura
     return ['MDF', 'Madera', 'Melamina', 'MDF Enchapado', 'Pino', 'Parota', 'Tzalam']; 
 });
 
-// --- 4. ACCIONES ---
+// --- 4. ACCIONES Y LIMPIEZA DE PRECIOS CON PUNTO ---
+const formatPriceInput = (variant, field, event) => {
+    let value = event.target.value;
+    // Reemplaza comas por puntos automáticamente
+    value = value.replace(/,/g, '.');
+    // Permite solo números y un único punto decimal
+    value = value.replace(/[^0-9.]/g, '');
+    
+    const parts = value.split('.');
+    if (parts.length > 2) {
+        value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    variant[field] = value;
+};
 
 const addVariant = () => {
     form.variants.push({ 
-        material: '', sku: '', stock: 0, 
+        material: '', measurements: '', sku: '', stock: 0, 
         price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null 
     });
 };
@@ -80,8 +83,8 @@ const submit = () => {
         return;
     }
 
-    if (form.variants.some(v => !v.material || v.price_1 <= 0)) {
-        Swal.fire('Variantes incompletas', 'Todas las variantes requieren MATERIAL y PRECIO PÚBLICO.', 'error');
+    if (form.variants.some(v => !v.material || !v.measurements || v.price_1 <= 0)) {
+        Swal.fire('Variantes incompletas', 'Todas las variantes requieren MATERIAL, MEDIDAS y PRECIO PÚBLICO.', 'error');
         return;
     }
 
@@ -141,11 +144,6 @@ const sanitizeNumber = (variant, field) => {
                                 <p v-if="selectedCategoryName" class="text-[10px] text-blue-500 mt-1 font-bold">✓ Materiales cargados para: {{ selectedCategoryName }}</p>
                             </div>
 
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Medidas</label>
-                                <input v-model="form.measurements" type="text" class="w-full border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 shadow-sm" placeholder="Ej. 180x200x50 cm">
-                            </div>
-
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Descripción</label>
                                 <textarea v-model="form.description" rows="2" class="w-full border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 shadow-sm" placeholder="Detalles técnicos..."></textarea>
@@ -194,7 +192,7 @@ const sanitizeNumber = (variant, field) => {
                                 <div class="p-5 bg-white">
                                     <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start mb-4">
                                         
-                                        <div class="md:col-span-4">
+                                        <div class="md:col-span-3">
                                             <label class="block text-xs font-bold text-gray-600 mb-1">Material <span class="text-red-500">*</span></label>
                                             
                                             <div v-if="!form.category_id" class="text-xs text-orange-500 p-2 bg-orange-50 rounded border border-orange-100">
@@ -208,6 +206,11 @@ const sanitizeNumber = (variant, field) => {
                                         </div>
 
                                         <div class="md:col-span-2">
+                                            <label class="block text-xs font-bold text-gray-600 mb-1">Medidas <span class="text-red-500">*</span></label>
+                                            <input v-model="variant.measurements" type="text" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500" placeholder="Ej: 1.50m">
+                                        </div>
+
+                                        <div class="md:col-span-2">
                                             <label class="block text-xs font-bold text-gray-500 mb-1">SKU / Código</label>
                                             <input v-model="variant.sku" type="text" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600 placeholder-gray-300" placeholder="Opcional">
                                         </div>
@@ -217,11 +220,19 @@ const sanitizeNumber = (variant, field) => {
                                             <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600">
                                         </div>
 
-                                        <div class="md:col-span-4">
+                                        <!-- PRECIO PÚBLICO (P1) con control estricto de punto decimal -->
+                                        <div class="md:col-span-3">
                                             <label class="block text-xs font-bold text-green-700 mb-1">Precio Público (P1) <span class="text-red-500">*</span></label>
                                             <div class="relative">
                                                 <span class="absolute left-3 top-2 text-gray-500 font-bold">$</span>
-                                                <input v-model="variant.price_1" type="number" min="0" step="0.50" @blur="sanitizeNumber(variant, 'price_1')" class="w-full pl-7 text-sm border-green-300 bg-green-50 rounded-lg focus:ring-green-500 font-bold text-gray-900 shadow-sm">
+                                                <input 
+                                                    :value="variant.price_1" 
+                                                    @input="formatPriceInput(variant, 'price_1', $event)" 
+                                                    type="text" 
+                                                    inputmode="decimal" 
+                                                    class="w-full pl-7 text-sm border-green-300 bg-green-50 rounded-lg focus:ring-green-500 font-bold text-gray-900 shadow-sm"
+                                                    placeholder="0.00"
+                                                >
                                             </div>
                                         </div>
                                     </div>
@@ -235,7 +246,15 @@ const sanitizeNumber = (variant, field) => {
                                                     <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2">
                                                         <span class="text-gray-400 text-xs">$</span>
                                                     </div>
-                                                    <input v-model="variant[`price_${i+1}`]" type="number" step="0.50" class="block w-full rounded border-gray-300 pl-5 text-xs focus:border-blue-500 focus:ring-blue-500" placeholder="0.00">
+                                                    <!-- LISTAS ADICIONALES (Precio 2 a 5) con control estricto de punto -->
+                                                    <input 
+                                                        :value="variant[`price_${i+1}`]" 
+                                                        @input="formatPriceInput(variant, `price_${i+1}`, $event)" 
+                                                        type="text" 
+                                                        inputmode="decimal" 
+                                                        class="block w-full rounded border-gray-300 pl-5 text-xs focus:border-green-500 focus:ring-green-500" 
+                                                        placeholder="0.00"
+                                                    >
                                                 </div>
                                             </div>
                                         </div>

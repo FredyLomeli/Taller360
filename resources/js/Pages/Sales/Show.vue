@@ -49,7 +49,7 @@ const getStatusLabel = (stage) => {
 };
 
 // --- MODO TALLER (Ocultar Precios) ---
-const productionMode = ref(false);
+const productionMode = ref(props.is_production_mode || false);
 
 // --- CALCULOS ---
 const saldoPendiente = computed(() => {
@@ -63,47 +63,6 @@ const formatMoney = (amount) => {
 const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('es-MX', { 
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit' 
-    });
-};
-
-// --- LÓGICA DE EMBARQUES / ENTREGAS ---
-const deliveryData = ref({});
-
-const submitDelivery = (detailId, maxToDeliver, productName) => {
-    const qty = parseInt(deliveryData.value[detailId]);
-
-    if (!qty || qty < 1) {
-        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una cantidad mayor a 0.' });
-        return;
-    }
-
-    if (qty > maxToDeliver) {
-        Swal.fire({ icon: 'error', title: 'Error', text: `Solo faltan ${maxToDeliver} piezas por entregar de este modelo.` });
-        return;
-    }
-
-    Swal.fire({
-        title: '¿Confirmar salida de almacén?',
-        text: `¿Dar salida a ${qty} piezas de ${productName}? Se descontarán del inventario inmediatamente.`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#16a34a',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Sí, entregar',
-        cancelButtonText: 'Cancelar'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            router.post(route('sales.deliveries.store'), {
-                sale_detail_id: detailId,
-                quantity: qty
-            }, {
-                preserveScroll: true,
-                onSuccess: () => {
-                    deliveryData.value[detailId] = ''; 
-                    Swal.fire({ icon: 'success', title: '¡Entregado!', text: 'El inventario se ha actualizado.', timer: 2000, showConfirmButton: false });
-                }
-            });
-        }
     });
 };
 </script>
@@ -223,7 +182,8 @@ const submitDelivery = (detailId, maxToDeliver, productName) => {
                                         
                                         <div class="flex flex-wrap gap-2 mt-1">
                                             <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded font-bold border">
-                                                🧱 {{ item.product_variant?.material || 'N/A' }}
+                                                🧱 {{ item.variant?.material || 'N/A' }}
+                                                <span v-if="item.variant?.measurements"> · {{ item.variant.measurements }}</span>
                                             </span>
                                             
                                             <span v-if="item.chosen_color" class="px-2 py-1 bg-white border border-gray-300 text-gray-700 text-xs rounded font-bold flex items-center gap-1">
@@ -241,30 +201,21 @@ const submitDelivery = (detailId, maxToDeliver, productName) => {
                                                 <span class="text-gray-500 font-bold uppercase tracking-wider block mb-1">Progreso de Entrega</span>
                                                 <span class="font-black text-lg text-gray-800">{{ item.delivered_quantity || 0 }}</span> 
                                                 <span class="text-gray-500">de {{ item.quantity }} enviadas</span>
-                                                
-                                                <span v-if="(item.delivered_quantity || 0) === item.quantity" class="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">
-                                                    ✓ Completado
-                                                </span>
+                                                <span v-if="(item.delivered_quantity || 0) === item.quantity" class="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">✓ Completado</span>
+
+                                                <div v-else class="mt-1">
+                                                    <span :class="(item.variant?.stock || 0) >= (item.quantity - (item.delivered_quantity || 0)) ? 'text-green-600' : 'text-red-500'" class="font-bold">
+                                                        Stock disponible: {{ item.variant?.stock || 0 }}
+                                                    </span>
+                                                    <span v-if="(item.variant?.stock || 0) < (item.quantity - (item.delivered_quantity || 0))" class="text-red-500 ml-1">
+                                                        ⚠️ insuficiente para completar
+                                                    </span>
+                                                </div>
                                             </div>
 
-                                            <div v-if="(item.quantity - (item.delivered_quantity || 0)) > 0" class="flex items-center gap-2 bg-gray-50 p-1.5 rounded border border-gray-200 shadow-sm">
-                                                <span class="text-xs font-bold text-gray-600 ml-1">Salida:</span>
-                                                <input 
-                                                    type="number" 
-                                                    v-model="deliveryData[item.id]" 
-                                                    min="1" 
-                                                    :max="item.quantity - (item.delivered_quantity || 0)"
-                                                    class="w-14 h-7 p-1 text-center border-gray-300 rounded text-xs focus:ring-green-500 font-bold" 
-                                                    placeholder="Cant."
-                                                >
-                                                <button 
-                                                    @click="submitDelivery(item.id, item.quantity - (item.delivered_quantity || 0), item.product_name)" 
-                                                    class="bg-green-600 hover:bg-green-700 text-white w-7 h-7 flex items-center justify-center rounded font-bold transition shadow-sm"
-                                                    title="Registrar Salida de Almacén"
-                                                >
-                                                    ✓
-                                                </button>
-                                            </div>
+                                            <Link v-if="(item.quantity - (item.delivered_quantity || 0)) > 0" :href="route('shipments.create', { client_ids: [sale.client_id] })" class="text-xs font-bold text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
+                                                📦 Registrar salida en Embarques
+                                            </Link>
                                         </div>
                                     </td>
 

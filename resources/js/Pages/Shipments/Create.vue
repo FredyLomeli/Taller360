@@ -13,6 +13,7 @@ const form = useForm({
     driver_name: '',
     license_plate: '',
     destination: '',
+    pickup_type: 'flota_propia', 
     items: [] 
 });
 
@@ -72,7 +73,9 @@ const submit = () => {
 
     Swal.fire({
         title: '¿Autorizar Salida?',
-        text: `Se generará el viaje para ${form.driver_name} y se descontará el inventario.`,
+        text: form.pickup_type === 'recoleccion_cliente'
+            ? `Se registrará la recolección de ${form.driver_name} y se descontará el inventario. El pedido quedará marcado como entregado.`
+            : `Se generará el viaje para ${form.driver_name} y se descontará el inventario.`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#16a34a',
@@ -134,8 +137,29 @@ const totalItemsInTruck = computed(() => {
                             
                             <div class="p-6 space-y-4">
                                 <div>
-                                    <label class="block text-sm font-bold text-gray-700 mb-1">Chofer / Repartidor <span class="text-red-500">*</span></label>
-                                    <input v-model="form.driver_name" type="text" required class="block w-full border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-sm shadow-sm" placeholder="Ej: Roberto Sánchez">
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Tipo de Salida</label>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <button type="button" @click="form.pickup_type = 'flota_propia'"
+                                            :class="form.pickup_type === 'flota_propia' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'"
+                                            class="px-3 py-2 rounded-lg text-xs font-bold border transition-all">
+                                            🚚 Flota Propia
+                                        </button>
+                                        <button type="button" @click="form.pickup_type = 'recoleccion_cliente'"
+                                            :class="form.pickup_type === 'recoleccion_cliente' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'"
+                                            class="px-3 py-2 rounded-lg text-xs font-bold border transition-all">
+                                            🏬 Recoge Cliente
+                                        </button>
+                                    </div>
+                                    <p v-if="form.pickup_type === 'recoleccion_cliente'" class="text-[10px] text-blue-600 mt-1 font-bold">
+                                        ✓ Este viaje se marcará como entregado de inmediato, sin pasar por "En Ruta".
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">
+                                        {{ form.pickup_type === 'recoleccion_cliente' ? 'Nombre de quien recoge' : 'Chofer / Repartidor' }} <span class="text-red-500">*</span>
+                                    </label>
+                                    <input v-model="form.driver_name" type="text" required class="block w-full border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-sm shadow-sm" :placeholder="form.pickup_type === 'recoleccion_cliente' ? 'Ej: Cliente mismo / representante' : 'Ej: Roberto Sánchez'">
                                 </div>
                                 
                                 <div>
@@ -205,7 +229,11 @@ const totalItemsInTruck = computed(() => {
                                                 
                                                 <div class="flex-1">
                                                     <p class="font-bold text-sm text-gray-800">{{ detail.product_name }}</p>
-                                                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Color: {{ detail.chosen_color || 'N/A' }}</p>
+                                                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                                        Color: {{ detail.chosen_color || 'N/A' }}
+                                                        <span v-if="detail.variant?.measurements" class="text-gray-300 mx-1">|</span>
+                                                        <span v-if="detail.variant?.measurements">Medida: {{ detail.variant.measurements }}</span>
+                                                    </p>
                                                     <div class="flex items-center gap-4 mt-1 text-xs">
                                                         <span class="text-gray-500 font-medium">Pendientes: <span class="font-bold text-red-500">{{ detail.quantity - (detail.delivered_quantity || 0) }}</span></span>
                                                         <span class="text-gray-500 font-medium">Stock Físico: <span class="font-bold text-green-600">{{ detail.variant?.stock || 0 }}</span></span>

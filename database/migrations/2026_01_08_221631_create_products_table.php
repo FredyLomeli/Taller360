@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('category_id')->constrained(); // Ej: Roperos
             $table->string('name'); // Ej: "Modelo California"
-            $table->string('measurements')->nullable(); // Ej: "180x120"
+            //$table->string('measurements')->nullable(); // Ej: "180x120"
             $table->text('description')->nullable(); // Detalles generales del diseño
             $table->string('image')->nullable(); // Imagen principal del modelo
             $table->boolean('is_favorite')->default(false);

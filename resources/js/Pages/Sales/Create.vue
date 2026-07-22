@@ -40,8 +40,21 @@ const materialColors = {
 };
 
 const getColorsForMaterial = (materialName) => {
+    if (!materialName) return materialColors['default'];
     const key = Object.keys(materialColors).find(k => materialName.includes(k));
     return key ? materialColors[key] : materialColors['default'];
+};
+
+// --- GESTIÓN INTELIGENTE DE IMÁGENES ---
+const getProductImage = (imagePath) => {
+    if (!imagePath) return '/storage/products/plantilla.jpg';
+    if (imagePath.startsWith('http') || imagePath.startsWith('/')) return imagePath;
+    if (imagePath.startsWith('products/')) return '/storage/' + imagePath;
+    return '/storage/products/' + imagePath;
+};
+
+const handleImageError = (event) => {
+    event.target.src = '/storage/products/plantilla.jpg';
 };
 
 // --- ESTADO GLOBAL ---
@@ -124,10 +137,9 @@ const handleAddToCart = (product, variant) => {
     cart.value.push({
         variant_id: variant.id, 
         product_name: product.name, 
-        // AGREGAMOS ESTO:
         category_name: product.category ? product.category.name : '', 
-        
         material: variant.material, 
+        measurements: variant.measurements, 
         sku: variant.sku, 
         image: product.image,
         price: price, 
@@ -141,7 +153,6 @@ const handleAddToCart = (product, variant) => {
 
 const removeFromCart = (index) => cart.value.splice(index, 1);
 
-// --- NUEVO: VACIAR CARRITO CON SWEETALERT ---
 const clearCart = () => {
     if (cart.value.length === 0) return;
     Swal.fire({
@@ -182,7 +193,10 @@ const filteredProducts = computed(() => {
     }
     if (searchProduct.value) {
         const term = searchProduct.value.toLowerCase();
-        result = result.filter(p => p.name.toLowerCase().includes(term) || p.variants.some(v => v.sku?.toLowerCase().includes(term)));
+        result = result.filter(p => 
+            p.name.toLowerCase().includes(term) || 
+            p.variants.some(v => v.sku?.toLowerCase().includes(term) || v.measurements?.toLowerCase().includes(term) || v.material?.toLowerCase().includes(term))
+        );
     }
     return result;
 });
@@ -195,14 +209,13 @@ const openImageModal = (product) => {
     showImageModal.value = true;
 };
 
-// --- NUEVO: MODAL DE NOTAS/EXTRAS ---
+// --- MODAL DE NOTAS/EXTRAS ---
 const showNotesModal = ref(false);
 const editingItemIndex = ref(null);
 const noteForm = ref({ notes: '', additional_cost: 0 });
 
 const openNotesModal = (index) => {
     editingItemIndex.value = index;
-    // Copiamos los valores actuales al formulario temporal
     const item = cart.value[index];
     noteForm.value = { 
         notes: item.notes || '', 
@@ -213,11 +226,9 @@ const openNotesModal = (index) => {
 
 const saveNotes = () => {
     if (editingItemIndex.value !== null) {
-        // 1. Validaciones de Seguridad
         let cost = parseFloat(noteForm.value.additional_cost);
         if (isNaN(cost) || cost < 0) cost = 0;
 
-        // 2. Guardar cambios
         cart.value[editingItemIndex.value].notes = noteForm.value.notes;
         cart.value[editingItemIndex.value].additional_cost = cost;
     }
@@ -232,17 +243,16 @@ const openPaymentModal = () => {
     if (cart.value.length === 0) return;
     const missingColor = cart.value.find(i => !i.chosen_color);
     if (missingColor) { 
-        Swal.fire({ title: 'Falta Color', text: `Selecciona el color para: ${missingColor.product_name}`, icon: 'warning' }); 
+        Swal.fire({ title: 'Falta Color', text: `Selecciona el color para: ${missingColor.product_name} (${missingColor.material} - ${missingColor.measurements})`, icon: 'warning' }); 
         return; 
     }
     showPaymentModal.value = true;
     const date = new Date(); date.setDate(date.getDate() + 15);
     paymentForm.value.promised_date = date.toISOString().split('T')[0];
     paymentForm.value.amount_received = 0;
-    showPaymentModal.value = true;
     setTimeout(() => {
         if (signaturePad.value) {
-            signaturePad.value.resizeCanvas(); // Fuerza al recuadro a tomar su tamaño real
+            signaturePad.value.resizeCanvas();
         }
     }, 300);
 };
@@ -250,7 +260,6 @@ const openPaymentModal = () => {
 const remainingBalance = computed(() => Math.max(0, cartTotal.value - (parseFloat(paymentForm.value.amount_received) || 0)));
 
 const submitOrder = () => {
-    // Capturamos la firma justo antes de enviar
     const { isEmpty, data } = signaturePad.value.saveSignature();
     
     if (isEmpty) {
@@ -268,7 +277,7 @@ const submitOrder = () => {
         payment_method: paymentForm.value.method,
         paid_amount: paymentForm.value.amount_received,
         promised_date: paymentForm.value.promised_date,
-        signature: data // <--- ENVIAMOS EL BASE64 DE LA FIRMA
+        signature: data
     };
 
     router.post(route('sales.store'), payload, {
@@ -280,9 +289,7 @@ const submitOrder = () => {
     });
 };
 
-// Funciones auxiliares para el Pad
 const clearSignature = () => signaturePad.value.clearSignature();
-
 </script>
 
 <template>
@@ -291,6 +298,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
     <AuthenticatedLayout>
         <div class="flex flex-col lg:flex-row gap-4 h-[calc(100vh-65px)] overflow-hidden p-3 bg-gray-100">
             
+            <!-- SECCIÓN IZQUIERDA: BÚSQUEDA Y CATÁLOGO DE PRODUCTOS -->
             <div class="flex-1 flex flex-col overflow-hidden gap-3">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 shrink-0">
                     <div class="flex flex-col md:flex-row gap-4 items-center mb-4">
@@ -303,7 +311,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
                         </div>
                         <div class="w-full md:w-1/2 relative">
                             <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Buscador</label>
-                            <input v-model="searchProduct" type="text" placeholder="Nombre, SKU..." class="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-green-500">
+                            <input v-model="searchProduct" type="text" placeholder="Nombre, SKU o medida..." class="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-green-500">
                             <svg class="w-4 h-4 text-gray-400 absolute left-3 bottom-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                             <button v-if="searchProduct" @click="searchProduct=''" class="absolute right-2 bottom-2 text-gray-400 font-bold hover:text-red-500">✕</button>
                         </div>
@@ -319,24 +327,36 @@ const clearSignature = () => signaturePad.value.clearSignature();
                         <span class="font-bold text-sm">Selecciona un cliente para ver precios.</span>
                     </div>
                     <div v-if="filteredProducts.length === 0" class="text-center py-20 text-gray-400"><p>No se encontraron productos.</p></div>
+                    
+                    <!-- GRID DE PRODUCTOS -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         <div v-for="product in filteredProducts" :key="product.id" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col group">
-                            <div class="h-40 bg-gray-50 relative cursor-pointer overflow-hidden" @click="openImageModal(product)">
-                                <img v-if="product.image" :src="`/storage/${product.image}`" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                                <div v-else class="w-full h-full flex items-center justify-center text-gray-300"><svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>
-                                <div v-if="product.is_favorite" class="absolute top-2 right-2 bg-white p-1 rounded-full shadow text-yellow-400"><svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg></div>
+                            
+                            <!-- IMAGEN CON PLANTILLA POR DEFECTO -->
+                            <div class="h-36 bg-gray-50 relative cursor-pointer overflow-hidden" @click="openImageModal(product)">
+                                <img :src="getProductImage(product.image)" @error="handleImageError" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                                <div v-if="product.is_favorite" class="absolute top-2 right-2 bg-white p-1 rounded-full shadow text-yellow-400">
+                                    <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                </div>
                             </div>
+
                             <div class="p-3 flex-1 flex flex-col">
                                 <div class="mb-2">
                                     <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{{ product.category?.name }}</p>
-                                    <h3 class="font-bold text-gray-800 text-sm leading-tight line-clamp-2">{{ product.name }}</h3>
-                                    <p class="text-xs text-gray-500 mt-1">{{ product.measurements }}</p>
+                                    <h3 class="font-bold text-gray-800 text-sm leading-tight line-clamp-1">{{ product.name }}</h3>
                                 </div>
-                                <div class="mt-auto space-y-1.5">
-                                    <button v-for="variant in product.variants" :key="variant.id" @click="handleAddToCart(product, variant)" :disabled="!selectedClient" :class="!selectedClient ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'bg-gray-50 hover:bg-green-600 hover:text-white'" class="w-full flex justify-between items-center px-3 py-2 border border-gray-200 rounded-lg transition-colors group/btn">
-                                        <span class="text-xs font-bold">{{ variant.material }}</span>
-                                        <span class="text-xs font-black group-hover:text-white">{{ selectedClient ? formatMoney(getPriceForClient(variant)) : '---' }}</span>
-                                        <span v-if="selectedClient" class="bg-white text-green-600 rounded-full w-5 h-5 flex items-center justify-center text-xs shadow opacity-0 group-hover:group-hover/btn:opacity-100 transition-opacity">+</span>
+
+                                <!-- LISTA DE VARIANTES -->
+                                <div class="mt-auto space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                                    <button v-for="variant in product.variants" :key="variant.id" @click="handleAddToCart(product, variant)" :disabled="!selectedClient" :class="!selectedClient ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'bg-gray-50 hover:bg-green-600 hover:text-white'" class="w-full flex justify-between items-center px-2.5 py-1.5 border border-gray-200 rounded-lg transition-colors group/btn">
+                                        <div class="text-left leading-tight">
+                                            <span class="text-[11px] font-bold block">{{ variant.material }}</span>
+                                            <span class="text-[10px] text-gray-400 group-hover/btn:text-green-100 block">{{ variant.measurements }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <span class="text-xs font-black group-hover:text-white">{{ selectedClient ? formatMoney(getPriceForClient(variant)) : '---' }}</span>
+                                            <span v-if="selectedClient" class="bg-white text-green-600 rounded-full w-4 h-4 flex items-center justify-center text-[10px] shadow opacity-0 group-hover/btn:opacity-100 transition-opacity">+</span>
+                                        </div>
                                     </button>
                                 </div>
                             </div>
@@ -345,6 +365,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
                 </div>
             </div>
 
+            <!-- SECCIÓN DERECHA: TICKET DE PEDIDO -->
             <div class="w-full lg:w-96 bg-white shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden shrink-0 h-full">
                 <div class="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                     <h2 class="text-base font-bold text-gray-800 flex items-center gap-2"><svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>Ticket de Pedido</h2>
@@ -357,13 +378,17 @@ const clearSignature = () => signaturePad.value.clearSignature();
                         <p class="text-xs font-medium">Carrito vacío</p>
                     </div>
 
-                    <div v-for="(item, index) in cart" :key="index" class="bg-white p-2 rounded-lg shadow-sm border border-gray-200 relative group hover:shadow-md transition-shadow">
+                    <!-- ITEMS EN CARRITO -->
+                    <div v-for="(item, index) in cart" :key="index" class="bg-white p-2.5 rounded-lg shadow-sm border border-gray-200 relative group hover:shadow-md transition-shadow">
                         <button @click="removeFromCart(index)" class="absolute top-1.5 right-1.5 text-gray-300 hover:text-red-500 font-bold leading-none text-base z-10">&times;</button>
                         
-                        <div class="pr-6 mb-2 flex items-start gap-1.5">
-                            <h4 class="font-bold text-gray-800 text-xs leading-tight line-clamp-2">{{ item.product_name }}</h4>
-                            <span v-if="item.category_name" class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold uppercase tracking-wider">{{ item.category_name }}</span>
-                            <span class="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 font-bold uppercase tracking-wider">{{ item.material }}</span>
+                        <div class="pr-6 mb-2">
+                            <h4 class="font-bold text-gray-800 text-xs leading-tight line-clamp-1">{{ item.product_name }}</h4>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                <span v-if="item.category_name" class="text-[9px] bg-blue-50 text-blue-600 px-1 py-0.5 rounded border border-blue-100 font-bold uppercase">{{ item.category_name }}</span>
+                                <span class="text-[9px] bg-gray-100 text-gray-700 px-1 py-0.5 rounded border border-gray-200 font-bold">{{ item.material }}</span>
+                                <span class="text-[9px] bg-green-50 text-green-700 px-1 py-0.5 rounded border border-green-200 font-bold">{{ item.measurements }}</span>
+                            </div>
                         </div>
 
                         <div class="flex items-end justify-between gap-2 mb-2 border-t border-gray-50 pt-2">
@@ -425,6 +450,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
             </div>
         </div>
 
+        <!-- MODAL DE NOTAS -->
         <Modal :show="showNotesModal" @close="showNotesModal = false" maxWidth="sm">
             <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -444,7 +470,6 @@ const clearSignature = () => signaturePad.value.clearSignature();
                             <span class="absolute left-3 top-2.5 text-gray-500 font-bold">$</span>
                             <input v-model="noteForm.additional_cost" type="number" min="0" class="w-full pl-7 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 font-bold text-gray-800">
                         </div>
-                        <p class="text-xs text-gray-500 mt-1">Este monto se sumará al total del producto.</p>
                     </div>
                 </div>
 
@@ -455,6 +480,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
             </div>
         </Modal>
 
+        <!-- MODAL DE PAGO Y FIRMA -->
         <Modal :show="showPaymentModal" @close="showPaymentModal = false" maxWidth="md">
             <div class="bg-white rounded-2xl overflow-hidden shadow-xl transform transition-all">
                 
@@ -475,24 +501,13 @@ const clearSignature = () => signaturePad.value.clearSignature();
                     
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Método de Pago</label>
                     <div class="grid grid-cols-3 gap-3 mb-5">
-                        <button @click="paymentForm.method = 'Efectivo'" 
-                            :class="paymentForm.method === 'Efectivo' ? 'bg-green-50 border-green-500 text-green-700 ring-1 ring-green-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'"
-                            class="border rounded-xl py-3 flex flex-col items-center gap-1 transition-all duration-200 group">
-                            <svg class="w-6 h-6 mb-1" :class="paymentForm.method === 'Efectivo' ? 'text-green-600' : 'text-gray-400 group-hover:text-gray-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        <button @click="paymentForm.method = 'Efectivo'" :class="paymentForm.method === 'Efectivo' ? 'bg-green-50 border-green-500 text-green-700 ring-1 ring-green-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'" class="border rounded-xl py-3 flex flex-col items-center gap-1 transition-all duration-200 group">
                             <span class="text-xs font-bold">Efectivo</span>
                         </button>
-                        
-                        <button @click="paymentForm.method = 'Tarjeta'" 
-                            :class="paymentForm.method === 'Tarjeta' ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'"
-                            class="border rounded-xl py-3 flex flex-col items-center gap-1 transition-all duration-200 group">
-                            <svg class="w-6 h-6 mb-1" :class="paymentForm.method === 'Tarjeta' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                        <button @click="paymentForm.method = 'Tarjeta'" :class="paymentForm.method === 'Tarjeta' ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'" class="border rounded-xl py-3 flex flex-col items-center gap-1 transition-all duration-200 group">
                             <span class="text-xs font-bold">Tarjeta</span>
                         </button>
-
-                        <button @click="paymentForm.method = 'Transferencia'" 
-                            :class="paymentForm.method === 'Transferencia' ? 'bg-purple-50 border-purple-500 text-purple-700 ring-1 ring-purple-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'"
-                            class="border rounded-xl py-3 flex flex-col items-center gap-1 transition-all duration-200 group">
-                            <svg class="w-6 h-6 mb-1" :class="paymentForm.method === 'Transferencia' ? 'text-purple-600' : 'text-gray-400 group-hover:text-gray-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                        <button @click="paymentForm.method = 'Transferencia'" :class="paymentForm.method === 'Transferencia' ? 'bg-purple-50 border-purple-500 text-purple-700 ring-1 ring-purple-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'" class="border rounded-xl py-3 flex flex-col items-center gap-1 transition-all duration-200 group">
                             <span class="text-xs font-bold">Transf.</span>
                         </button>
                     </div>
@@ -502,13 +517,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
                     </label>
                     <div class="relative mb-4">
                         <span class="absolute left-4 top-3 text-gray-400 text-xl font-bold">$</span>
-                        <input 
-                            v-model.number="paymentForm.amount_received" 
-                            type="number" 
-                            class="w-full pl-9 pr-4 py-3 text-3xl font-bold text-gray-800 border border-gray-300 rounded-xl focus:ring-green-500 focus:border-green-500 transition-shadow shadow-sm placeholder-gray-300"
-                            placeholder="0.00"
-                            @focus="$event.target.select()"
-                        >
+                        <input v-model.number="paymentForm.amount_received" type="number" class="w-full pl-9 pr-4 py-3 text-3xl font-bold text-gray-800 border border-gray-300 rounded-xl focus:ring-green-500 focus:border-green-500 shadow-sm placeholder-gray-300" placeholder="0.00" @focus="$event.target.select()">
                     </div>
 
                     <div class="bg-gray-50 rounded-xl p-4 flex justify-between items-center mb-5 border border-gray-100">
@@ -520,72 +529,27 @@ const clearSignature = () => signaturePad.value.clearSignature();
                         </span>
                     </div>
 
-                    <details class="group mb-6">
-                        <summary class="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-500 hover:text-green-600 select-none transition-colors">
-                            <span class="bg-gray-100 p-1 rounded group-open:bg-green-100 group-open:text-green-600">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                            </span>
-                            <span>Definir Fecha de Entrega (Opcional)</span>
-                            <svg class="w-3 h-3 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </summary>
-                        
-                        <div class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-100 animate-fade-in-down">
-                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Fecha Promesa</label>
-                            <input v-model="paymentForm.promised_date" type="date" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-gray-700">
-                            <p class="text-[10px] text-gray-400 mt-1">Si se deja vacío, se coordinará después con el cliente.</p>
-                        </div>
-                    </details>
-
                     <div class="mt-6 mb-4">
                         <div class="flex justify-between items-center mb-2">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                Firma de Autorización del Cliente
-                            </label>
-                            <button type="button" @click="clearSignature" class="text-[10px] text-red-500 font-bold hover:underline">
-                                Limpiar Firma
-                            </button>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Firma de Autorización del Cliente</label>
+                            <button type="button" @click="clearSignature" class="text-[10px] text-red-500 font-bold hover:underline">Limpiar Firma</button>
                         </div>
-                        
                         <div class="border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 overflow-hidden relative group">
-                            <VueSignaturePad
-                                width="100%"
-                                height="180px"
-                                ref="signaturePad"
-                                class="cursor-crosshair"
-                                :options="{ 
-                                    penColor: '#1a202c',
-                                    backgroundColor: 'rgba(0,0,0,0)'
-                                }"
-                            />
-                            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none opacity-20 group-focus-within:opacity-0 transition-opacity">
-                                <p class="text-[10px] text-gray-400 font-medium border-t border-gray-300 pt-1 px-4">X _______________________</p>
-                            </div>
+                            <VueSignaturePad width="100%" height="180px" ref="signaturePad" class="cursor-crosshair" :options="{ penColor: '#1a202c', backgroundColor: 'rgba(0,0,0,0)' }" />
                         </div>
-                        <p class="text-[9px] text-gray-400 mt-2 italic text-center">
-                            Al firmar, el cliente acepta el diseño, materiales y fecha estimada de entrega.
-                        </p>
                     </div>
 
                     <div class="flex gap-3">
-                        <button 
-                            @click="showPaymentModal = false" 
-                            class="flex-1 py-3.5 border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-                        >
-                            Cancelar
-                        </button>
-                        <button 
-                            @click="submitOrder" 
-                            class="flex-1 py-3.5 bg-green-600 rounded-xl font-bold text-white hover:bg-green-700 shadow-lg shadow-green-200 transition-all flex justify-center items-center gap-2"
-                        >
+                        <button @click="showPaymentModal = false" class="flex-1 py-3.5 border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition-colors">Cancelar</button>
+                        <button @click="submitOrder" class="flex-1 py-3.5 bg-green-600 rounded-xl font-bold text-white hover:bg-green-700 shadow-lg shadow-green-200 transition-all flex justify-center items-center gap-2">
                             <span>Confirmar Pedido</span>
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                         </button>
                     </div>
-
                 </div>
             </div>
         </Modal>
 
+        <!-- MODAL NUEVO CLIENTE -->
         <Modal :show="showClientModal" @close="showClientModal = false">
              <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-800 mb-4">Nuevo Cliente</h3>
@@ -602,48 +566,70 @@ const clearSignature = () => signaturePad.value.clearSignature();
              </div>
         </Modal>
 
+        <!-- MODAL DE VISTA PREVIA MEJORADO (Categoría, Descripción, Materiales, Medidas y Colores) -->
         <div v-if="showImageModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 transition-opacity" @click.self="showImageModal=false">
-            <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden relative flex flex-col md:flex-row animate-fade-in-up">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden relative flex flex-col md:flex-row animate-fade-in-up max-h-[90vh]">
                 
                 <button @click="showImageModal=false" class="absolute top-4 right-4 z-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-1 transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
 
-                <div class="w-full md:w-1/2 bg-gray-100 flex items-center justify-center relative min-h-[300px] md:min-h-[450px]">
-                    <img v-if="selectedProductForModal?.image" 
-                         :src="`/storage/${selectedProductForModal.image}`" 
-                         class="w-full h-full object-contain max-h-[500px] mix-blend-multiply p-6 transition-transform hover:scale-105 duration-700">
-                    
-                    <div v-else class="flex flex-col items-center text-gray-300">
-                        <svg class="w-20 h-20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        <span class="font-medium text-sm">Sin imagen</span>
-                    </div>
+                <!-- Columna Izquierda: Imagen del Producto -->
+                <div class="w-full md:w-1/2 bg-gray-50 flex items-center justify-center relative min-h-[300px] p-6">
+                    <img :src="getProductImage(selectedProductForModal?.image)" @error="handleImageError" class="w-full h-full object-contain max-h-[450px]">
                 </div>
 
-                <div class="w-full md:w-1/2 p-8 flex flex-col justify-center bg-white">
-                    
-                    <h4 class="text-green-600 font-bold tracking-wider uppercase text-xs mb-2">
-                        {{ selectedProductForModal?.category?.name || 'General' }}
-                    </h4>
+                <!-- Columna Derecha: Información Completa (Categoría, Título, Descripción, Materiales y Colores) -->
+                <div class="w-full md:w-1/2 p-6 md:p-8 flex flex-col justify-between bg-white overflow-y-auto max-h-[90vh]">
+                    <div>
+                        <!-- Categoría -->
+                        <h4 class="text-green-600 font-bold tracking-wider uppercase text-xs mb-1">
+                            {{ selectedProductForModal?.category?.name || 'General' }}
+                        </h4>
 
-                    <h2 class="text-3xl font-extrabold text-gray-900 mb-2 leading-tight">
-                        {{ selectedProductForModal?.name }}
-                    </h2>
+                        <!-- Nombre del Modelo -->
+                        <h2 class="text-2xl md:text-3xl font-extrabold text-gray-900 mb-4 leading-tight">
+                            {{ selectedProductForModal?.name }}
+                        </h2>
 
-                    <p class="text-gray-500 font-medium text-lg mb-6 flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
-                        {{ selectedProductForModal?.measurements || 'Medidas no especificadas' }}
-                    </p>
+                        <!-- Descripción -->
+                        <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
+                            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider mb-1">Descripción:</h3>
+                            <p class="text-gray-600 text-xs leading-relaxed whitespace-pre-line">
+                                {{ selectedProductForModal?.description || 'No hay descripción disponible.' }}
+                            </p>
+                        </div>
 
-                    <div class="bg-gray-50 p-6 rounded-2xl border border-gray-100">
-                        <h3 class="font-bold text-gray-800 mb-2 text-sm">Descripción:</h3>
-                        <p class="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-                            {{ selectedProductForModal?.description || 'No hay descripción disponible para este modelo.' }}
-                        </p>
+                        <!-- Materiales y Medidas Disponibles en este Modelo -->
+                        <div class="mb-4" v-if="selectedProductForModal?.variants && selectedProductForModal.variants.length > 0">
+                            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider mb-2">Variantes (Materiales y Medidas):</h3>
+                            <div class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                <div v-for="variant in selectedProductForModal.variants" :key="variant.id" class="flex justify-between items-center bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 text-xs">
+                                    <span class="font-bold text-gray-800">{{ variant.material }}</span>
+                                    <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold text-[11px] border border-blue-100">{{ variant.measurements }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Muestrario de Colores Posibles según los materiales del mueble -->
+                        <div v-if="selectedProductForModal?.variants">
+                            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider mb-2">Colores Disponibles:</h3>
+                            <div class="space-y-2">
+                                <div v-for="matGroup in [...new Set(selectedProductForModal.variants.map(v => v.material))]" :key="matGroup" class="bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Para {{ matGroup }}:</span>
+                                    <div class="flex flex-wrap gap-2">
+                                        <div v-for="color in getColorsForMaterial(matGroup)" :key="color.name" class="flex items-center gap-1.5 bg-white px-2 py-1 rounded border border-gray-200 shadow-2xs">
+                                            <span class="w-3.5 h-3.5 rounded-full border shadow-2xs" :class="{'border-gray-300': color.border}" :style="{ backgroundColor: color.hex }"></span>
+                                            <span class="text-[11px] font-medium text-gray-700">{{ color.name }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="mt-8 md:hidden">
-                        <button @click="showImageModal=false" class="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200">
+                    <div class="mt-6 md:hidden">
+                        <button @click="showImageModal=false" class="w-full py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 text-xs">
                             Cerrar
                         </button>
                     </div>

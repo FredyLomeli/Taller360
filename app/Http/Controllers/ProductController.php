@@ -43,15 +43,16 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'category_id' => 'required|exists:categories,id',
             'description' => 'nullable|string',
-            'measurements' => 'nullable|string', // Nuevo campo
+            //'measurements' => 'nullable|string', 
             'image' => 'nullable|image|max:2048',
-            'is_favorite' => 'boolean', // Nuevo campo
+            'is_favorite' => 'boolean', 
             
             // Validación de Variantes (Solo Material y Precios)
             'variants' => 'required|array|min:1',
             'variants.*.material' => 'required|string',
             'variants.*.sku' => 'nullable|string',
             'variants.*.stock' => 'required|integer|min:0',
+            'variants.*.measurements' => 'required|string',
             'variants.*.price_1' => 'required|numeric|min:0',
             'variants.*.price_2' => 'nullable|numeric|min:0',
             'variants.*.price_3' => 'nullable|numeric|min:0',
@@ -72,17 +73,21 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'name' => $request->name,
                 'description' => $request->description,
-                'measurements' => $request->measurements,
+                //'measurements' => $request->measurements,
                 'image' => $imagePath,
                 'is_favorite' => $request->boolean('is_favorite'),
             ]);
 
             // 4. Crear Variantes (Sin Color)
             foreach ($request->variants as $variantData) {
+                $sku = $variantData['sku'] ?? strtoupper(substr($product->name, 0, 3) . '-' . $variantData['measurements'] . '-' . substr($variantData['material'], 0, 3));
+                $sku = str_replace(' ', '', $sku); // Limpiamos espacios
+
                 ProductVariant::create([
                     'product_id' => $product->id,
                     'material' => $variantData['material'],
-                    'sku' => $variantData['sku'] ?? null,
+                    'measurements' => $variantData['measurements'],
+                    'sku' => $sku,
                     'stock' => $variantData['stock'],
                     'price_1' => $variantData['price_1'],
                     'price_2' => $variantData['price_2'] ?? null,
@@ -112,11 +117,12 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'category_id' => 'required|exists:categories,id',
             'description' => 'nullable|string',
-            'measurements' => 'nullable|string',
+            //'measurements' => 'nullable|string',
             'image' => 'nullable|image|max:2048',
             'is_favorite' => 'boolean',
 
             'variants' => 'required|array|min:1',
+            'variants.*.measurements' => 'required|string',
             'variants.*.material' => 'required|string',
             'variants.*.stock' => 'required|integer|min:0',
             'variants.*.price_1' => 'required|numeric|min:0',
@@ -137,7 +143,7 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'name' => $request->name,
                 'description' => $request->description,
-                'measurements' => $request->measurements,
+                //'measurements' => $request->measurements,
                 'image' => $imagePath,
                 'is_favorite' => $request->boolean('is_favorite'),
             ]);
@@ -158,6 +164,7 @@ class ProductController extends Controller
                     [
                         'product_id' => $product->id,
                         'material' => $variantData['material'],
+                        'measurements' => $variantData['measurements'],
                         'sku' => $variantData['sku'] ?? null,
                         'stock' => $variantData['stock'],
                         'price_1' => $variantData['price_1'],

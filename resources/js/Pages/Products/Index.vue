@@ -5,16 +5,15 @@ import { ref, computed, watch } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    products: Array // Recibimos el array completo
+    products: Array 
 });
 
 const search = ref('');
 
-// --- PAGINACIÓN LOCAL (Tu lógica original) ---
+// --- PAGINACIÓN LOCAL ---
 const itemsPerPage = ref(10);
 const currentPage = ref(1);
 
-// Filtrado 
 const filteredProducts = computed(() => {
     if (!search.value) return props.products;
     const term = search.value.toLowerCase();
@@ -22,15 +21,13 @@ const filteredProducts = computed(() => {
     return props.products.filter(p => 
         p.name.toLowerCase().includes(term) ||
         (p.category && p.category.name.toLowerCase().includes(term)) ||
-        p.variants.some(v => v.sku && v.sku.toLowerCase().includes(term))
+        p.variants.some(v => (v.sku && v.sku.toLowerCase().includes(term)) || (v.measurements && v.measurements.toLowerCase().includes(term)))
     );
 });
 
-// Reseteos de página al buscar
 watch(search, () => { currentPage.value = 1; });
 watch(itemsPerPage, () => { currentPage.value = 1; });
 
-// Datos paginados (Corte del array)
 const paginatedProducts = computed(() => {
     const start = (currentPage.value - 1) * itemsPerPage.value;
     const end = start + itemsPerPage.value;
@@ -58,20 +55,26 @@ const formatMoney = (amount) => {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount || 0);
 };
 
-// --- ACCIONES (Backend) ---
+// Resolver imagen o plantilla por defecto
+const getProductImage = (imagePath) => {
+    if (!imagePath) return '/storage/products/plantilla.jpg';
+    if (imagePath.startsWith('http') || imagePath.startsWith('/')) return imagePath;
+    if (imagePath.startsWith('products/')) return '/storage/' + imagePath;
+    return '/storage/products/' + imagePath;
+};
 
-// 1. Alternar Favorito (NUEVO)
+const handleImageError = (event) => {
+    event.target.src = '/storage/products/plantilla.jpg';
+};
+
+// --- ACCIONES ---
 const toggleFavorite = (product) => {
     router.put(route('products.toggle-favorite', product.id), {}, {
         preserveScroll: true,
-        preserveState: true, // Importante para no perder la página actual
-        onSuccess: () => {
-            // Opcional: Feedback visual muy sutil si quieres
-        }
+        preserveState: true,
     });
 };
 
-// 2. Eliminar
 const deleteProduct = (product) => {
     Swal.fire({
         title: '¿Eliminar Producto?',
@@ -114,7 +117,7 @@ const deleteProduct = (product) => {
                             <option :value="100">Todos</option>
                         </select>
 
-                        <input v-model="search" type="text" placeholder="Buscar..." class="border border-gray-300 rounded-lg px-4 py-2 w-full md:w-64 focus:ring-green-500 shadow-sm">
+                        <input v-model="search" type="text" placeholder="Buscar por nombre, categoría o medida..." class="border border-gray-300 rounded-lg px-4 py-2 w-full md:w-80 focus:ring-green-500 shadow-sm">
                         
                         <Link :href="route('products.create')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center shadow transition-colors">
                             <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -129,15 +132,17 @@ const deleteProduct = (product) => {
                             <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b">
                                 <tr>
                                     <th class="px-4 py-3 text-center w-10">★</th>
-                                    <th class="px-6 py-3">Producto</th>
-                                    <th class="px-6 py-3">Variantes</th>
-                                    <th class="px-6 py-3 text-center">Stock</th>
+                                    <th class="px-4 py-3">Imagen</th>
+                                    <th class="px-6 py-3">Producto / Categoría</th>
+                                    <th class="px-6 py-3">Variantes (Material, Medidas & Precios)</th>
+                                    <th class="px-6 py-3 text-center">Stock Total</th>
                                     <th class="px-6 py-3 text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="product in paginatedProducts" :key="product.id" class="bg-white border-b hover:bg-gray-50 transition">
                                     
+                                    <!-- Favorito -->
                                     <td class="px-4 py-4 text-center cursor-pointer" @click="toggleFavorite(product)">
                                         <span class="text-xl transition-transform transform active:scale-125 inline-block" 
                                               :class="product.is_favorite ? 'text-yellow-400' : 'text-gray-200 hover:text-gray-300'">
@@ -145,43 +150,57 @@ const deleteProduct = (product) => {
                                         </span>
                                     </td>
 
+                                    <!-- Miniatura de Imagen -->
+                                    <td class="px-4 py-4">
+                                        <img :src="getProductImage(product.image)" @error="handleImageError" class="w-12 h-12 object-cover rounded-lg border border-gray-200 shadow-sm">
+                                    </td>
+
+                                    <!-- Producto y Categoría -->
                                     <td class="px-6 py-4">
                                         <div class="font-bold text-gray-900 text-base">{{ product.name }}</div>
-                                        <div class="text-xs text-gray-400">{{ product.measurements || 'Estándar' }}</div>
-                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 mt-1 border">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-green-50 text-green-700 mt-1 border border-green-200 font-semibold">
                                             {{ product.category ? product.category.name : 'General' }}
                                         </span>
                                     </td>
 
+                                    <!-- Variantes (Con Material, Medidas y SKU) -->
                                     <td class="px-6 py-4">
-                                        <div class="flex flex-col gap-1">
-                                            <div v-for="variant in product.variants" :key="variant.id" class="text-xs flex justify-between bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                                                <span class="font-bold text-gray-700">{{ variant.material }}</span>
-                                                <div class="flex gap-2">
-                                                    <span class="text-gray-500">{{ formatMoney(variant.price_1) }}</span>
-                                                    <span :class="variant.stock > 0 ? 'text-green-600' : 'text-red-400 font-bold'">{{ variant.stock }}</span>
+                                        <div class="flex flex-col gap-1.5 py-1">
+                                            <div v-for="variant in product.variants" :key="variant.id" class="text-xs flex items-center justify-between bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-2xs">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-bold text-gray-800">{{ variant.material }}</span>
+                                                    <span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-blue-100">{{ variant.measurements }}</span>
+                                                    <span v-if="variant.sku" class="text-gray-400 text-[10px]">({{ variant.sku }})</span>
+                                                </div>
+                                                <div class="flex items-center gap-3">
+                                                    <span class="font-bold text-green-700">{{ formatMoney(variant.price_1) }}</span>
+                                                    <span :class="variant.stock > 0 ? 'text-green-600 bg-green-50 px-2 py-0.5 rounded font-bold' : 'text-red-500 bg-red-50 px-2 py-0.5 rounded font-bold'">
+                                                        Stock: {{ variant.stock }}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
 
+                                    <!-- Stock Global -->
                                     <td class="px-6 py-4 text-center">
                                         <span :class="getTotalStock(product.variants) < 5 ? 'text-red-700 bg-red-100' : 'text-green-700 bg-green-100'" class="px-3 py-1 rounded-full font-bold border border-transparent text-xs">
                                             {{ getTotalStock(product.variants) }}
                                         </span>
                                     </td>
 
+                                    <!-- Acciones -->
                                     <td class="px-6 py-4 text-center">
                                         <div class="flex justify-center items-center gap-3">
                                             <Link :href="route('products.edit', product.id)" class="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase">Editar</Link>
-                                            <button @click="deleteProduct(product)" class="text-red-400 hover:text-red-600">
+                                            <button @click="deleteProduct(product)" class="text-red-400 hover:text-red-600 cursor-pointer">
                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr v-if="filteredProducts.length === 0">
-                                    <td colspan="5" class="px-6 py-12 text-center text-gray-400">
+                                    <td colspan="6" class="px-6 py-12 text-center text-gray-400">
                                         No se encontraron productos.
                                     </td>
                                 </tr>

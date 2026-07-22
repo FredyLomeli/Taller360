@@ -19,7 +19,7 @@ class ShipmentController extends Controller
     public function index()
     {
         return Inertia::render('Shipments/Index', [
-            'shipments' => Shipment::select('id', 'driver_name', 'license_plate', 'destination', 'status', 'created_at')
+            'shipments' => Shipment::select('id', 'driver_name', 'license_plate', 'destination', 'status', 'pickup_type', 'created_at')
                 ->latest()
                 ->get()
         ]);
@@ -37,10 +37,12 @@ class ShipmentController extends Controller
                 'details' => function ($q) {
                     // Solo lo que Shipments/Create.vue realmente usa — nunca precios, nunca firma.
                     $q->select('id', 'sale_id', 'product_variant_id', 'product_name', 'quantity', 'chosen_color')
-                    ->withSum('deliveries as delivered_quantity', 'quantity_delivered');
+                    ->withSum(['deliveries as delivered_quantity' => function ($dq) {
+                        $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
+                    }], 'quantity_delivered');
                 },
-                'details.variant:id,product_id,material,stock',
-                'details.variant.product:id,name,measurements,image',
+                'details.variant:id,product_id,material,measurements,stock',
+                'details.variant.product:id,name,image',
             ])
             ->whereIn('stage', ['confirmado', 'produccion', 'enviado']);
 
@@ -149,7 +151,7 @@ class ShipmentController extends Controller
 
     public function show($id)
     {
-        $shipment = Shipment::select('id', 'driver_name', 'license_plate', 'created_at')
+        $shipment = Shipment::select('id', 'driver_name', 'license_plate', 'status', 'pickup_type', 'created_at')
             ->with([
                 'deliveries' => function ($q) {
                     $q->select('id', 'shipment_id', 'sale_detail_id', 'quantity_delivered');
@@ -178,7 +180,9 @@ class ShipmentController extends Controller
     private function closeOrderIfComplete(SaleDetail $detail): void
     {
         $sale = $detail->sale()->with(['details' => function ($q) {
-            $q->withSum('deliveries as delivered_quantity', 'quantity_delivered');
+            $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
+                $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
+            }], 'quantity_delivered');
         }])->first();
 
         $allDelivered = $sale->details->every(function ($d) {
@@ -207,6 +211,52 @@ class ShipmentController extends Controller
         });
 
         return back()->with('success', 'Viaje marcado como entregado.');
+    }
+
+    public function cancel($id)
+    {
+        $shipment = Shipment::with('deliveries.saleDetail.sale')->findOrFail($id);
+
+        if ($shipment->status === 'cancelado') {
+            return back()->withErrors(['error' => 'Este embarque ya está cancelado.']);
+        }
+        if ($shipment->pickup_type === 'flota_propia' && $shipment->status === 'entregado') {
+            return back()->withErrors(['error' => 'No se puede cancelar un embarque de flota propia ya entregado.']);
+        }
+
+        DB::transaction(function () use ($shipment) {
+            foreach ($shipment->deliveries as $delivery) {
+                $detail = $delivery->saleDetail;
+                if (!$detail) continue;
+
+                if ($detail->variant) {
+                    $detail->variant->increment('stock', $delivery->quantity_delivered);
+                }
+
+                $sale = $detail->sale;
+
+                if (in_array($sale->stage, ['entregado', 'enviado'])) {
+                    $transition = SaleHistory::where('sale_id', $sale->id)
+                        ->whereIn('to_stage', ['entregado', 'enviado'])
+                        ->latest()
+                        ->first();
+
+                    $revertStage = $transition->from_stage ?? 'produccion';
+                    $sale->update(['stage' => $revertStage]);
+                }
+
+                SaleHistory::create([
+                    'sale_id' => $sale->id,
+                    'user_id' => auth()->id(),
+                    'to_stage' => $sale->fresh()->stage,
+                    'notes' => "❌ Embarque #{$shipment->id} cancelado: se regresan {$delivery->quantity_delivered} unidades de {$detail->product_name} a inventario."
+                ]);
+            }
+
+            $shipment->update(['status' => 'cancelado']);
+        });
+
+        return back()->with('success', 'Embarque cancelado y stock restituido correctamente.');
     }
 
 }

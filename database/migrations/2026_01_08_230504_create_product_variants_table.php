@@ -16,9 +16,13 @@ return new class extends Migration
             // Relación con el padre
             $table->foreignId('product_id')->constrained()->onDelete('cascade');
             
-            $table->string('material');
+            // Atributos físicos del mueble en bodega
+            $table->string('measurements'); // Ej: "1.50", "1.20"
+            $table->string('material'); // Ej: "OKUME", "MDF"
+
             $table->integer('stock')->default(0);
             $table->string('sku')->nullable();
+            $table->string('stock_notes')->nullable(); // Para anotar excepciones: "1 pieza pintada en Chocolate"
             
             // Precios
             $table->decimal('price_1', 10, 2); // Precio Público (Obligatorio)

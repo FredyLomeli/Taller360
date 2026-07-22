@@ -65,8 +65,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/sales/{id}/note', 'printNote')->name('sales.printNote');
             Route::post('/sales/{id}/email', 'sendEmail')->name('sales.email');
 
-            // Entregas parciales y completas
-            Route::post('/sales/deliveries', 'storeDelivery')->name('sales.deliveries.store');
         });
 
         // 5. CLIENTES (Vendedores pueden ver/crear/editar)
@@ -121,13 +119,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     }); // Fin middleware admin
 
-    Route::controller(ShipmentController::class)->group(function () {
-        Route::get('/shipments/create','create')->name('shipments.create');
-        Route::post('/shipments', 'store')->name('shipments.store');
-        Route::get('/shipments', 'index')->name('shipments.index');
-        Route::patch('/shipments/{id}/confirm', 'confirmDelivery')->name('shipments.confirm');
-        Route::get('/shipments/{id}/print', 'printManifest')->name('shipments.print');
-        Route::get('/shipments/{id}', 'show')->name('shipments.show');
+    Route::middleware('role:admin,inventario')->group(function () {
+        Route::controller(ShipmentController::class)->group(function () {
+            Route::get('/shipments/create','create')->name('shipments.create');
+            Route::post('/shipments', 'store')->name('shipments.store');
+            Route::get('/shipments', 'index')->name('shipments.index');
+            Route::patch('/shipments/{id}/confirm', 'confirmDelivery')->name('shipments.confirm');
+            Route::get('/shipments/{id}/print', 'printManifest')->name('shipments.print');
+            Route::get('/shipments/{id}', 'show')->name('shipments.show');
+            Route::patch('/shipments/{id}/cancel', 'cancel')->name('shipments.cancel'); 
+        });
     });
 }); // Fin middleware auth
 

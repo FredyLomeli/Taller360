@@ -79,6 +79,7 @@ const advanceStage = (id, currentStage) => {
         confirmTitle = '¿Pasar a Producción?';
         confirmText = 'El taller podrá ver este pedido para comenzarlo.';
         btnText = 'Sí, a producción';
+    }
 
     if (!nextStage) return;
 
@@ -292,7 +293,10 @@ const sendEmail = (id) => {
                                 <div class="pr-4">
                                     <p class="font-bold text-gray-800 text-sm leading-tight">{{ item.product_name }}</p>
                                     <div class="flex items-center gap-2 mt-1">
-                                        <span class="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold uppercase">{{ item.material || 'N/A' }}</span>
+                                        <span class="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold uppercase">
+                                            {{ item.variant?.material || 'N/A' }}
+                                            <span v-if="item.variant?.measurements"> · {{ item.variant.measurements }}</span>
+                                        </span>
                                         <span class="text-[10px] text-green-600 font-bold flex items-center gap-1">
                                             <span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
                                             {{ item.chosen_color || 'Base' }}
@@ -381,8 +385,7 @@ const sendEmail = (id) => {
                             @click="advanceStage(selectedSale.id, selectedSale.stage)"
                             class="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200 transition-all active:scale-95">
                             <span>
-                                {{ selectedSale.stage === 'pedido' ? 'Confirmar Pedido' : 
-                                   selectedSale.stage === 'confirmado' ? 'A Producción' : }}
+                                {{ selectedSale.stage === 'pedido' ? 'Confirmar Pedido' : 'A Producción' }}
                             </span>
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
                         </button>
