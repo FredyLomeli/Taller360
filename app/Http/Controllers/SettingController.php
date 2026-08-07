@@ -31,7 +31,7 @@ class SettingController extends Controller
         // Lista de claves que permitimos guardar (seguridad)
         $allowedKeys = [
             'company_name', 'company_rfc', 'company_address', 'company_phone',
-            'notification_emails', 'allow_negative_stock', 'ticket_footer_text'
+            'notification_emails', 'allow_negative_stock', 'ticket_footer_text', 'auto_email_on_sale'
         ];
 
         // 1. Guardar textos

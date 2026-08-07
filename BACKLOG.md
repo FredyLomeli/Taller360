@@ -9,11 +9,11 @@
 Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño técnico ya acordado (ver `CONTEXTO_TECNICO.md` sección 0.1 para el detalle completo de schema/lógica). Van en orden de prioridad sugerido.
 
 ### 1. 🟢 Envío automático de nota de venta al crear pedido (rápido, bajo riesgo)
-- [ ] Extraer lógica de `SaleController::sendEmail()` a método privado reutilizable.
-- [ ] Nuevo `Setting`: `auto_email_on_sale` (boolean, default `true`).
-- [ ] Llamar el envío al final de `store()`, fuera de la transacción de BD, sin bloquear la creación del pedido si el correo falla.
-- [ ] Agregar `auto_email_on_sale` a las claves permitidas en `SettingController`.
-- [ ] El botón manual de reenvío en `Sales/Index.vue` se queda intacto, funciona sin importar el estado del interruptor.
+- [x] Extraer lógica de `SaleController::sendEmail()` a método privado reutilizable.
+- [x] Nuevo `Setting`: `auto_email_on_sale` (boolean, default `true`).
+- [x] Llamar el envío al final de `store()`, fuera de la transacción de BD, sin bloquear la creación del pedido si el correo falla.
+- [x] Agregar `auto_email_on_sale` a las claves permitidas en `SettingController`.
+- [x] El botón manual de reenvío en `Sales/Index.vue` se queda intacto, funciona sin importar el estado del interruptor.
 
 ### 2. 🟢 Supervisor con permisos completos en Producción, Almacén y Embarques
 - [ ] Agregar `supervisor` a `role:admin,produccion` (rutas de Producción) y `role:admin,inventario` (rutas de Embarques) en `routes/web.php`.

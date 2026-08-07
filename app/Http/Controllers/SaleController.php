@@ -105,7 +105,7 @@ class SaleController extends Controller
         ]);
 
         try {
-            return DB::transaction(function () use ($request) {
+            $sale = DB::transaction(function () use ($request) {
                 $totalSale = 0;
 
                 // 1. Crear Venta (Estado inicial: pedido)
@@ -164,8 +164,18 @@ class SaleController extends Controller
                     $sale->update(['stage' => 'confirmado']);
                 }
 
-                return redirect()->route('sales.index')->with('success', 'Pedido registrado correctamente (Folio #' . $sale->id . ')');
+                return $sale;
             });
+
+            try {
+                if (Setting::getValue('auto_email_on_sale', true)) {
+                    $this->sendSaleNoteMail($sale);
+                }
+            } catch (\Exception $mailException) {
+                \Illuminate\Support\Facades\Log::error('Error enviando correo automático: ' . $mailException->getMessage());
+            }
+
+            return redirect()->route('sales.index')->with('success', 'Pedido registrado correctamente (Folio #' . $sale->id . ')');
 
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
@@ -287,6 +297,20 @@ class SaleController extends Controller
     public function sendEmail($id)
     {
         $sale = Sale::with(['details', 'client'])->findOrFail($id);
+        
+        try {
+            $emails = $this->sendSaleNoteMail($sale);
+            if (empty($emails)) {
+                return back()->withErrors(['error' => 'No hay correos configurados para enviar.']);
+            }
+            return back()->with('success', 'Correo enviado correctamente a: ' . implode(', ', $emails));
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+    }
+
+    private function sendSaleNoteMail(Sale $sale)
+    {
         $settings = Setting::all()->pluck('value', 'key');
         
         // Preparar Datos (Igual que printNote)
@@ -324,15 +348,10 @@ class SaleController extends Controller
         
         $emails = array_unique(array_filter($emails));
 
-        if (empty($emails)) {
-            return back()->withErrors(['error' => 'No hay correos configurados para enviar.']);
+        if (!empty($emails)) {
+            Mail::to($emails)->send(new SaleNoteEmail($sale, $pdfOutput));
         }
 
-        try {
-            Mail::to($emails)->send(new SaleNoteEmail($sale, $pdfOutput));
-            return back()->with('success', 'Correo enviado correctamente a: ' . implode(', ', $emails));
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Error al enviar correo: ' . $e->getMessage()]);
-        }
+        return $emails;
     }
 }
