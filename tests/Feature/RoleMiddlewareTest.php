@@ -41,4 +41,19 @@ class RoleMiddlewareTest extends TestCase
         $this->actingAs($admin)->get('/production-plan')->assertStatus(200);
         $this->actingAs($admin)->get('/users')->assertStatus(200);
     }
+    public function test_supervisor_can_access_production_and_inventory_but_not_sales()
+    {
+        $supervisor = User::factory()->create(['role' => 'supervisor']);
+
+        // Rutas permitidas
+        $this->actingAs($supervisor)->get('/production-plan')->assertStatus(200);
+        $this->actingAs($supervisor)->get('/shipments')->assertStatus(200);
+        $this->actingAs($supervisor)->get('/products')->assertStatus(200);
+
+        // Rutas prohibidas
+        $this->actingAs($supervisor)->get('/sales')->assertForbidden();
+        $this->actingAs($supervisor)->get('/configuracion')->assertForbidden();
+        $this->actingAs($supervisor)->get('/users')->assertForbidden();
+        $this->actingAs($supervisor)->get('/clients')->assertForbidden();
+    }
 }

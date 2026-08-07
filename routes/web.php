@@ -81,10 +81,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // El rol "produccion" solo necesita esta pantalla por ahora.
     // Cuando se construyan las tareas de Fase 2 (piezas terminadas, embarques),
     // sus rutas nuevas se agregan aquí mismo, dentro de este mismo grupo.
-    Route::middleware('role:admin,produccion')->group(function () {
+    Route::middleware('role:admin,produccion,supervisor')->group(function () {
         Route::get('/production-plan', [ProductionController::class, 'index'])->name('production.plan');
         Route::post('/production-plan/complete', [ProductionController::class, 'storeCompletion'])->name('production.complete');
         Route::get('/production-plan/print', [ProductionController::class, 'printReport'])->name('production.print');
+    });
+
+    // ==========================================
+    //    📋 ZONA DE INVENTARIO (ADMIN + SUPERVISOR)
+    // ==========================================
+    Route::middleware('role:admin,supervisor')->group(function () {
+        // B. GESTIÓN DE PRODUCTOS (Inventario)
+        // Usamos resource para generar todas las rutas estándar:
+        // products.index, create, store, edit, update, destroy
+        Route::resource('products', ProductController::class);
+
+        Route::put('products/{product}/favorite', [ProductController::class, 'toggleFavorite'])
+        ->name('products.toggle-favorite');
     });
 
     // ==========================================
@@ -94,14 +107,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // A. GESTIÓN DE USUARIOS
         Route::resource('users', UserController::class);
-
-        // B. GESTIÓN DE PRODUCTOS (Inventario)
-        // Usamos resource para generar todas las rutas estándar:
-        // products.index, create, store, edit, update, destroy
-        Route::resource('products', ProductController::class);
-
-        Route::put('products/{product}/favorite', [ProductController::class, 'toggleFavorite'])
-        ->name('products.toggle-favorite');
         
         // Eliminación de variante individual (AJAX)
         // Nota: Agrega este método 'destroyVariant' en ProductController si no existe, 
@@ -119,7 +124,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     }); // Fin middleware admin
 
-    Route::middleware('role:admin,inventario')->group(function () {
+    Route::middleware('role:admin,inventario,supervisor')->group(function () {
         Route::controller(ShipmentController::class)->group(function () {
             Route::get('/shipments/create','create')->name('shipments.create');
             Route::post('/shipments', 'store')->name('shipments.store');
