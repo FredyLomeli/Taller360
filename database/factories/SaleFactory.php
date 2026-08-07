@@ -28,7 +28,7 @@ class SaleFactory extends Factory
             'paid_amount' => $this->faker->randomFloat(2, 100, 5000),
             'change_amount' => 0,
             'payment_method' => 'Efectivo',
-            'status' => 'pagado',
+            'stage' => 'pedido',
             'created_at' => now(),
             'updated_at' => now(),
         ];

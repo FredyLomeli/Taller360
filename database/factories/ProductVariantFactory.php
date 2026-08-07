@@ -22,7 +22,7 @@ class ProductVariantFactory extends Factory
         return [
             'product_id' => Product::factory(), // Crea el padre si no existe
             'material' => fake()->randomElement(['MDF', 'Madera', 'Melamina', 'Pino', 'Roble']),
-            'color' => fake()->randomElement(['Chocolate', 'Blanco', 'Gris', 'Nogal', 'Caoba', 'Negro']),
+            'measurements' => fake()->numberBetween(80, 240) . 'x' . fake()->numberBetween(40, 120) . ' cm',
             'sku' => strtoupper(fake()->bothify('PROD-####-??')),
             'stock' => fake()->numberBetween(0, 50),
             

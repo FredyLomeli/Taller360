@@ -20,7 +20,7 @@ public function definition(): array
             // Importante: No usar unique() aquí tampoco
             'category_id' => Category::factory(), 
             'name' => $name, // Se pueden repetir nombres, no pasa nada
-            'measurements' => fake()->numberBetween(80, 240) . 'x' . fake()->numberBetween(40, 120) . ' cm',
+
             'description' => fake()->text(100),
             'image' => null,
         ];
