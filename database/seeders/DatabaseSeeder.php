@@ -25,8 +25,8 @@ class DatabaseSeeder extends Seeder
         // VARIABLE DE CONTROL (OPCIONALIDAD)
         // ==========================================
         // Cambia esto a 'true' SOLO si quieres llenar el sistema con ventas falsas para pruebas.
-        $simularVentas = true; 
-        $generarVendedor = true; 
+        $simularVentas = false; 
+        $generarVendedor = false; 
 
         // 1. Configuraciones Globales
         echo "⚙️ Configurando el sistema...\n";

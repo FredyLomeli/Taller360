@@ -1,4 +1,5 @@
 *.log
+app.zip
 .DS_Store
 .env
 .env.backup

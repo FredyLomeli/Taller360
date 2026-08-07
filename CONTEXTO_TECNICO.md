@@ -1,32 +1,111 @@
 # 🧠 CONTEXTO TÉCNICO — TALLER 360
-**Versión Real:** 2.6 | **Auditado contra código real:** Julio 2026
+**Versión Real:** 2.6 | **Auditado directamente contra el código fuente (zip del proyecto):** 25 de julio 2026
 **Para:** Retomar desarrollo con IA o desarrollador nuevo sin perder contexto.
-**IMPORTANTE:** Este archivo refleja el código REAL auditado (controladores, rutas y migraciones). Compartirlo siempre al iniciar una nueva sesión.
+**IMPORTANTE:** A diferencia de la versión anterior de este documento (que auditaba solo texto/reportes previos), esta versión se verificó línea por línea contra controladores, modelos, migraciones, rutas y componentes Vue reales. Compartir siempre este archivo al iniciar una nueva sesión.
+
+---
+
+## 0.1 Acuerdos de la reunión con cliente (04 ago 2026) — pendientes de construir
+
+Estos 5 puntos salieron de una reunión con el cliente y ya tienen diseño técnico acordado con el desarrollador. Van en orden de prioridad para la siguiente ronda de código.
+
+### A. Supervisor con permisos completos en Producción, Almacén y Embarques
+**Decisión:** Supervisor deja de ser "sin módulo" y pasa a tener los mismos permisos que Admin en esos tres módulos específicos — no en Ventas/Kanban ni Configuración salvo que se indique lo contrario. Cambio: agregar `supervisor` a los grupos de middleware `role:admin,produccion` (Producción) y `role:admin,inventario` (Embarques), y dar acceso de escritura en Productos/Inventario donde hoy es de solo lectura.
+
+### B. Bug — pedido "entregado" cancelado cae en limbo (`enviado` invisible)
+**Causa raíz confirmada:** `ShipmentController::cancel()` revierte la etapa leyendo `SaleHistory::latest()->from_stage`, y para un pedido que llegó a `entregado`, esa transición previa fue `enviado → entregado` — revierte a `enviado`, etapa que el Kanban actual ya no muestra (`Sales/Index.vue` solo maneja `pedido/confirmado/producción/cancelado`). Contribuye el hecho de que `store()` crea un `SaleHistory` manual duplicado sin `from_stage`, además del automático de `SaleObserver`.
+**Decisión de arreglo (acordada):** reemplazar la lectura de historial por un recálculo en vivo, igual al patrón que ya usa `closeOrderIfComplete()` — al cancelar, si quedan piezas sin entregar, la etapa siempre vuelve a `producción` (ya sea que falte fabricar o que ya esté en stock esperando reembarque), nunca a un valor histórico. Adicionalmente, quitar el `SaleHistory::create()` manual y duplicado de `store()`, dejando que `SaleObserver` sea la única fuente de verdad del historial de etapas.
+
+### C. Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales
+**Necesidad del cliente:** (1) puede producir por anticipado sin que exista un pedido todavía (conoce la demanda de temporada), y (2) cuando un envío parcial deja piezas sin fabricar, no quiere que el sistema las marque automáticamente como urgentes en el taller — quiere decidir él cuándo se fabrica el remanente.
+
+**Diseño acordado — nueva tabla `work_orders`:**
+```
+id, product_variant_id (FK), quantity_requested (int),
+target_date (date, nullable), status (string: 'abierta'|'cerrada', default:'abierta'),
+origin_sale_detail_id (FK → sale_details, nullable — si nace de un remanente parcial),
+notes (text, nullable), created_by (FK → users), timestamps
+```
+- Aparece en el Plan de Producción mezclada con las necesidades de pedidos normales (mismo query, unión de dos fuentes).
+- Al cerrarla se registra cuánto se terminó realmente y esas piezas entran directo a `product_variants.stock` — mismo mecanismo que ya usa `production_completions`, pero sin requerir una venta.
+- `production_completions.sale_detail_id` pasa a ser nullable; se agrega `work_order_id` (FK, nullable) — una fila de avance pertenece a una u otra fuente, nunca a ambas.
+
+**Diseño acordado — pausa de remanentes (`sale_details.production_hold`):**
+```
+sale_details.production_hold (boolean, default: false)
+```
+- Se activa automáticamente la primera vez que una línea recibe un envío parcial (queda pieza sin entregar Y sin fabricar todavía).
+- Mientras está en `true`, `ProductionController::index()` excluye esa cantidad remanente de "pendiente de fabricar" — aparece en una sección aparte ("en espera de decisión"), no mezclada con lo urgente.
+- Cualquier usuario con acceso a Producción (`role:admin,produccion,supervisor` tras el cambio A) puede "liberar a producción" — apaga el flag y/o genera un `work_order` con `origin_sale_detail_id` apuntando a esa línea.
+
+### D. Stock mínimo por variante, solo para productos preferentes
+**Decisión:** el campo nuevo vive en `product_variants`, no en `products` — el stock siempre se ha manejado por variante (confirmado: la alerta actual de Dashboard ya consulta `ProductVariant`, no `Product`). "Preferente" sigue siendo el `is_favorite` que ya existe; no se crea concepto nuevo, solo se usa como filtro de visibilidad del campo.
+```
+product_variants.min_stock (int, nullable)
+```
+- El formulario de variantes solo pide/muestra `min_stock` cuando el producto padre tiene `is_favorite = true`.
+- La alerta de stock crítico del Dashboard cambia de `stock <= 5` (fijo) a `stock <= COALESCE(min_stock, 5)` — mantiene el comportamiento actual como default si un producto se marca preferente sin definir aún su mínimo por variante.
+- Cambiar de temporada es simplemente desmarcar/marcar `is_favorite` — no requiere migrar ni tocar `min_stock` de variantes que ya no importan.
+
+### E. Envío automático de la nota de venta al crear el pedido
+**Hallazgo:** la lógica ya existe completa en `SaleController::sendEmail()` (correo del cliente + `settings.notification_emails` + PDF adjunto vía `SaleNoteEmail`), pero solo se dispara manualmente desde un botón en `Sales/Index.vue` — nunca se llama dentro de `store()`.
+**Decisión de diseño:**
+1. Extraer la lógica de `sendEmail()` a un método privado reutilizable (p. ej. `sendSaleNoteMail(Sale $sale)`), usado tanto por el envío automático como por el botón manual.
+2. Nuevo `Setting`: `auto_email_on_sale` (boolean, default: `true` — habilitado desde el día uno para que el cliente empiece a probarlo).
+3. Al final de `store()`, fuera de la transacción de BD (el envío de correo es I/O, no debe competir por locks), si `auto_email_on_sale` está activo: enviar el correo. Si falla (SMTP mal configurado, etc.), **no debe revertir ni bloquear la creación del pedido** — solo registrar el error.
+4. El botón manual en `Sales/Index.vue` se queda intacto y funciona **sin importar el estado del interruptor** — sirve para reenviar la nota cuando haga falta, independientemente de si el envío automático está prendido o apagado.
+5. `SettingController` ya lista las claves permitidas (`'notification_emails', 'allow_negative_stock', 'ticket_footer_text'`) — agregar `'auto_email_on_sale'` a esa lista.
+
+## 0. Hallazgos de la ronda 2 de auditoría (25 jul 2026, con `UserController.php`, `package.json`, `vite.config.js`)
+
+### ✅ Cerrado — `UserController.php` sí existe
+La ronda 1 marcó como crítico que `UserController.php` no viniera en el zip pese a estar referenciado en `routes/web.php`. Confirmado con el archivo real: existe, CRUD completo (`index`, `create`, `store`, `edit`, `update`, `destroy`), con protección contra auto-eliminación (`if (auth()->id() == $user->id)`) y `VALID_ROLES = 'admin,vendedor,produccion,inventario,supervisor,financiero'` — coincide exactamente con los 6 roles usados en el resto del sistema. `User::$fillable` incluye `role`. Sin pendientes aquí.
+
+### 🆘 Conflicto de versiones de Tailwind CSS — confirmado con `tailwind.config.js` real
+
+`package.json` confirma **dos setups de Tailwind instalados a la vez**:
+```json
+"tailwindcss": "^3.2.1",        // v3 clásico
+"@tailwindcss/vite": "^4.0.0",  // plugin exclusivo de v4
+"postcss": "^8.4.31",
+"autoprefixer": "^10.4.12"
+```
+`vite.config.js` confirma que **no** se usa el plugin `@tailwindcss/vite` (solo `laravel()` y `vue()` están registrados). `resources/css/app.css` confirma sintaxis v3. El proyecto corre en Tailwind v3 real; `@tailwindcss/vite ^4.0.0` es peso muerto.
+
+`tailwind.config.js` confirmado — configuración **mínima**:
+```js
+theme: { extend: { fontFamily: { sans: ['Figtree', ...defaultTheme.fontFamily.sans] } } },
+plugins: [forms], // @tailwindcss/forms ^0.5.3
+```
+Sin colores, espaciados, breakpoints ni `@apply` custom. La fuente Figtree se carga vía `<link>` externo a fonts.bunny.net en `resources/views/app.blade.php`, no como `@font-face` local — no requiere migración especial. **Esto significa que una migración completa a Tailwind v4 sería de bajo riesgo** si se decide hacer, y no solo quedarse en v3. Ruta exacta de migración en `GUIA_RUTA.md`.
 
 ---
 
 ## 1. Stack Tecnológico
 
-| Capa | Tecnología | Notas |
+| Capa | Tecnología | Confirmado en |
 |------|-----------|-------|
-| Backend | Laravel 12 (PHP 8.2+) | MVC + Eloquent ORM |
-| Frontend | Vue 3 (`<script setup>`) | Composition API |
-| Puente | Inertia.js | No hay API REST; los controladores devuelven `Inertia::render()` |
-| Estilos | Tailwind CSS | Sin CSS custom salvo scrollbars y print |
-| BD | MySQL / MariaDB InnoDB | |
-| PDFs | barryvdh/laravel-dompdf | `composer.json` fija `^3.1.1` (verificar que `composer.lock` resuelva a 3.1.2 como indica el changelog previo) |
-| Firma Digital | vue-signature-pad | Captura firma del cliente en el POS |
-| Alertas | sweetalert2 | Confirmaciones y toasts en todo el sistema |
-| Utilidades JS | lodash (debounce/throttle) | Búsquedas con delay |
-| Hosting objetivo | Neubox (Hosting Compartido / cPanel) | |
+| Backend | Laravel 12.62.0 (PHP 8.2+) | `composer.lock` |
+| Frontend | Vue `^3.4.0` (`<script setup>`) | `package.json` |
+| Puente | Inertia.js `@inertiajs/vue3 ^2.0.0` | `package.json`, sin rutas `/api/` en `routes/web.php` |
+| Build | Vite `^7.0.7` + `laravel-vite-plugin ^2.0.0` + `@vitejs/plugin-vue ^6.0.7` | `package.json`, `vite.config.js` |
+| Estilos | Tailwind CSS `^3.2.1` (activo) — ⚠️ `@tailwindcss/vite ^4.0.0` instalado sin usar, ver sección 0 | `package.json`, `resources/css/app.css` |
+| BD | MySQL / MariaDB InnoDB | migraciones |
+| PDFs | barryvdh/laravel-dompdf 3.1.2 (dompdf/dompdf 3.1.5) | `composer.lock`, confirmado exacto |
+| Firma Digital | vue-signature-pad `^3.0.2` | `package.json`, `Sales/Create.vue` |
+| Alertas | sweetalert2 `^11.26.17` | `package.json` |
+| Utilidades JS | lodash `^4.17.21` | `package.json` |
+| Hosting objetivo | Neubox (Hosting Compartido / cPanel) | `.env` de producción documentado en README |
 
-> **Arquitectura clave:** Inertia.js conecta Laravel con Vue sin API REST. Los controladores devuelven `Inertia::render('Carpeta/Vista', $datos)`. Los componentes Vue reciben los datos como `props`. No hay rutas `/api/` para uso normal del frontend.
+> `vite.config.js` confirmado: solo registra los plugins `laravel()` (apuntando a `resources/css/app.css` y `resources/js/app.js`, con `refresh: true`) y `vue()` (con `transformAssetUrls` configurado). No incluye el plugin de Tailwind v4 — consistente con que el proyecto corre en v3 vía PostCSS.
 
-> ⚠️ **Nota sobre `/`:** la ruta raíz (`web.php`) actualmente devuelve una vista Blade `catalogo.index` directamente (no Inertia). No se auditó el contenido de esa vista en esta sesión — verificar si es un placeholder o si la Fase 4 (Catálogo Público) ya tiene algo de avance no documentado.
+> **Arquitectura clave:** Inertia.js conecta Laravel con Vue sin API REST. Los controladores devuelven `Inertia::render('Carpeta/Vista', $datos)`.
+
+> ✅ **Confirmado sobre `/`:** la ruta raíz devuelve `view('catalogo.index')` — es una **vista Blade estática con datos hardcodeados** (categorías fijas "Roperos/Trincheros/Bases", un solo producto de ejemplo "Ropero Clásico Santa Cecilia"). No consulta `products`, `categories` ni `product_variants`. La Fase 4 (Catálogo Público) no tiene avance funcional real, solo este mockup visual.
 
 ---
 
-## 2. Estructura de Base de Datos (Schema Real Completo)
+## 2. Estructura de Base de Datos (Schema Real Completo — confirmado contra migraciones)
 
 ### 👤 `users`
 ```
@@ -35,7 +114,7 @@ role (string: 'admin'|'vendedor'|'produccion'|'inventario'|'supervisor'|'financi
 email_verified_at, remember_token, timestamps
 ```
 - `role` es un string directo en la tabla, NO una tabla separada de roles.
-- 6 roles válidos definidos en `UserController::VALID_ROLES` (no auditado en esta sesión, confirmar que coincide con esta lista).
+- ⚠️ No se pudo confirmar `VALID_ROLES` porque `UserController.php` no está en el código auditado (ver hallazgo crítico, sección 0).
 
 ### 👥 `clients`
 ```
@@ -45,8 +124,7 @@ street_address, neighborhood, city, state, delegation, zip_code (todos nullable)
 references (text, nullable), timestamps
 ```
 - `price_tier` 1-5 → se muestra como Listas A, B, C, D, E en el frontend.
-- Confirmado en `ClientController`: `price_tier` es obligatorio (`required|integer|min:1|max:5`) tanto en `store` como en `update`.
-- **`catalog_token` NO existe todavía** — confirmado, Fase 4.2 sigue sin construir.
+- **`catalog_token` NO existe todavía** — Fase 4.2 sigue sin construir.
 
 ### 🗂️ `categories`
 ```
@@ -56,22 +134,23 @@ id, name, timestamps
 ### 📦 `products`
 ```
 id, category_id (FK → categories),
-name, measurements (nullable), description (nullable),
+name, description (nullable),
 image (nullable, ruta relativa al disco public),
 is_favorite (boolean, default:false), timestamps
 ```
-> ⚠️ NO existe campo `color`. El color es atributo de la venta (`sale_details.chosen_color`).
+> ⚠️ NO existe campo `color` ni `measurements` (movido a `product_variants`, confirmado en migración). El color es atributo de la venta (`sale_details.chosen_color`).
 
 ### 🎨 `product_variants`
 ```
 id, product_id (FK → products, cascade delete),
-material (string), sku (nullable), stock (int, default:0),
+measurements (string, obligatorio), material (string, obligatorio),
+stock (int, default:0), sku (nullable), stock_notes (nullable),
 price_1 (decimal, obligatorio), price_2..price_5 (decimal, nullable),
 timestamps
 ```
-- Un producto tiene N variantes (una por material).
-- El stock sube al registrar producción (`production_completions`) y baja al confirmar un embarque (`shipments.store`).
-- ⚠️ **También baja stock el motor de etapas (`SaleController::updateStage`) al mover una venta a `stage = 'enviado'`.** Ver sección 5 — es un flujo paralelo al de embarques y es la causa raíz de la mayoría de los problemas de consistencia de inventario documentados en el Backlog.
+- Un producto tiene N variantes (material + medida).
+- El stock sube al registrar producción (`production_completions`, confirmado en `ProductionController::storeCompletion`) y baja al confirmar un embarque (`ShipmentController::store`, confirmado con `lockForUpdate`).
+- ✅ **Confirmado resuelto:** el motor de etapas del Kanban (`SaleController::updateStage`) **ya no toca stock**. Embarques es el único mecanismo de salida. (Antes era un bug crítico documentado; ver sección 5.)
 
 ### 💼 `sales`
 ```
@@ -83,11 +162,12 @@ stage (enum: pedido|confirmado|produccion|enviado|entregado|cancelado, default:'
 promised_date (date, nullable), is_partial_shipping (boolean, default:false),
 timestamps
 ```
+⚠️ `promised_date` solo se captura al crear el pedido (`SaleController::store()`). **Confirmado: no existe forma de editarla después** — pendiente real, no se toca en `updateStage()` ni en ningún otro método.
 
 ### 📋 `sale_details`
 ```
 id, sale_id (FK → sales, cascade), product_variant_id (FK → product_variants),
-product_name (snapshot), quantity (int),
+product_name (snapshot, incluye medida y material), quantity (int),
 chosen_color (nullable), custom_notes (text, nullable),
 additional_cost (decimal, default:0),
 discount_percent (int, default:0), unit_price (decimal), subtotal (decimal),
@@ -106,13 +186,15 @@ id, sale_id (FK → sales, cascade), user_id (FK → users),
 amount (decimal), payment_method (string),
 reference (nullable), paid_at (timestamp), timestamps
 ```
-- **Los pagos están ligados a una venta (`sale_id`), no a un cliente directamente.** El "estado de cuenta por cliente" que necesita el módulo de Finanzas (Fase 3.2) se construye agregando esta tabla + `sales.paid_amount` agrupado por `client_id` — no requiere cambio de esquema. Ver sección 9.
+- Los pagos están ligados a `sale_id`, no a un cliente directamente. El "estado de cuenta por cliente" (Fase 3.2, Finanzas) se construye agregando esta tabla + `sales.paid_amount` por `client_id` — no requiere cambio de esquema.
+- Registrado por `SalePaymentController::store()`, confirmado con validación de deuda (`amount <= total - paid_amount`) y transacción atómica.
 
 ### ⚙️ `settings`
 ```
 id, key (unique), value (text, nullable), timestamps
 ```
 Claves usadas: `company_name`, `company_rfc`, `company_address`, `company_phone`, `company_logo`, `notification_emails`, `allow_negative_stock`, `ticket_footer_text`.
+> 🆕 Acordado, pendiente de construir: `auto_email_on_sale` (boolean, default `true`) — interruptor del envío automático de la nota de venta al crear el pedido. Ver punto E en la sección 0.1.
 
 ### 🛠️ `production_completions` (v2.6)
 ```
@@ -122,37 +204,33 @@ user_id (FK → users),
 completed_at (timestamp),
 timestamps
 ```
-- Registra cuando el taller termina una pieza física.
-- NO cambia el `stage` global del pedido — solo acumula piezas listas en bodega.
-- Al completar, suma al `stock` de `product_variants`.
-- ⚠️ Esta tabla es la única fuente confiable de "cuánto se ha fabricado en total" para un pedido. **No usar `product_variants.stock` para inferir eso** — el stock se ve afectado también por embarques y por el motor de etapas. Ver bug crítico en sección 5.
+- Registra cuando el taller termina una pieza física. NO cambia el `stage` global del pedido — solo acumula piezas listas en bodega y suma al `stock` de `product_variants`.
+- Es la única fuente confiable de "cuánto se ha fabricado en total" para un pedido — no usar `product_variants.stock` para eso, porque el stock también se ve afectado por embarques.
 
 ### 🚚 `shipments` (v2.6)
 ```
 id, driver_name (nullable), license_plate (nullable), destination (nullable),
-status (string, default:'en_transito' — valores usados: 'en_transito','entregado'),
-shipped_at (nullable timestamp), delivered_at (nullable timestamp),
-notes (text, nullable),   ← existe en la migración, no estaba documentado antes
-user_id (FK → users),
-timestamps
+status (string, default:'en_transito' — valores usados: 'en_transito','entregado','cancelado'),
+shipped_at (nullable), pickup_type (string, default:'flota_propia'),
+delivered_at (nullable), notes (text, nullable),
+user_id (FK → users), timestamps
 ```
-- Entidad que agrupa la carga física de una camioneta en un viaje.
-- Al confirmar entrega (`status = 'entregado'`), evalúa si cada pedido involucrado puede cerrarse (`sale.stage = 'entregado'` si ya se entregó el 100% de ese detalle).
-- ⚠️ El comentario en la migración menciona `'cancelado'` como valor posible de `status`, pero **no existe ningún método de cancelación de embarque en `ShipmentController`** ni ruta para ello. La regla de negocio "si se cancela un embarque, el stock regresa" está documentada pero no implementada.
+- ✅ **Confirmado:** `pickup_type` (`'flota_propia'` / `'recoleccion_cliente'`) existe en la migración y está **implementado completo** en backend y frontend (ver sección 5, ya no es un pendiente).
+- ✅ **Confirmado:** `cancel()` existe en `ShipmentController` — el valor `'cancelado'` del `status` sí se usa en código real, ya no es solo un comentario de migración sin implementar.
 
 ### 📦 `sale_deliveries` (v2.6)
 ```
-id, shipment_id (FK → shipments, cascade, OBLIGATORIO no nullable),
+id, shipment_id (FK → shipments, cascade, obligatorio, no nullable),
 sale_detail_id (FK → sale_details, cascade),
 quantity_delivered (int),
 timestamps
 ```
 - Tabla pivote. Permite envíos parciales del mismo pedido en distintos viajes.
-- ⚠️ **Solo tiene estas 3 columnas + timestamps.** No tiene `user_id` ni `delivered_at`. Ver bug crítico en sección 5 (`SaleController::storeDelivery()` intenta escribir columnas que no existen).
+- Solo tiene estas 3 columnas + timestamps. El antiguo `SaleController::storeDelivery()` que intentaba escribir `user_id`/`delivered_at` (columnas inexistentes aquí) **ya no existe en el código** — método, ruta y botón del frontend fueron eliminados.
 
 ---
 
-## 3. Relaciones Eloquent (confirmadas / corregidas contra código real)
+## 3. Relaciones Eloquent (confirmadas contra código real)
 
 ```
 User          → hasMany(Sale), hasMany(Shipment), hasMany(ProductionCompletion)
@@ -164,21 +242,11 @@ Sale          → belongsTo(User), belongsTo(Client)
               → hasMany(SaleDetail)
               → hasMany(SaleHistory)  ['history']
               → hasMany(SalePayment)  ['payments']
-              → getIsPaidAttribute()  [accessor: paid_amount >= total]
 SaleDetail    → belongsTo(Sale)
-              → belongsTo(ProductVariant) — ⚠️ el método real en el código es `variant()`, NO `productVariant()`.
-                Confirmado en ProductionController y ShipmentController, que usan `->with(['variant.product', ...])`
-                y `$detail->variant`. Si algún desarrollador nuevo asume `productVariant`, el eager-load fallará
-                silenciosamente (relación no encontrada) o lanzará error según el contexto. AJUSTAR EN CUALQUIER
-                DOCUMENTO O PROMPT que diga `productVariant`.
-
-                ⚠️ OJO — esto es distinto de la columna cruda: en el JSON que Inertia manda al frontend, el campo
-                de la llave foránea es `product_variant_id` (así se llama la columna real en `sale_details`), NO
-                `variant_id`. Causó un bug real en `Shipments/Create.vue` (Julio 2026): el código armaba
-                `{ sale_detail_id, quantity, variant_id: detail.variant_id }` con un campo que no existe —
-                `detail.variant_id` era `undefined`, confirmado con Vue Devtools. Resumen para no repetir el error:
-                `variant` = nombre de la relación Eloquent (`$detail->variant`). `product_variant_id` = nombre de
-                la columna/llave foránea cruda (`detail.product_variant_id` en el frontend).
+              → belongsTo(ProductVariant) — el método real es `variant()`, NO `productVariant()`.
+                Confirmado en ProductionController y ShipmentController (`->with(['variant.product', ...])`).
+                ⚠️ Distinto de la columna cruda: la FK en el JSON hacia el frontend es `product_variant_id`
+                (nombre real de la columna en `sale_details`), NO `variant_id`.
               → hasMany(ProductionCompletion) ['completions']
               → hasMany(SaleDelivery) ['deliveries']
 SaleHistory   → belongsTo(User)
@@ -187,170 +255,114 @@ Shipment      → belongsTo(User)
               → hasMany(SaleDelivery) ['deliveries']
 SaleDelivery  → belongsTo(Shipment), belongsTo(SaleDetail)
 ProductionCompletion → belongsTo(SaleDetail), belongsTo(User)
-Setting       → getValue(), setValue(), getAll()  [métodos estáticos]
+Setting       → getValue(), setValue(), getAll() [métodos estáticos]
 ```
 
 ---
 
-## 4. Rutas (`routes/web.php`) — Estado real
-
-### Zonas de acceso por rol (confirmado en código)
+## 4. Rutas (`routes/web.php`) — Estado real confirmado
 
 | Zona | Middleware real | Rutas incluidas |
 |------|-----------|----------------|
-| Pública | — | `/` (catálogo Blade), login, register |
+| Pública | — | `/` (catálogo Blade estático), login, register |
 | Dashboard | `auth,verified` (todos) | `/dashboard` — el controlador decide qué mostrar según rol |
 | Perfil | `auth,verified` | `/profile` |
 | Ventas | `role:admin,vendedor` | `/pos`, `/sales/*`, `/clients` (crear/editar), pagos |
 | Taller | `role:admin,produccion` | `/production-plan`, `/production-plan/complete`, `/production-plan/print` |
-| Admin | `role:admin` | `/users`, `/products`, `/clients/{id}` (destroy), `/configuracion` |
-| **Embarques** | ⚠️ **NINGUNO** — solo `auth,verified` | `/shipments/*` (index, create, store, show, confirm, print) |
+| Admin | `role:admin` | `/users` (✅ `UserController` confirmado completo), `/products`, `/clients/{id}` (destroy), `/configuracion` |
+| **Embarques** | ✅ `role:admin,inventario` | `/shipments/*` (index, create, store, show, confirm, print, **cancel**) |
 
-> 🚨 **Hallazgo crítico:** las rutas de `/shipments/*` no están dentro de ningún grupo `role:...`. Cualquier usuario autenticado, sin importar su rol (`vendedor`, `financiero`, `inventario`, `supervisor`), puede crear y confirmar embarques hoy mismo. Debe corregirse — ver Backlog, sección de bugs críticos, y la matriz de roles propuesta en la sección 9 de este documento.
+> ✅ **Confirmado resuelto:** las rutas de `/shipments/*` ya están restringidas a `admin,inventario`. Antes era un bug crítico (cualquier usuario autenticado podía crear/confirmar embarques); ya no es el caso.
 
-### Rutas de Embarques (confirmadas)
+### Rutas de Embarques (confirmadas completas)
 
 | Método | URI | Nombre | Descripción |
 |--------|-----|---------|-------------|
 | GET | `/shipments` | `shipments.index` | Historial de viajes |
-| GET | `/shipments/create` | `shipments.create` | UI para armar embarque |
-| POST | `/shipments` | `shipments.store` | Guardar embarque (transaccional) |
+| GET | `/shipments/create` | `shipments.create` | UI para armar embarque (soporta `?client_ids[]=`) |
+| POST | `/shipments` | `shipments.store` | Guardar embarque (transaccional, con `lockForUpdate`) |
 | GET | `/shipments/{id}` | `shipments.show` | Detalle del viaje |
-| GET | `/shipments/{id}/print` | `shipments.print` | PDF Remisión del viaje (única, agrupa todos los pedidos del viaje — ver Backlog Fase 2.5) |
-| PATCH | `/shipments/{id}/confirm` | `shipments.confirm` | Confirmar entrega y cerrar pedidos |
-| — | — | — | **No existe** ruta de cancelación de embarque |
+| GET | `/shipments/{id}/print` | `shipments.print` | PDF Remisión — **no agrupa por cliente/pedido, es un listado plano** (ver sección 5) |
+| PATCH | `/shipments/{id}/confirm` | `shipments.confirm` | Confirmar entrega y cerrar pedidos (revisa TODAS las líneas) |
+| PATCH | `/shipments/{id}/cancel` | `shipments.cancel` | ✅ Cancelar embarque y regresar stock — confirmado implementado |
 
 ---
 
-## 5. Reglas de Negocio Críticas
+## 5. Reglas de Negocio — Estado Real (25 jul 2026)
 
-### 🚨 Flujo de Stock — DOS mecanismos activos en paralelo (⏳ bug arquitectónico, aún PENDIENTE de corregir)
+### ✅ RESUELTO — Doble mecanismo de descuento de stock
 
-El sistema tiene **dos caminos independientes** que descuentan/regresan stock, y ninguno sabe del otro:
+`SaleController::updateStage()` confirmado: su `validate()` solo acepta `pedido,confirmado,produccion,cancelado` — ya no permite mover a mano a `enviado` o `entregado`, y no toca stock en absoluto. `ShipmentController::store()` es ahora el único punto que descuenta stock (con `ProductVariant::lockForUpdate()` para evitar condiciones de carrera entre líneas o usuarios concurrentes), y `ShipmentController::cancel()` es el único que lo regresa.
 
-**Camino A — Motor de etapas (`SaleController::updateStage`, lógica v1 heredada):**
-1. Al mover una venta a `stage = 'enviado'`: resta `detail.quantity` de `product_variants.stock` para cada línea de la venta completa.
-2. Al cancelar una venta que estaba en `enviado` o `entregado`: regresa el stock.
+### ✅ RESUELTO — Plan de Producción no descontaba lo ya fabricado
 
-**Camino B — Embarques (`ShipmentController::store`, v2.6, ya con validación de stock — ver abajo):**
-1. Al crear un embarque: valida y resta `item.quantity` de `product_variants.stock` por cada línea incluida en ese viaje específico (puede ser parcial).
-2. Al confirmar entrega: NO toca stock (ya se restó al crear el embarque).
-
-**Riesgo:** nada impide que ambos caminos se disparen para el mismo pedido. Si alguien mueve una venta a `enviado` desde el Kanban (Camino A) Y además se arma un embarque para esas mismas piezas (Camino B), el stock se descuenta dos veces. **Decisión ya tomada con el equipo, pendiente de implementar:** el paso a `enviado` debe volverse automático al crear el primer Embarque del pedido (no un cambio manual desde el Kanban), y se debe quitar el descuento de stock de `updateStage()` por completo.
-
-### ✅ RESUELTO Y PROBADO — El Plan de Producción no descontaba lo ya fabricado tras un envío parcial
-
-Ubicación: `ProductionController::index()` (la pantalla interactiva, no el PDF). Causa: `completed_quantity` nunca se cargaba ahí (sí en `printReport()`), así que `pending_to_fabricate` terminaba dependiendo solo de `quantity - stock_actual`, y el stock baja con cada embarque — cada envío parcial hacía que la pantalla volviera a pedir piezas ya fabricadas.
-
-**Fix aplicado y confirmado con datos reales:**
+`ProductionController::index()` y `printReport()` confirmados con:
 ```php
-// index() ahora carga esto (igual que ya hacía printReport()):
 ->withSum('completions as completed_quantity', 'quantity_completed')
-
-// La fórmula ya NO resta stock:
-'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0)),
-'in_stock' => $group->first()->variant->stock ?? 0, // se muestra aparte, informativo
+...
+'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted), // ya no resta stock
 ```
+Badge de 4 estados confirmado en `Production/Index.vue` (sin fabricar / parcial / listo para embarcar / fabricado y ya embarcado). Navegación de semana (`« Ant.` / `Sig. »`) confirmada implementada. ⚠️ El toggle "Ver todo acumulado" **no existe** en el código — sigue pendiente.
 
-**Mejoras de UX agregadas al confirmar el fix (Julio 2026):**
-- Badge de estatus en `Production/Index.vue` ahora distingue 4 casos, no 3: sin fabricar, parcial, listo para embarcar, y **fabricado y ya embarcado** (antes este último se veía igual que "sin fabricar", porque el badge solo comparaba contra `in_stock`, que vuelve a 0 tras embarcar).
-- `$grouped` se ordena (`sortBy`) para que lo pendiente aparezca primero y lo ya resuelto (fabricado + embarcado) quede al final de la lista — evita que producción interprete como urgente algo que ya está cerrado.
+### ✅ RESUELTO — `storeDelivery()` roto
 
-### ⏳ PENDIENTE — `storeDelivery()` está roto (columnas inexistentes)
+El método, la ruta `sales.deliveries.store` y el botón correspondiente en `Sales/Show.vue` **ya no existen** en el código.
 
-`SaleController::storeDelivery()` (ruta `sales.deliveries.store`) intenta:
-```php
-SaleDelivery::create([
-    'sale_detail_id' => $saleDetail->id,
-    'quantity_delivered' => $request->quantity,
-    'user_id' => auth()->id(),      // ❌ columna no existe en sale_deliveries
-    'delivered_at' => now(),        // ❌ columna no existe en sale_deliveries
-]);
-```
-La tabla `sale_deliveries` (migración real) solo tiene `shipment_id` (obligatorio, sin `nullable()`), `sale_detail_id`, `quantity_delivered`. Esta llamada truena en cualquier escenario. Es probable que este método sea un remanente de una versión anterior al módulo de Embarques (v2.6). **Aún no se ha tocado en la implementación en vivo.**
+### ✅ RESUELTO — Sin forma de cancelar un embarque
 
-### ✅ RESUELTO Y PROBADO — Inventario podía quedar negativo al armar un embarque
+`ShipmentController::cancel()` confirmado, con las reglas de negocio documentadas respetadas en código:
+- Flota propia: cancelable solo mientras `en_transito`, no una vez `entregado`.
+- Recolección en mostrador: cancelable incluso después de `entregado` (es la única forma de revertir un error de captura, ya que nace directo en ese estado).
+- Regresa stock con `increment()`, revierte el `stage` del pedido al `from_stage` real tomado de `sale_histories` (no un valor fijo adivinado).
+- Los `withSum('deliveries as delivered_quantity', ...)` en `ShipmentController::create()`, `SaleController::show()` y `closeOrderIfComplete()` confirmados con `whereHas('shipment', fn($q) => $q->where('status', '!=', 'cancelado'))` — un embarque cancelado no vuelve a contarse como entregado.
 
-Encontrado por el cliente probando el sistema (no estaba en la auditoría original de código). `ShipmentController::store()` nunca validaba stock real antes de descontar — cada línea del formulario se validaba de forma aislada contra el pedido, no contra el stock físico compartido entre pedidos distintos del mismo producto. Ejemplo real: producto con 5 en stock, 2 pedidos de 10 c/u, el formulario dejaba cargar 5+5 y el resultado era -5 en inventario.
+### ✅ IMPLEMENTADO COMPLETO — Recolección en mostrador vs. flota propia (`pickup_type`)
 
-**Fix aplicado (backend, dentro de la transacción de `store()`):**
-```php
-$allowNegative = Setting::where('key', 'allow_negative_stock')->value('value');
+A diferencia de lo que indicaba el Backlog anterior (marcado como "backend listo, falta selector en frontend"), **está confirmado completo en ambos lados**:
+- Backend: `ShipmentController::store()` crea el `Shipment` directo en `status = 'entregado'` con `delivered_at = now()` cuando `pickup_type === 'recoleccion_cliente'`, y ejecuta `closeOrderIfComplete()` en la misma transacción.
+- Frontend: `Shipments/Create.vue` confirmado con un toggle visual (`flota_propia` / `recoleccion_cliente`) que cambia el texto del formulario dinámicamente ("Chofer / Repartidor" vs. "Nombre de quien recoge").
 
-foreach ($request->items as $item) {
-    $detail = SaleDetail::with('variant')->findOrFail($item['sale_detail_id']);
+### ⚠️ PENDIENTE (confirmado, sin cambios respecto a lo documentado) — Notas de entrega no agrupadas por pedido
 
-    if ($detail->variant) {
-        // lockForUpdate re-lee el stock ya actualizado por líneas anteriores de este
-        // mismo foreach (o por otro usuario armando un embarque al mismo tiempo).
-        $variant = ProductVariant::lockForUpdate()->find($detail->variant->id);
+`ShipmentController::printManifest()` y la plantilla `resources/views/pdf/shipment_manifest.blade.php` fueron revisados: **no hay agrupación por cliente/pedido**, es un `@foreach($shipment->deliveries as $del)` plano. Si un viaje agrupa piezas de varios clientes, la remisión los mezcla en una sola lista. Sigue pendiente construir la agrupación real.
 
-        if (!$allowNegative && $variant->stock < $item['quantity']) {
-            throw new \Exception("Stock insuficiente de {$detail->product_name}. Disponible real: {$variant->stock}, solicitado: {$item['quantity']}.");
-        }
-        $variant->decrement('stock', $item['quantity']);
-    }
-    // ... SaleDelivery::create(...), SaleHistory::create(...) ...
-}
-```
-Todo el `store()` está envuelto en `try/catch` que devuelve el error a Inertia (`back()->withErrors(...)`) en vez de dejarlo subir como error 500 sin control. En el frontend, `Shipments/Create.vue` necesita un `onError` en el `form.post(...)` para mostrar ese mensaje (ver más abajo).
+### ⚠️ PENDIENTE (confirmado) — Filtro multi-cliente en Embarques
 
-**Fix complementario (frontend, `Shipments/Create.vue`):** el formulario también validaba cada línea de forma aislada contra `detail.variant?.stock` (el número fijo cargado al abrir la página), sin saber que otra línea del mismo formulario ya había apartado parte de ese mismo stock compartido. Se agregó un `computed` (`consumedByVariant`) que suma cuánto se ha cargado de cada `product_variant_id` entre todas las líneas del formulario, y `getAvailableToSend()` resta eso antes de calcular el máximo de cada línea — así el segundo pedido del mismo producto ya no puede exceder lo que dejó libre el primero. **Ojo con el nombre del campo:** la columna real es `product_variant_id`, no `variant_id` — el primer intento de este fix usó el nombre equivocado y no filtraba nada.
+`ShipmentController::create()` sí soporta `client_ids[]` vía query param y filtra el `Sale::whereIn('client_id', $clientIds)`. **Pero no existe ningún selector en `Shipments/Create.vue`** que mande ese parámetro — el backend está listo, la UI no.
 
-### ⚠️ Patrón de rendimiento a vigilar en todo el proyecto — modelos completos viajando sin usarse
+### ⚠️ Patrón de rendimiento — modelos completos viajando sin usarse
 
-Se detectó que `ShipmentController::create()`, `index()` y `show()` cargaban el modelo `Sale` completo (incluida `signature`, un base64 que puede pesar varios KB por venta) y precios (`unit_price`, `subtotal`, `total`) sin que ninguna de esas vistas los usara — se confirmó revisando línea por línea qué campos consume cada `.vue` real. Ya corregido en esos tres métodos con `select()` explícito.
+Confirmado ya corregido en `ShipmentController::create()`, `index()` y `show()`: usan `select()` explícito, sin `signature` (base64 pesado) ni columnas de precio para roles de Inventarios.
 
-**Regla adoptada:** cualquier `with('sale')`, `with('client')` o `Sale::with(...)` sin `select()` explícito es sospechoso por default. Antes de decidir qué columnas traer, hay que revisar qué usa el `.vue` real — no asumir. **Pendiente de aplicar esta misma revisión a `ProductionController` y cualquier otro controlador que toque `Sale` — no se ha hecho todavía**, es la siguiente barrida de rendimiento recomendada.
-
-**Excepción intencional:** `ShipmentController::printManifest()` sí necesita precios completos (la remisión que firma el cliente los requiere) y se dejó sin restringir a propósito — un PDF generado en servidor nunca viaja como JSON al navegador, así que no aplica el mismo riesgo de exposición de datos que en las pantallas Inertia.
-
-### Flujo de Stock — Meta a alcanzar (parcialmente implementado)
-1. Al crear/confirmar pedido: stock NO se toca. ✅ ya es así.
-2. Al marcar piezas como terminadas (`production_completions`): stock SUBE en `product_variants`. ✅ ya es así.
-3. Al crear embarque (`shipments.store`): stock BAJA de forma transaccional, con validación contra stock real. ✅ ya corregido (ver arriba). **Pendiente:** que sea el único camino de salida de stock — todavía coexiste con el Camino A del Kanban.
-4. Cancelar un embarque antes de confirmar entrega: **pendiente de implementar** (no existe hoy).
+**Pendiente confirmado, sin corregir todavía:**
+- `ProductController::index()` — `Product::with(['category','variants'])->get()` sin `select()` ni paginación: carga todos los productos con todas sus variantes completas (incluidos los 5 precios) en cada visita al catálogo interno.
+- `SaleController::create()` (POS) — `Client::all()` sin límite ni `select()`, se ejecuta en cada apertura del POS.
 
 ### Roles y Redirección al Login
-- `admin` → `/dashboard`
-- `vendedor` → `/dashboard`
+- `admin`, `vendedor` → `/dashboard`
 - `produccion` → `/production-plan`
-- `inventario`, `supervisor`, `financiero` → `/dashboard` (pantalla de bienvenida temporal — sin módulo propio todavía)
+- `inventario`, `supervisor`, `financiero` → `/dashboard` (pantalla de bienvenida temporal — sin módulo propio todavía, confirmado en `DashboardController`)
 
-### Middleware CheckRole
-- Usa parámetros variádicos (`string ...$roles`) — forma correcta de Laravel. Confirmado en código.
-- `role:admin,produccion` → Laravel pasa `['admin', 'produccion']` como array automáticamente.
-
-### Pagos (mecanismo actual, por venta — ver sección 9 para el diseño de cuenta por cliente)
-- Anticipo inicial en `sales.paid_amount` al crear.
-- Abonos posteriores en `sale_payments`, acumulados en `sales.paid_amount`.
-- Validación: `monto_abono <= (total - paid_amount)`.
-- Registrar pagos hoy vive en zona `role:admin,vendedor` — **Finanzas todavía no tiene acceso a esto** (pendiente, ver sección 9).
-
-### PDFs en Hosting Compartido
-- Variable `FILESYSTEM_PUBLIC_ROOT` en `.env` para rutas físicas absolutas.
-- Fallback a `public_path('storage/...')` si no existe.
+### Modo Oficina / Modo Taller (`Sales/Show.vue`)
+Confirmado: `is_production_mode` sigue siendo un prop controlado solo por el query param `?production=` en el frontend (`const productionMode = ref(props.is_production_mode || false)`). **No hay lógica de backend que lo fuerce por rol** — sigue pendiente forzarlo para `supervisor`, `inventario` y `produccion` independientemente del query param.
 
 ---
 
-## 6. Componentes Vue — Estado Real
+## 6. Componentes Vue — Estado Real (confirmado contra código)
 
 | Componente | Estado | Notas |
 |-----------|--------|-------|
-| `Dashboard.vue` | ✅ | KPIs por rol; pantalla bienvenida para roles sin dashboard (produccion, inventario, supervisor, financiero) |
+| `Dashboard.vue` | ✅ | KPIs por rol; pantalla bienvenida para roles sin dashboard propio |
 | `Sales/Create.vue` | ✅ | POS completo |
-| `Sales/Index.vue` | ✅ | Kanban |
-| `Sales/Show.vue` | ✅ | Modo Oficina/Taller, abonos |
-| `Production/Index.vue` | ⚠️ No auditado en esta sesión (no incluido en el zip). Confirmar si ya tiene navegación de semana (el controlador ya soporta `start_date`) y si muestra `total_completed` (hoy llega en 0 desde el backend — ver bug arriba) |
-| `Products/Create.vue` | ✅ | Variantes, materiales, imagen, favorito |
-| `Products/Edit.vue` | ✅ | Upsert variantes, lightbox |
-| `Products/Index.vue` | ✅ | Paginación local, toggle favorito |
-| `Clients/*` | ✅ (no auditado en detalle esta sesión) | |
-| `Users/*` | ✅ (no auditado en detalle esta sesión) | |
-| `Settings/Index.vue` | ✅ (no auditado en detalle esta sesión) | |
-| `Shipments/Index.vue` | ✅ | Lista de viajes, imprimir y confirmar entrega — **pendiente: filtro por cliente en Create, no en Index** |
-| `Shipments/Create.vue` | ✅ | Armar embarque; validación `Math.min()` contra negativos — **pendiente: filtro de clientes (ver Backlog Fase 2.5)** |
-| `Shipments/Show.vue` | ✅ | Detalle con `chosen_color` y fechas |
+| `Sales/Index.vue` | ✅ | Kanban — ya no permite mover a mano a `enviado`/`entregado` |
+| `Sales/Show.vue` | ✅ | Modo Oficina/Taller (por query param, no forzado por rol aún), abonos |
+| `Production/Index.vue` | ✅ | Navegación de semana y badge de 4 estados confirmados. Falta toggle "ver acumulado". `formatDate` sin usar ya **no existe** (código limpio, bug previamente documentado ya no aplica) |
+| `Products/Create.vue` / `Edit.vue` | ✅ | Variantes, materiales, medidas, imagen, favorito |
+| `Products/Index.vue` | ⚠️ | Funcional, pero `ProductController::index()` no pagina server-side |
+| `Clients/*`, `Users/*`, `Settings/Index.vue` | ✅ | `Users/*` confirmado funcional contra `UserController.php` real (CRUD completo, `VALID_ROLES` coincide con los 6 roles del sistema) |
+| `Shipments/Index.vue` | ✅ | Lista de viajes, imprimir, confirmar, **cancelar** (badge de 3 estados: en tránsito/entregado/cancelado) |
+| `Shipments/Create.vue` | ✅ | Armar embarque, validación de stock compartido entre líneas del mismo formulario, **toggle flota propia / recolección en mostrador**. Falta: selector multi-cliente |
+| `Shipments/Show.vue` | ✅ | Detalle con `chosen_color`, fechas y piezas a bordo |
 
 ---
 
@@ -359,7 +371,7 @@ Se detectó que `ShipmentController::create()`, `index()` y `show()` cargaban el
 ### `SaleObserver.php`
 - Al **crear** venta → registra en `sale_histories` automáticamente.
 - Al **actualizar** stage → registra `from_stage` / `to_stage` automáticamente.
-- No tocar para lógica de stock — pero ver sección 5: `SaleController::updateStage` SÍ toca stock directamente además del Observer, son cosas distintas.
+- No toca stock — eso ahora vive únicamente en `ShipmentController`.
 
 ### `CheckRole.php`
 - Parámetro variádico: `handle(Request $request, Closure $next, string ...$roles)`. Confirmado correcto en código real.
@@ -377,79 +389,52 @@ Se detectó que `ShipmentController::create()`, `index()` y `show()` cargaban el
 
 ---
 
-## 8. Paquetes Instalados
+## 8. Paquetes Instalados (confirmado con `composer.lock` y `package.json` reales)
 
 ```
-PHP: barryvdh/laravel-dompdf, laravel-lang/common
-JS: vue-signature-pad, sweetalert2, lodash
+PHP: barryvdh/laravel-dompdf ^3.1.1 (resuelve a 3.1.2), laravel-lang/common,
+     laravel/framework ^12.0 (resuelve a 12.62.0)
+
+JS — dependencies (runtime):
+     lodash ^4.17.21, sweetalert2 ^11.26.17, vue-signature-pad ^3.0.2
+
+JS — devDependencies (build/tooling):
+     @inertiajs/vue3 ^2.0.0, @tailwindcss/forms ^0.5.3, @tailwindcss/vite ^4.0.0 (⚠️ sin usar, ver sección 0),
+     @vitejs/plugin-vue ^6.0.7, autoprefixer ^10.4.12, axios ^1.18.0, concurrently ^9.0.1,
+     laravel-vite-plugin ^2.0.0, postcss ^8.4.31, tailwindcss ^3.2.1, vite ^7.0.7, vue ^3.4.0
 ```
 
 ---
 
-## 9. Matriz de Roles y Permisos (Propuesta — a implementar)
+## 9. Matriz de Roles y Permisos (Propuesta — parcialmente implementada, confirmado contra rutas reales)
 
 6 roles: `admin`, `supervisor`, `vendedor`, `inventario`, `produccion`, `financiero`.
 
 | Módulo | Admin | Supervisor | Vendedor | Inventarios | Producción | Finanzas |
 |---|---|---|---|---|---|---|
-| Dashboard | Selector: Ventas/Producción/Financiero/Todo (Fase 3.3) | Solo lectura, vista global | Su propio dashboard | Vista de inventario/stock | Vista de producción (Fase 3.1) | Vista financiera / cartera (Fase 3.2) |
+| Dashboard | ✅ implementado | ❌ sin módulo (pantalla bienvenida) | ✅ implementado | ❌ sin módulo | ❌ sin módulo | ❌ sin módulo |
 | POS / Crear pedido | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Ventas (Kanban, mover etapa) | ✅ todas | 👁️ ver todas | ✅ solo las suyas | ❌ | ❌ | 👁️ ver todas |
-| Clientes (CRUD) | ✅ completo | 👁️ ver | ✅ crear/editar | ❌ | ❌ | 👁️ ver + estado de cuenta |
-| Plan de Producción | ✅ | 👁️ ver | ❌ | ❌ | ✅ ver + registrar fabricado | ❌ |
-| Embarques (crear/confirmar) | ✅ | 👁️ ver | ❌ | ✅ crear/confirmar | 👁️ ver (opcional) | 👁️ ver en tránsito + entregados |
-| Pagos/Abonos (`sale_payments`) | ✅ | ❌ | ✅ (de sus ventas) | ❌ | ❌ | ✅ registrar, por cliente |
-| Reporte Cartera/Cobranza | ✅ | 👁️ ver | ❌ | ❌ | ❌ | ✅ |
-| Productos/Inventario (CRUD) | ✅ | 👁️ ver | 👁️ ver (para POS) | ✅ editar stock/variantes | 👁️ ver | ❌ |
-| Usuarios | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Ventas (Kanban, mover etapa) | ✅ todas | ❌ fuera de alcance de la reunión del 04 ago | ✅ solo las suyas | ❌ | ❌ | ❌ sin acceso hoy |
+| Clientes (CRUD) | ✅ completo | ❌ sin acceso hoy | ✅ crear/editar | ❌ | ❌ | ❌ sin acceso hoy |
+| Plan de Producción | ✅ | 🆕 **acordado — acceso completo, mismos permisos que Admin** | ❌ | ❌ | ✅ ver + registrar fabricado | ❌ |
+| Embarques (crear/confirmar/cancelar) | ✅ | 🆕 **acordado — acceso completo, mismos permisos que Admin** | ❌ | ✅ | ❌ sin acceso hoy | ❌ sin acceso hoy |
+| Pagos/Abonos (`sale_payments`) | ✅ | ❌ | ✅ (de sus ventas) | ❌ | ❌ | ❌ sin acceso hoy |
+| Productos/Inventario (CRUD) | ✅ | 🆕 **acordado — acceso completo, mismos permisos que Admin** | 👁️ ver (para POS) | ❌ sin acceso hoy | ❌ | ❌ |
+| Usuarios | ✅ confirmado completo | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Configuración | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-**Decisiones de diseño detrás de esta matriz:**
-- **Embarques pasa a ser dominio de Inventarios** (no de Producción). Razón: `shipments.store` descuenta `product_variants.stock` — es una operación de salida de almacén, no de manufactura. Producción se limita a fabricar y reportar piezas terminadas.
-- **Supervisor es de solo lectura** en todo el sistema operativo (Ventas, Producción, Embarques, Cartera) — rol de supervisión transversal, sin capacidad de crear/editar/mover nada. Hoy no tiene ningún acceso real (cae a pantalla de bienvenida); esta matriz define su alcance desde cero.
-- **Finanzas no puede crear pedidos.** Solo interactúa con lo que ya existe: ve ventas, ve embarques (en tránsito y entregados) y registra pagos/abonos ligados a la cuenta del cliente.
+**Diferencia importante con la matriz "propuesta" de versiones anteriores de este documento:** antes describía el diseño *deseado* a futuro (Supervisor de solo lectura en todo). **Acuerdo de reunión (04 ago 2026):** eso cambió — el cliente ahora quiere a Supervisor con permisos de edición completos (no solo lectura) en Producción, Almacén y Embarques, al mismo nivel que Admin. Sigue sin acceso a Ventas/Kanban ni Configuración salvo que se amplíe después. `financiero` sigue sin ninguna ruta asignada — Fase 3, sin empezar.
 
-### 🔒 Matriz de Visibilidad de Precios (DECIDIDO con cliente, Julio 2026)
+### 🔒 Matriz de Visibilidad de Precios — estado real
 
-Directriz del cliente: **nadie ve precios excepto Admin y Finanzas — con la excepción explícita del Vendedor, que los necesita para hacer su trabajo (armar ventas en el POS, ver sus propias ventas y su propio ingreso).**
+Confirmado en código:
+- `ShipmentController::create()` ya no manda `price_1..price_5` en el JSON (columnas explícitamente excluidas con `variant:id,product_id,material,measurements,stock`).
+- `SaleController::index()` ya usa `select()` explícito sin `signature`.
+- **Pendiente confirmado:** `SaleController::index()` no condiciona el `select()` por rol (hoy nadie más que admin/vendedor llega a esa ruta, así que no es explotable todavía, pero tampoco está la lógica lista para cuando se abra a Supervisor). `Sales/Show.vue` no fuerza Modo Taller por rol en el backend.
 
-⚠️ **Nota técnica importante:** ocultar un precio en el componente Vue no es suficiente. Con Inertia, si el controlador manda el modelo completo (`ProductVariant`, `SaleDetail`, etc.) en la respuesta, los campos de precio viajan en el JSON aunque la interfaz no los pinte — visibles desde las herramientas de desarrollador del navegador. La restricción real debe hacerse en el backend, seleccionando explícitamente qué columnas se envían según el rol del usuario autenticado (`->select([...])` o transformar la respuesta antes de `Inertia::render()`), no solo con `v-if` en el frontend. Esto aplica sobre todo a `Supervisor`, `Inventarios` y `Producción`, que sí pueden llegar a tocar pantallas donde viaja el modelo de venta/producto.
+### Diseño del "Estado de Cuenta" por cliente (Finanzas) — sigue siendo diseño, no implementación
 
-| Pantalla / Dato | Admin | Finanzas | Supervisor | Vendedor | Inventarios | Producción |
-|---|---|---|---|---|---|---|
-| Catálogo de Productos (`price_1`..`price_5`) | ✅ | ✅ | ❌ | ❌ (no tiene acceso al CRUD de Productos, solo lo consume dentro del POS) | ❌ | ❌ |
-| POS — precio unitario al armar la venta | ✅ | — | — | ✅ **necesario para operar** | — | — |
-| POS — total a cobrar / cambio | ✅ | — | — | ✅ | — | — |
-| Kanban de Ventas — columnas Total / Pagado | ✅ | ✅ | ❌ (solo folio, cliente, etapa, fechas) | ✅ (solo de sus propias ventas, como ya es hoy) | ❌ | ❌ |
-| Detalle de Venta — Modo Oficina (con precios) | ✅ | ✅ | ❌ | ✅ (solo sus propias ventas) | ❌ (sin acceso al módulo) | ❌ (sin acceso al módulo) |
-| Detalle de Venta — Modo Taller (sin precios, ya existe hoy) | — | — | — | — | ✅ si necesita ver el pedido | ✅ |
-| Dashboard — Ingresos / KPIs en $ | ✅ | ✅ | ❌ | ✅ (solo su propio ingreso, como ya es hoy) | ❌ | ❌ |
-| Embarques — valor de las piezas embarcadas | ✅ | ✅ | ❌ | — | ❌ (arma el viaje solo con cantidades, sin montos) | — |
-| Clientes — `price_tier` (nivel A-E, sin cifra en $) | ✅ | ✅ | ✅ | ✅ (necesita saber qué lista aplica) | ❌ | ❌ |
-
-**Ya resuelto sin cambios:** el catálogo de Productos hoy vive dentro de `role:admin` en `web.php` — ningún otro rol, incluido Vendedor, puede acceder al CRUD de Productos. Eso ya cumple la directriz tal cual. Lo que Vendedor sí necesita (y conserva) es ver el precio del producto **dentro del POS**, que es una vista distinta y ya filtrada por `price_tier` del cliente.
-
-**Resumen de la regla final:** Vendedor es la única excepción a "solo Admin y Finanzas ven precios", y esa excepción se limita a **sus propias operaciones** (su POS, sus ventas, su ingreso) — nunca ve precios de catálogo general fuera del POS ni datos de otros vendedores. Supervisor, Inventarios y Producción no ven precios en ningún caso.
-
-### Diseño del "Estado de Cuenta" por cliente (Finanzas)
-
-No se requiere una tabla nueva de saldo. Se calcula agregando datos existentes, agrupados por `client_id`:
-
-```
-Deuda exigible del cliente =
-    Σ (sale_deliveries.quantity_delivered × sale_details.unit_price)
-    para entregas cuyo shipment.status = 'entregado'
-    (join: sale_deliveries → shipments, sale_deliveries → sale_details → sales, filtrando por sales.client_id)
-
-Total cobrado del cliente =
-    Σ sales.paid_amount + Σ sale_payments.amount
-    para todas las ventas de ese cliente
-
-Saldo pendiente = Deuda exigible − Total cobrado
-Antigüedad de saldo = se cuenta desde shipments.delivered_at (NO desde promised_date)
-```
-
-Esto reemplaza la definición anterior de "cartera vencida" (que comparaba `promised_date` contra `paid_amount` sin considerar si algo se había entregado realmente). La nueva definición es más correcta: **la cartera nace cuando se entrega, no cuando se vence la fecha promesa de un pedido que quizá ni se ha fabricado.**
+No se requiere tabla nueva. Se calcularía agregando `sale_deliveries` (join con `shipments.status = 'entregado'`) contra `sales.paid_amount` + `sale_payments.amount`, agrupado por `client_id`. **Confirmado: no hay ningún controlador ni ruta que calcule esto todavía** — es 100% diseño para la Fase 3.2.
 
 ---
 
@@ -471,8 +456,9 @@ FILESYSTEM_PUBLIC_ROOT=/home/usuario/public_html/storage
 ## 11. Cómo Compartir Contexto con IA al Retomar
 
 Al iniciar sesión nueva:
-1. Comparte este archivo (`CONTEXTO_TECNICO.md`)
-2. Comparte los archivos específicos de la tarea a trabajar (controlador + vista Vue involucrados, y la migración si aplica)
-3. Describe qué quieres hacer
+1. Comparte este archivo (`CONTEXTO_TECNICO.md`).
+2. Comparte los archivos específicos de la tarea a trabajar (controlador + vista Vue involucrados, y la migración si aplica). Si vas a compartir un zip completo, **excluye `vendor/`, `node_modules/`, `storage/logs`, `storage/framework` y `.git`** — no aportan nada y hacen el zip pesado.
+3. Si la tarea toca el frontend/build, incluye `tailwind.config.js` y `postcss.config.js` — no se auditaron todavía (ver hallazgo del conflicto de versiones de Tailwind, sección 0).
+4. Describe qué quieres hacer.
 
-Para tareas grandes de Fase 2 en adelante, abre sesiones separadas por sub-tarea.
+Para tareas grandes de Fase 3 en adelante, abre sesiones separadas por sub-tarea.

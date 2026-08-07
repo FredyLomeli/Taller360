@@ -1,420 +1,271 @@
 # 🗺️ GUÍA DE RUTA — TALLER 360
-**Actualizada:** Julio 2026 (post-auditoría + sesión de implementación en vivo)
+**Actualizada:** 25 de julio 2026 — auditoría directa contra el código fuente real (zip del proyecto)
 
 ---
 
 ## Estado actual en una línea
-> Se implementó y probó en vivo el Bug #1 (Plan de Producción) más 4 bugs nuevos encontrados en Embarques al probar (inventario negativo, validación de stock compartido en el frontend, filtro de clientes que no se ejecutaba, y carga innecesaria de firma/precios). Los bugs originales #2, #3, #4 y #5 (doble descuento de stock, `storeDelivery` roto, rol en Embarques, cancelación) **siguen pendientes**. Detalle completo en `BACKLOG.md`, sección "Sesión de Implementación en Vivo".
+> Los 5 bugs críticos documentados en julio (Producción, doble stock, `storeDelivery`, rol en Embarques, cancelación) están **confirmados como resueltos en el código real**, junto con la recolección en mostrador (`pickup_type`) que se creía pendiente, y el `UserController` que en la primera ronda de auditoría parecía faltante (era solo una omisión al armar el zip). Quedan dos pendientes reales de Embarques (selector multi-cliente y agrupación de notas de entrega) y un hallazgo de limpieza nuevo: `package.json` tiene dos versiones de Tailwind instaladas a la vez, aunque solo una está activa.
 
-## Flujo de Git para lo que sigue (lanzamiento: miércoles)
-- Trabajar en una rama separada para el resto de estos fixes (`fix/produccion-embarques-inventario` o similar), aunque no sea la costumbre — son cambios de dinero/inventario a días de producción, y una rama da margen para probar el checklist completo antes de tocar `master`.
-- Separar en commits por bug (no un commit único del día) — si algo falla en la prueba final, se puede revertir un commit puntual sin afectar el resto.
-- Después del lanzamiento, retomar el hábito normal de trabajar en `master` si así lo prefiere el equipo — esto aplica solo a esta ventana de cambios críticos.
+## ⚠️ Nota sobre versiones previas de este documento
+La primera versión de `GUIA_RUTA.md` decía que los bugs #2, #3, #4 y #5 "siguen pendientes" — ya no es cierto, se verificó contra el código y los 5 están resueltos. Una segunda ronda de auditoría también cerró la duda sobre `UserController.php` (sí existe) y sumó el hallazgo de Tailwind. Si vas a retomar el proyecto con una IA nueva, comparte esta versión.
 
 ---
 
-## Mapa de fases (reordenado por prioridad real)
+## Mapa de fases (reordenado por prioridad real, confirmado en código)
 
 ```
-✅ FASE 0 — Seguridad y dependencias         (COMPLETADA)
+✅ FASE 0 — Seguridad y dependencias         (COMPLETADA — Laravel 12.62.0, dompdf 3.1.2 confirmados)
 ✅ FASE 1 — Deuda técnica y roles            (COMPLETADA)
-🟠 FASE 2 — Producción y embarques           (95% — filtro semanal YA está)
-🆘 BUGS CRÍTICOS — Producción/Stock/Embarques (SIGUIENTE ENFOQUE — antes de todo lo demás)
-🟢 FASE 2.5 — Mejoras a Embarques            (filtro cliente + notas individuales)
-🟡 FASE 3 — Dashboards + Roles completos     (depende de que los bugs estén resueltos)
-🟢 FASE 4 — Catálogo público + link          (verificar avance ya existente en '/')
-🔵 FASE 5 — Precios dinámicos por flete      (Pendiente)
-🟣 FASE 6 — Reportes PDF                     (Actividad final)
+✅ BUGS CRÍTICOS — Producción/Stock/Embarques (CONFIRMADOS RESUELTOS EN CÓDIGO)
+✅ UserController                            (CONFIRMADO COMPLETO — era omisión del zip)
+🎯 SPRINT CLIENTE (04 ago 2026)              (5 puntos, ver bloque dedicado abajo — máxima prioridad)
+🟢 Conflicto de versiones Tailwind           (limpieza, no bloquea nada)
+🟠 FASE 2 — Producción y embarques           (95% — falta toggle "ver acumulado")
+🟢 FASE 2.5 — Mejoras a Embarques            (selector multi-cliente + notas agrupadas — NINGUNA construida)
+🟡 FASE 2.6 — Optimización de consultas      (2 hallazgos concretos confirmados, ver abajo)
+🟡 FASE 3 — Dashboards + Roles completos     (confirmado sin empezar en código)
+🟢 FASE 4 — Catálogo público + link          (confirmado: mockup estático, sin conexión a BD)
+🔵 FASE 5 — Precios dinámicos por flete      (diseño cerrado, sin construcción)
+🟣 FASE 6 — Reportes PDF                     (actividad final)
 ```
 
 ---
 
-## PRÓXIMA TAREA (revisada): Corregir los 3 bugs críticos de Producción/Stock
+## 🎯 Sprint acordado con cliente (04 ago 2026) — siguiente en la fila, antes que todo lo demás
 
-**Tiempo estimado:** 3-5 horas | **Prioridad:** Alta — bloquea Fase 3
+Reunión con el cliente dejó 5 puntos con diseño ya cerrado (ver `CONTEXTO_TECNICO.md` sección 0.1 para el detalle completo). Este bloque pasa a ser la prioridad #1, por encima de Tailwind y de la Fase 2.5 de Embarques que ya estaban planeadas.
 
-### Bug #1 — Plan de Producción no descuenta correctamente lo ya fabricado
+### Paso 1 — Envío automático de nota de venta (empezar por aquí, es el más rápido y de menor riesgo)
 
-**Archivo:** `app/Http/Controllers/ProductionController.php`, método `index()`
-
-**Paso 1 — Cargar el histórico de fabricación (falta esta línea, ya existe en `printReport()`):**
+En `SaleController.php`, extraer el cuerpo de `sendEmail()` a un método privado:
 ```php
-$items = SaleDetail::whereHas('sale', function ($query) use ($endWeek) {
-        $query->where('stage', 'produccion')
-              ->where(function($q) use ($endWeek) {
-                  $q->whereDate('promised_date', '<=', $endWeek)
-                    ->orWhereNull('promised_date');
-              });
-    })
-    ->withSum('completions as completed_quantity', 'quantity_completed')   // ← AGREGAR
-    ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
-    ->get()
-    ->sortBy(function ($item) {
-        return $item->sale->promised_date ?? '9999-12-31';
-    });
-```
-
-**Paso 2 — Corregir la fórmula de pendientes (ya no debe restar stock):**
-```php
-->map(function ($group) {
-    $totalNeeded = $group->sum('quantity');
-    $totalCompleted = $group->sum('completed_quantity') ?? 0;
-
-    return [
-        'name' => $group->first()->product_name,
-        'material' => $group->first()->variant->material ?? 'Estándar',
-        'total_quantity' => $totalNeeded,
-        'breakdown' => $group->groupBy('chosen_color'),
-        'orders' => /* igual que antes */,
-        'details' => $group,
-        'total_needed' => $totalNeeded,
-        'total_completed' => $totalCompleted,
-        'in_stock' => $group->first()->variant->stock ?? 0,   // dato aparte, informativo
-        // YA NO se resta in_stock aquí:
-        'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted),
-    ];
-});
-```
-
-**Paso 3 — En `Production/Index.vue`:** mostrar `in_stock` como una etiqueta separada ("En bodega, listo para embarcar: X"), no como parte del cálculo de "pendiente por fabricar".
-
-### Bug #2 — Desactivar el descuento de stock duplicado en el Kanban
-
-**Archivo:** `app/Http/Controllers/SaleController.php`, método `updateStage()`
-
-Quitar (o dejar comentado con explicación) los bloques que descuentan/regresan stock al cambiar a `enviado`/`cancelado`:
-```php
-// ELIMINAR — el stock ahora se maneja exclusivamente en ShipmentController::store()
-// CASO A: Salida de Almacén (Enviado) -> RESTAR STOCK
-// if ($newStage === 'enviado' ...) { ... }
-
-// CASO B: Cancelación de un pedido YA enviado -> DEVOLVER STOCK
-// if ($newStage === 'cancelado' ...) { ... }
-```
-Dejar que `updateStage()` solo cambie `stage` (el Observer se encarga del historial). El único lugar que debe tocar `product_variants.stock` es `ShipmentController`.
-
-⚠️ **Antes de borrar este código, confirmar con el equipo si todavía hay flujos operativos donde una venta pasa a `enviado` sin pasar por el módulo de Embarques.** Si los hay, hay que migrar ese flujo a Embarques primero, o el negocio se quedará sin forma de sacar esas piezas del inventario.
-
-### Bug #3 — Eliminar o redirigir `storeDelivery()`
-
-**Archivo:** `app/Http/Controllers/SaleController.php` + `routes/web.php`
-
-- [ ] Verificar en el frontend (`Sales/Show.vue` probablemente) si hay un botón que llame a la ruta `sales.deliveries.store`.
-- [ ] Si no hay ningún botón activo: eliminar el método `storeDelivery()` y la ruta.
-- [ ] Si sí hay un botón activo: redirigir esa funcionalidad para que cree un `Shipment` de una sola línea en vez de escribir directo en `sale_deliveries` (reusar `ShipmentController::store()`), para no duplicar lógica de descuento de stock.
-
-### Bugs #4 y #5 — Embarques: rol + cancelación
-
-**Archivo:** `routes/web.php`
-```php
-// Envolver el bloque de Shipments (hoy sin restricción):
-Route::middleware('role:admin,inventario')->group(function () {
-    Route::controller(ShipmentController::class)->group(function () {
-        Route::get('/shipments/create','create')->name('shipments.create');
-        Route::post('/shipments', 'store')->name('shipments.store');
-        Route::get('/shipments', 'index')->name('shipments.index');
-        Route::patch('/shipments/{id}/confirm', 'confirmDelivery')->name('shipments.confirm');
-        Route::get('/shipments/{id}/print', 'printManifest')->name('shipments.print');
-        Route::get('/shipments/{id}', 'show')->name('shipments.show');
-        Route::patch('/shipments/{id}/cancel', 'cancel')->name('shipments.cancel'); // NUEVO
-    });
-});
-```
-
-**Archivo:** `app/Http/Controllers/ShipmentController.php` — nuevo método:
-```php
-public function cancel($id)
+private function sendSaleNoteMail(Sale $sale): void
 {
-    $shipment = Shipment::with('deliveries')->findOrFail($id);
+    $settings = Setting::all()->pluck('value', 'key');
+    // ... mismo armado de $company, $logoPath, $pdf que ya existe en sendEmail() ...
 
-    if ($shipment->status === 'entregado') {
-        return back()->withErrors(['error' => 'No se puede cancelar un embarque ya entregado.']);
+    $emails = [];
+    if ($sale->client && $sale->client->email) $emails[] = $sale->client->email;
+    if (!empty($settings['notification_emails'])) {
+        $emails = array_merge($emails, array_map('trim', explode(',', $settings['notification_emails'])));
     }
+    $emails = array_unique(array_filter($emails));
+    if (empty($emails)) return;
 
-    DB::transaction(function () use ($shipment) {
-        foreach ($shipment->deliveries as $delivery) {
-            $detail = $delivery->saleDetail;
-            if ($detail && $detail->variant) {
-                $detail->variant->increment('stock', $delivery->quantity_delivered);
-            }
-        }
-        $shipment->update(['status' => 'cancelado']);
-    });
-
-    return back()->with('success', 'Embarque cancelado, stock restituido.');
+    try {
+        Mail::to($emails)->send(new SaleNoteEmail($sale, $pdf->output()));
+    } catch (\Exception $e) {
+        \Log::error('Fallo envío automático de nota de venta #'.$sale->id.': '.$e->getMessage());
+    }
 }
 ```
+Y en `store()`, justo después del `return DB::transaction(...)` (fuera de la transacción):
+```php
+$autoEmail = Setting::where('key', 'auto_email_on_sale')->value('value');
+if ($autoEmail === null || filter_var($autoEmail, FILTER_VALIDATE_BOOLEAN)) {
+    $this->sendSaleNoteMail($sale->fresh(['details', 'client']));
+}
+```
+`sendEmail()` (el endpoint manual) pasa a llamar también a `sendSaleNoteMail()` para no duplicar código.
 
-### Cómo probar todo el bloque de bugs
-1. Crear un pedido de 10 piezas, promised_date esta semana.
-2. Registrar 10 piezas fabricadas → verificar que "pendiente por fabricar" muestre 0.
-3. Crear un embarque con solo 3 de esas 10 piezas.
-4. Volver al Plan de Producción → confirmar que sigue mostrando 0 pendientes por fabricar (antes del fix mostraba 3 — este es el caso de prueba del bug reportado).
-5. Cancelar ese embarque (bug #5) → confirmar que el stock regresa a 10.
-6. Verificar que mover una venta manualmente a `enviado` desde el Kanban ya NO mueve stock (bug #2).
-7. Intentar acceder a `/shipments` con un usuario `vendedor` → debe dar 403 (bug #4).
+Agregar `auto_email_on_sale` al `$fillable`/whitelist de `SettingController` y un toggle en `Settings/Index.vue`, default `true`.
+
+### Paso 2 — Supervisor con permisos completos
+
+En `routes/web.php`:
+```php
+// Antes:
+Route::middleware('role:admin,produccion')->group(function () { ... });
+Route::middleware('role:admin,inventario')->group(function () { ... });
+
+// Después:
+Route::middleware('role:admin,produccion,supervisor')->group(function () { ... });
+Route::middleware('role:admin,inventario,supervisor')->group(function () { ... });
+```
+Revisar también el grupo de Productos (`role:admin`) — agregar `supervisor` ahí también para que tenga CRUD completo de inventario, no solo lectura.
+
+### Paso 3 — Bug del pedido en limbo
+
+En `ShipmentController::cancel()`, reemplazar:
+```php
+if (in_array($sale->stage, ['entregado', 'enviado'])) {
+    $transition = SaleHistory::where('sale_id', $sale->id)
+        ->whereIn('to_stage', ['entregado', 'enviado'])
+        ->latest()->first();
+    $revertStage = $transition->from_stage ?? 'produccion';
+    $sale->update(['stage' => $revertStage]);
+}
+```
+por un recálculo en vivo (mismo patrón que `closeOrderIfComplete()`, pero a la inversa):
+```php
+if (in_array($sale->stage, ['entregado', 'enviado'])) {
+    // Tras regresar el stock de este embarque, ¿queda algo sin entregar?
+    $stillPending = $sale->details()->get()->contains(function ($d) {
+        $delivered = $d->deliveries()
+            ->whereHas('shipment', fn($q) => $q->where('status', '!=', 'cancelado'))
+            ->sum('quantity_delivered');
+        return $delivered < $d->quantity;
+    });
+
+    $sale->update(['stage' => $stillPending ? 'produccion' : $sale->stage]);
+}
+```
+(Ojo: este bloque corre dentro del `foreach ($shipment->deliveries as $delivery)`, así que hay que evitar recalcular la sale completa en cada iteración si el embarque toca varias líneas del mismo pedido — mejor mover este recálculo fuera del loop, una vez por `sale_id` único, antes de cerrar la transacción.)
+
+También quitar el `SaleHistory::create()` manual duplicado en `store()` (líneas ~133-141) — dejar que `SaleObserver::updated()` sea la única fuente de historial de cambios de etapa. Si se quiere conservar la nota descriptiva del embarque ("📦 Envío #X: N unidades..."), moverla a un campo `notes` opcional que el Observer pueda recibir, o crear una tabla de bitácora separada — no duplicar `SaleHistory`.
+
+### Paso 4 — Stock mínimo por variante
+
+```bash
+php artisan make:migration add_min_stock_to_product_variants_table
+```
+```php
+$table->integer('min_stock')->nullable()->after('stock');
+```
+En `DashboardController`, cambiar:
+```php
+$lowStockProducts = ProductVariant::where('stock', '<=', 5)
+```
+por:
+```php
+$lowStockProducts = ProductVariant::whereColumn('stock', '<=', DB::raw('COALESCE(min_stock, 5)'))
+```
+En `Products/Create.vue`/`Edit.vue`: mostrar el input de `min_stock` por variante solo cuando `form.is_favorite === true` (mismo patrón condicional que ya usan para otros campos dependientes).
+
+### Paso 5 — Órdenes de Trabajo (el más grande, dejarlo al final)
+
+Requiere sesión dedicada por su tamaño — migración de 3 tablas/columnas, un controlador nuevo (`WorkOrderController`), cambios en `ProductionController::index()` para unir dos fuentes de datos, y una vista nueva. Ver el detalle completo de diseño en `BACKLOG.md` punto 5 y `CONTEXTO_TECNICO.md` sección 0.1-C antes de empezar — vale la pena revisar juntos el mockup de la UI antes de tocar el backend, dado que cambia cómo se ve el Plan de Producción día a día para el taller.
 
 ---
 
-## FASE 2.5 — Mejoras a Embarques (solicitado Julio 2026)
+## PRÓXIMA TAREA #6: Resolver el conflicto de versiones de Tailwind
 
-### 2.5.1 — Filtro por cliente al armar embarque
+**Tiempo estimado:** 15 min si se queda en v3, ~1 h si se migra a v4 (confirmado, riesgo bajo) | **Prioridad:** Baja-media (limpieza, no bloquea nada hoy)
 
-**Archivo:** `app/Http/Controllers/ShipmentController.php`, método `create()`
-```php
-public function create(Request $request)
-{
-    $clientIds = $request->input('client_ids', []); // array opcional
+Con `tailwind.config.js` ya confirmado, tu configuración es mínima: solo la fuente Figtree (cargada por `<link>` externo, no `@font-face` local) y el plugin `@tailwindcss/forms`. Sin colores, breakpoints ni `@apply` custom. Esto baja el riesgo de migrar a v4 de "medio" a "bajo, confirmado".
 
-    $salesQuery = Sale::with(['client', 'details.variant.product', 'details' => function($q) {
-            $q->withSum('deliveries as delivered_quantity', 'quantity_delivered');
-        }])
-        ->whereIn('stage', ['confirmado', 'produccion', 'enviado']);
-
-    if (!empty($clientIds)) {
-        $salesQuery->whereIn('client_id', $clientIds);
-    }
-
-    $sales = $salesQuery->get()->filter(/* misma lógica de piezas embarcables que ya existe */)->values();
-
-    return Inertia::render('Shipments/Create', [
-        'shippableSales' => $sales,
-        'filters' => ['client_ids' => $clientIds],
-    ]);
-}
+**Opción A — quedarse en v3 (más rápido, cero riesgo):**
+```bash
+npm uninstall @tailwindcss/vite
 ```
 
-**Archivo:** `resources/js/Pages/Shipments/Create.vue` — agregar un selector multi-cliente (puede ser un multiselect simple con checkbox) arriba del listado de pedidos embarcables, que dispare `router.get(route('shipments.create'), { client_ids: [...] }, { preserveState: true })`. Si no se selecciona nada, se manda vacío y se ve el listado completo (comportamiento actual, sin romper nada).
+**Opción B — completar la migración a v4 (recomendada si hay 1 hora disponible, dado lo simple de tu config):**
 
-### 2.5.2 — Notas de entrega individuales por pedido
+1. `resources/css/app.css` — reemplazar:
+   ```css
+   @tailwind base;
+   @tailwind components;
+   @tailwind utilities;
+   ```
+   por:
+   ```css
+   @import "tailwindcss";
+   @plugin "@tailwindcss/forms";
 
-**Archivo:** `app/Http/Controllers/ShipmentController.php`
+   @theme {
+       --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+   }
+   ```
+   (v4 usa `@plugin` dentro del CSS en vez de `plugins: [forms]` en el config, y `@theme` en vez de `theme.extend`.)
+
+2. `vite.config.js` — agregar el plugin:
+   ```js
+   import tailwindcss from '@tailwindcss/vite';
+   // ...
+   plugins: [
+       tailwindcss(),
+       laravel({ input: ['resources/css/app.css', 'resources/js/app.js'], refresh: true }),
+       vue({ template: { transformAssetUrls: { base: null, includeAbsolute: false } } }),
+   ],
+   ```
+
+3. `package.json` — quitar `tailwindcss` (v3), `postcss`, `autoprefixer` de `devDependencies` (v4 no los necesita); confirmar que `@tailwindcss/forms` siga siendo compatible con v4 (en general lo es, revisar el changelog del plugin si el build falla).
+
+4. Borrar `tailwind.config.js` — en v4 ya no se usa (todo vive en `@theme` dentro de `app.css`).
+
+5. Probar visualmente: v4 cambió la paleta de colores por defecto a espacio OKLCH — mismos nombres de clase (`bg-gray-100`, `text-red-600`), tono ligeramente distinto. Revisar especialmente el POS, Kanban, y los PDFs generados con dompdf (dompdf no procesa Tailwind directamente, pero si algún PDF usa clases inline heredadas de un componente Vue, confirmar que se vea igual).
+
+Dado que la config es tan simple, esta migración ya no requiere una ventana grande de prueba como se pensaba antes — es viable hacerla en una sesión normal de desarrollo.
+
+---
+
+## PRÓXIMA TAREA #7: Fase 2.5 — Embarques, lo que de verdad falta
+*(prioridad real más alta que la Tarea #1 de limpieza de Tailwind — hazla primero si el tiempo es limitado)*
+
+**Tiempo estimado:** 3-4 horas | **Prioridad:** Media-alta, antes de que crezca el volumen de viajes con múltiples clientes
+
+### 2.5.1 — Selector multi-cliente en `Shipments/Create.vue`
+El backend ya soporta `client_ids[]` en `ShipmentController::create()`. Falta solo la UI:
+- Agregar un `<select multiple>` o componente de chips con los clientes que tienen ventas activas (`confirmado`, `produccion`, `enviado`).
+- Al seleccionar, disparar `router.get(route('shipments.create'), { client_ids: seleccionados }, { preserveState: true })`.
+
+### 2.5.2 — Agrupar notas de entrega por pedido/cliente
+**Corrección importante sobre el plan anterior:** el documento previo decía que había que "fusionar la plantilla real con una versión de referencia (`reference_shipment_manifest.blade.php`)". Ese archivo de referencia no existe en el código auditado, y el controlador (`printManifest()`) tampoco agrupa nada — es un `@foreach` plano. Hay que construirlo desde cero:
+
+**Paso 1 — Agrupar en el controlador**, no en la plantilla:
 ```php
 public function printManifest($id)
 {
     $shipment = Shipment::with(['deliveries.saleDetail.sale.client'])->findOrFail($id);
 
-    // Agrupar las entregas del embarque por pedido (sale_id / cliente)
-    $deliveriesBySale = $shipment->deliveries->groupBy(fn($d) => $d->saleDetail->sale_id);
+    $groupedByClient = $shipment->deliveries->groupBy(fn($d) => $d->saleDetail->sale->client_id);
 
-    $orders = $deliveriesBySale->map(function ($deliveries) use ($shipment) {
-        $sale = $deliveries->first()->saleDetail->sale;
-        return [
-            'sale' => $sale,
-            'client' => $sale->client,
-            'items' => $deliveries,
-            'total' => $deliveries->sum(fn($d) => $d->quantity_delivered * $d->saleDetail->unit_price),
-        ];
-    });
-
-    $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment', 'orders'));
+    $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment', 'groupedByClient'));
     return $pdf->stream('remision-viaje-'.$shipment->id.'.pdf');
 }
 ```
-
-**Archivo:** `resources/views/pdf/shipment_manifest.blade.php` — modificar para iterar `$orders` y meter un salto de página (`page-break-after: always;` en CSS de impresión) entre cada pedido, cada uno con su propio encabezado de cliente, listado de piezas, total, y un recuadro "Recibí de conformidad — Nombre y Firma: ______________".
-
-**Resultado:** un solo PDF, una página (o más) por cliente/pedido dentro del mismo viaje, listo para que el chofer haga firmar cada entrega por separado.
+**Paso 2 — En la plantilla**, iterar sobre `$groupedByClient` en vez del `@foreach` plano actual, con un encabezado de sección por cliente/pedido antes de cada bloque de piezas.
 
 ---
 
-## FASE 3 — Dashboards Especializados (una vez resueltos los bugs críticos)
+## PRÓXIMA TAREA #8: Optimización de consultas confirmadas (Fase 2.6)
 
-### 3.1 Dashboard de Producción
-Igual que antes, pero ahora usa la fórmula ya corregida de `pending_to_fabricate` (bug #1 resuelto):
+**Tiempo estimado:** 1-2 horas | **Prioridad:** Media, importante para hosting compartido
+
+Dos hallazgos concretos y confirmados en código (no hipótesis, ya se revisó línea por línea):
+
+**1. `ProductController::index()`:**
 ```php
-elseif (in_array($user->role, ['produccion', 'supervisor'])) {
-    $inProduction = SaleDetail::whereHas('sale', fn($q) => $q->where('stage', 'produccion'))->count();
-    $readyToShip = ProductionCompletion::whereDoesntHave('saleDetail.saleDeliveries')->sum('quantity_completed');
-    $upcomingDates = Sale::where('stage', 'produccion')->orderBy('promised_date')->take(10)->get(['id', 'promised_date', 'client_id']);
+// Hoy:
+'products' => Product::with(['category', 'variants'])->orderBy('is_favorite', 'desc')->get(),
 
-    return Inertia::render('Dashboard', [
-        'isAdmin' => false,
-        'isProduccion' => true,
-        'kpis' => ['in_production' => $inProduction, 'ready_to_ship' => $readyToShip],
-        'upcomingDates' => $upcomingDates,
-    ]);
-}
+// Recomendado:
+'products' => Product::with(['category:id,name', 'variants'])
+    ->orderBy('is_favorite', 'desc')
+    ->paginate(20) // o el tamaño que use Products/Index.vue
+    ->withQueryString(),
 ```
+Revisar `Products/Index.vue` para confirmar si ya espera un objeto paginado o una colección plana antes de cambiar esto — hoy usa "paginación local" en el frontend, que dejaría de tener sentido si se pagina en servidor.
 
-### 3.2 Dashboard / Módulo Financiero (rediseñado — estado de cuenta por cliente)
-
+**2. `SaleController::create()` (POS):**
 ```php
-elseif ($user->role === 'financiero') {
-    // Estado de cuenta por cliente: deuda exigible ENTREGADA menos cobrado
-    $accountsByClient = Client::query()
-        ->withSum(['sales as total_paid' => function ($q) {
-            $q->select(DB::raw('COALESCE(SUM(paid_amount),0)'));
-        }], 'paid_amount')
-        ->get()
-        ->map(function ($client) {
-            $deliveredValue = DB::table('sale_deliveries')
-                ->join('shipments', 'sale_deliveries.shipment_id', '=', 'shipments.id')
-                ->join('sale_details', 'sale_deliveries.sale_detail_id', '=', 'sale_details.id')
-                ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
-                ->where('sales.client_id', $client->id)
-                ->where('shipments.status', 'entregado')
-                ->selectRaw('SUM(sale_deliveries.quantity_delivered * sale_details.unit_price) as total')
-                ->value('total') ?? 0;
+// Hoy:
+'clients' => Client::all(),
 
-            $paid = Sale::where('client_id', $client->id)->sum('paid_amount');
-
-            return [
-                'client' => $client->only(['id', 'name']),
-                'delivered_value' => $deliveredValue,
-                'paid' => $paid,
-                'balance' => $deliveredValue - $paid,
-            ];
-        })
-        ->filter(fn($row) => $row['balance'] > 0)
-        ->values();
-
-    return Inertia::render('Dashboard', [
-        'isAdmin' => false,
-        'isFinanciero' => true,
-        'accountsReceivable' => $accountsByClient,
-    ]);
-}
+// Recomendado, si el catálogo de clientes ya es grande:
+'clients' => Client::select('id', 'name', 'business_name', 'price_tier')->orderBy('name')->get(),
 ```
-> Nota: esta consulta es ilustrativa del enfoque (agregación por cliente sobre entregas confirmadas), no código listo para producción — optimizar con una sola query agregada antes de llevarlo a un dataset grande.
-
-### 3.3 Selector de Vista para Admin
-Sin cambios respecto al plan original: tabs "Ventas" / "Producción" / "Financiero" / "Todo", solo Admin ve las 4.
-
-### 3.4 Rutas y sidebar condicionales por rol completo
-
-```php
-// web.php — nuevas zonas a agregar
-Route::middleware('role:admin,inventario')->group(function () {
-    // mover aquí todo el bloque de ShipmentController (ver bug #4)
-});
-
-Route::middleware('role:admin,financiero')->group(function () {
-    Route::get('/cuentas-por-cobrar', [FinanceController::class, 'index'])->name('finance.index');
-    Route::post('/sales/{sale}/payment', [SalePaymentController::class, 'store'])->name('sales.payment.store.finanzas');
-    // Acceso de lectura a shipments para financiero: ver nota abajo
-});
-```
-
-En `AuthenticatedLayout.vue`:
-```html
-<template v-if="['admin', 'vendedor'].includes($page.props.auth.user.role)">
-    <Link :href="route('sales.index')">Reporte de Ventas</Link>
-    <Link :href="route('sales.create')">Punto de Venta</Link>
-</template>
-
-<template v-if="['admin', 'inventario'].includes($page.props.auth.user.role)">
-    <Link :href="route('shipments.index')">Embarques</Link>
-</template>
-
-<template v-if="['admin', 'financiero'].includes($page.props.auth.user.role)">
-    <Link :href="route('finance.index')">Cuentas por Cobrar</Link>
-</template>
-
-<template v-if="$page.props.auth.user.role === 'admin'">
-    <Link :href="route('settings.index')">Configuración</Link>
-</template>
-```
-
-> Pendiente de decidir: si `financiero` necesita ver el índice de embarques (`shipments.index`) en modo lectura para dar seguimiento, hay que exponer esa ruta también al rol `financiero` (aunque no pueda crear/confirmar). Se puede resolver con `role:admin,inventario,financiero` en la ruta `shipments.index` específicamente, dejando `create`/`store`/`confirm`/`cancel` solo para `admin,inventario`.
+Si el volumen de clientes sigue siendo manejable (decenas, no miles), esto puede esperar — priorizar `ProductController` primero, que carga precios completos de cada variante en cada visita.
 
 ---
 
-### 3.5 Restricción de precios por rol (DECIDIDO con cliente, Julio 2026)
+## PRÓXIMA TAREA #9: Fase 3 — Dashboards especializados
 
-Regla final: solo `admin`, `financiero`, y `vendedor` **dentro de sus propias operaciones** (POS, sus ventas, su dashboard) ven precios. `supervisor`, `inventario` y `produccion` nunca los ven. Nada que cambiar en el flujo del Vendedor — sigue viendo precios en su POS exactamente como hoy.
-
-**Archivo:** `app/Http/Controllers/SaleController.php`, método `index()` (Kanban)
-```php
-public function index(Request $request)
-{
-    $user = auth()->user();
-    $hidePrices = in_array($user->role, ['supervisor']); // inventario/produccion no acceden a esta ruta
-
-    $sales = Sale::with('client')
-        ->when($hidePrices, fn($q) => $q->select('id', 'client_id', 'user_id', 'stage', 'promised_date', 'created_at'))
-        ->when(!$hidePrices, fn($q) => $q->select('id', 'client_id', 'user_id', 'stage', 'promised_date', 'total', 'paid_amount', 'created_at'))
-        ->get();
-
-    return Inertia::render('Sales/Index', ['sales' => $sales, 'hidePrices' => $hidePrices]);
-}
-```
-
-**Archivo:** `app/Http/Controllers/SaleController.php`, método `show()`
-```php
-public function show(Sale $sale)
-{
-    $user = auth()->user();
-    // Forzar Modo Taller (sin precios) para roles que nunca deben ver montos,
-    // sin importar el query param que use el frontend para el switch Oficina/Taller.
-    $forceProductionMode = in_array($user->role, ['supervisor', 'inventario', 'produccion']);
-
-    return Inertia::render('Sales/Show', [
-        'sale' => $sale->load(['details.variant.product', 'client', 'history', 'payments']),
-        'forceProductionMode' => $forceProductionMode,
-    ]);
-}
-```
-En `Sales/Show.vue`, si `forceProductionMode` viene en `true`, ocultar el switch Oficina/Taller y dejar fijo el modo sin precios (no permitir que el usuario lo cambie desde el frontend).
-
-**Archivo:** `app/Http/Controllers/ShipmentController.php`, métodos `create()` y `show()`
-```php
-// Antes: ->with(['details.variant.product', ...])   ← trae price_1..price_5 sin querer
-// Después, restringir columnas explícitamente:
-->with(['details.variant:id,product_id,material,stock', 'details.variant.product:id,name,measurements,image'])
-```
-Esto es necesario porque Embarques es de Inventarios (bug #4, en proceso de restringirse a `role:admin,inventario`), y ese rol nunca debe recibir precios en el payload — aunque la vista no los pinte, sin este cambio viajarían en el JSON.
-
-**Archivo:** `app/Http/Controllers/DashboardController.php` — al construir la futura rama de `supervisor` (Fase 3.1), no incluir ningún KPI en pesos, solo conteos y fechas:
-```php
-elseif ($user->role === 'supervisor') {
-    return Inertia::render('Dashboard', [
-        'isSupervisor' => true,
-        'kpis' => [
-            'sales_in_progress' => Sale::whereNotIn('stage', ['entregado', 'cancelado'])->count(),
-            'in_production' => SaleDetail::whereHas('sale', fn($q) => $q->where('stage', 'produccion'))->count(),
-            // Sin 'revenue', 'total', 'paid_amount' ni ningún campo en $
-        ],
-    ]);
-}
-```
-
-### Cómo probar
-1. Con un usuario `supervisor`: entrar al Kanban → no debe verse columna de Total/Pagado. Abrir un pedido → debe abrir directo en modo sin precios, sin poder cambiar al modo con precios.
-2. Con un usuario `inventario`: entrar a `/shipments/create` → abrir el payload en las herramientas de desarrollador del navegador (pestaña Network o Vue Devtools) → confirmar que `price_1..price_5` **no aparecen en absoluto** en el JSON, no solo que estén ocultos visualmente.
-3. Con un usuario `vendedor`: confirmar que el POS, su Kanban y su dashboard siguen mostrando precios exactamente igual que antes — este rol no debe notar ningún cambio.
+**Confirmado en código: no hay ni una línea de esto todavía.** `DashboardController::index()` solo tiene ramas `admin` y `vendedor`; todo lo demás cae a la pantalla de bienvenida. Antes de empezar, decidir con el cliente el orden real entre Producción (3.1) y Financiero (3.2) — ambos dependen de datos que ya están correctos gracias a los bugs resueltos, así que no hay bloqueo técnico, solo priorización de negocio.
 
 ---
 
-## FASE 4 — Catálogo Público
+## PRÓXIMA TAREA #10: Fase 4 — Catálogo público
 
-⚠️ **Antes de empezar:** la ruta `/` ya devuelve `catalogo.index` (vista Blade) según `web.php` actual — auditar esa vista primero para no duplicar trabajo.
-
-### 4.1 Nuevas rutas
-```php
-Route::get('/catalogo', [CatalogController::class, 'index'])->name('catalog.index');
-Route::get('/catalogo/{category:name}', [CatalogController::class, 'byCategory'])->name('catalog.category');
-Route::get('/catalogo/producto/{product}', [CatalogController::class, 'show'])->name('catalog.show');
-Route::get('/catalogo/cliente/{token}', [CatalogController::class, 'byClientToken'])->name('catalog.client');
-```
-
-### 4.2 Token de cliente
-```bash
-php artisan make:migration add_catalog_token_to_clients_table
-```
-```php
-$table->string('catalog_token', 32)->unique()->nullable();
-```
+**Confirmado en código:** `/` devuelve una vista Blade 100% estática (`catalogo.index`), con categorías y un producto de ejemplo hardcodeados. No hay ningún avance real de esta fase — no hay que "verificar avance existente" como decía la versión anterior de este documento, hay que construir desde cero:
+1. Reemplazar los bloques hardcodeados por un `CatalogoController` que consulte `Product::with('variants')->whereHas('category')->get()`.
+2. Agregar las rutas públicas `/catalogo`, `/catalogo/{categoria}`, `/catalogo/producto/{id}`.
+3. Nunca exponer `price_1..price_5` en esta vista pública (reservado para el link personalizado de la Fase 4.2).
 
 ---
 
-## Cómo usar esta guía con Claude
+## Notas para la siguiente sesión con IA
 
-Al iniciar sesión nueva:
-```
-"Voy a trabajar en [Fase X.X - Nombre].
-Contexto:" → [pegar CONTEXTO_TECNICO.md]
-"Archivos relevantes:" → [pegar archivos de esa tarea]
-```
-
-Para los bugs críticos, comparte específicamente: `ProductionController.php`, `SaleController.php`, `ShipmentController.php`, `web.php`, y las migraciones de `shipments`/`sale_deliveries`/`production_completions`.
+1. Comparte `CONTEXTO_TECNICO.md` actualizado — ya incluye el stack de frontend confirmado (`package.json`, `vite.config.js`) y el estado real de cada bug.
+2. Si vuelves a compartir un zip del proyecto, **excluye `vendor/`, `node_modules/`, `.git`, `storage/logs`, `storage/framework`** — así quedó ligero y fácil de revisar completo en esta ronda.
+3. Si la tarea toca estilos, incluye `tailwind.config.js` y `postcss.config.js` — no se auditaron todavía (ver Tarea #1, conflicto de versiones de Tailwind).
