@@ -9,12 +9,18 @@
 
 Estos 5 puntos salieron de una reunión con el cliente y ya tienen diseño técnico acordado con el desarrollador. Van en orden de prioridad para la siguiente ronda de código.
 
-### A. Supervisor con permisos completos en Producción, Almacén y Embarques
-**Decisión:** Supervisor deja de ser "sin módulo" y pasa a tener los mismos permisos que Admin en esos tres módulos específicos — no en Ventas/Kanban ni Configuración salvo que se indique lo contrario. Cambio: agregar `supervisor` a los grupos de middleware `role:admin,produccion` (Producción) y `role:admin,inventario` (Embarques), y dar acceso de escritura en Productos/Inventario donde hoy es de solo lectura.
+### A. Supervisor con permisos completos en Producción, Almacén y Embarques (COMPLETADO)
+- **Rutas y Middleware:** En `routes/web.php`, se agregó el rol `supervisor` a los grupos de middleware `role:admin,produccion,supervisor` y `role:admin,inventario,supervisor`.
+- **Inventario:** Se extrajeron las rutas de `products` (CRUD y favoritos) de la zona exclusiva de admin hacia un nuevo grupo compartido `role:admin,supervisor`.
+- **Restricciones:** El supervisor tiene prohibido el acceso a Clientes, Configuración, Usuarios y Ventas (corroborado vía tests con `assertForbidden()`).
+- **Frontend:** Se validó que no existen directivas `v-if` restrictivas por rol en los componentes Vue involucrados, por lo que los botones y acciones operan de forma nativa basados en el acceso del backend.
 
-### B. Bug — pedido "entregado" cancelado cae en limbo (`enviado` invisible)
-**Causa raíz confirmada:** `ShipmentController::cancel()` revierte la etapa leyendo `SaleHistory::latest()->from_stage`, y para un pedido que llegó a `entregado`, esa transición previa fue `enviado → entregado` — revierte a `enviado`, etapa que el Kanban actual ya no muestra (`Sales/Index.vue` solo maneja `pedido/confirmado/producción/cancelado`). Contribuye el hecho de que `store()` crea un `SaleHistory` manual duplicado sin `from_stage`, además del automático de `SaleObserver`.
-**Decisión de arreglo (acordada):** reemplazar la lectura de historial por un recálculo en vivo, igual al patrón que ya usa `closeOrderIfComplete()` — al cancelar, si quedan piezas sin entregar, la etapa siempre vuelve a `producción` (ya sea que falte fabricar o que ya esté en stock esperando reembarque), nunca a un valor histórico. Adicionalmente, quitar el `SaleHistory::create()` manual y duplicado de `store()`, dejando que `SaleObserver` sea la única fuente de verdad del historial de etapas.
+
+### B. Bug — pedido "entregado" cancelado cae en limbo (`enviado` invisible) (COMPLETADO)
+- **Causa raíz solucionada:** Se eliminó la lectura estática a `SaleHistory` en `ShipmentController::cancel()` reemplazándola por un recálculo en vivo de piezas entregadas. Al cancelar un viaje, si un pedido previamente "entregado" aún tiene piezas pendientes en alguna de sus líneas, la etapa vuelve de forma dinámica a `produccion`.
+- **Limpieza de Historial:** Se suprimió la creación manual y duplicada de registros de `SaleHistory` en el método `store()`, consolidando a `SaleObserver` como la única fuente de verdad para el tracking de etapas.
+- **Fix Secundario (Modelo):** Se añadió el campo `pickup_type` al array `$fillable` del modelo `Shipment` para garantizar el guardado del tipo de entrega y evitar choques con validaciones de flota propia al cancelar remisiones de mostrador.
+
 
 ### C. Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales
 **Necesidad del cliente:** (1) puede producir por anticipado sin que exista un pedido todavía (conoce la demanda de temporada), y (2) cuando un envío parcial deja piezas sin fabricar, no quiere que el sistema las marque automáticamente como urgentes en el taller — quiere decidir él cuándo se fabrica el remanente.
@@ -47,14 +53,10 @@ product_variants.min_stock (int, nullable)
 - La alerta de stock crítico del Dashboard cambia de `stock <= 5` (fijo) a `stock <= COALESCE(min_stock, 5)` — mantiene el comportamiento actual como default si un producto se marca preferente sin definir aún su mínimo por variante.
 - Cambiar de temporada es simplemente desmarcar/marcar `is_favorite` — no requiere migrar ni tocar `min_stock` de variantes que ya no importan.
 
-### E. Envío automático de la nota de venta al crear el pedido
-**Hallazgo:** la lógica ya existe completa en `SaleController::sendEmail()` (correo del cliente + `settings.notification_emails` + PDF adjunto vía `SaleNoteEmail`), pero solo se dispara manualmente desde un botón en `Sales/Index.vue` — nunca se llama dentro de `store()`.
-**Decisión de diseño:**
-1. Extraer la lógica de `sendEmail()` a un método privado reutilizable (p. ej. `sendSaleNoteMail(Sale $sale)`), usado tanto por el envío automático como por el botón manual.
-2. Nuevo `Setting`: `auto_email_on_sale` (boolean, default: `true` — habilitado desde el día uno para que el cliente empiece a probarlo).
-3. Al final de `store()`, fuera de la transacción de BD (el envío de correo es I/O, no debe competir por locks), si `auto_email_on_sale` está activo: enviar el correo. Si falla (SMTP mal configurado, etc.), **no debe revertir ni bloquear la creación del pedido** — solo registrar el error.
-4. El botón manual en `Sales/Index.vue` se queda intacto y funciona **sin importar el estado del interruptor** — sirve para reenviar la nota cuando haga falta, independientemente de si el envío automático está prendido o apagado.
-5. `SettingController` ya lista las claves permitidas (`'notification_emails', 'allow_negative_stock', 'ticket_footer_text'`) — agregar `'auto_email_on_sale'` a esa lista.
+### E. Envío automático de la nota de venta al crear el pedido (COMPLETADO)
+- **Configuración (Settings):** Se agregó la clave `auto_email_on_sale` (boolean, default `true`) a `$allowedKeys` en `SettingController`. Determina el envío automático de correos en el POS.
+- **Ventas:** En `SaleController`, se refactorizó el envío de correos al método `private function sendSaleNoteMail(Sale $sale)`. En el método `store()`, se llama al envío de correos fuera del bloque de transacción (`DB::transaction`) y envuelto en un `try-catch` (`Log::error()`) para evitar que fallas SMTP aborten el pedido.
+- **Testing (Línea Base):** Configurado `phpunit.xml` a base de datos `:memory:` (SQLite). Creadas suites de Feature Tests para asegurar comportamiento del middleware de roles (`RoleMiddlewareTest`), control de transiciones y ventas (`SaleControllerTest`), administración y consistencia del inventario (`ShipmentControllerTest`) y disparo del sistema de correos (`SaleAutoEmailTest`).
 
 ## 0. Hallazgos de la ronda 2 de auditoría (25 jul 2026, con `UserController.php`, `package.json`, `vite.config.js`)
 

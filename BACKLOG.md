@@ -16,15 +16,15 @@ Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño té
 - [x] El botón manual de reenvío en `Sales/Index.vue` se queda intacto, funciona sin importar el estado del interruptor.
 
 ### 2. 🟢 Supervisor con permisos completos en Producción, Almacén y Embarques
-- [ ] Agregar `supervisor` a `role:admin,produccion` (rutas de Producción) y `role:admin,inventario` (rutas de Embarques) en `routes/web.php`.
-- [ ] Dar acceso de escritura a Supervisor en Productos/Inventario (hoy sin ninguna ruta).
-- [ ] Confirmar que ninguna vista (`Production/Index.vue`, `Shipments/*.vue`, `Products/*.vue`) tenga un `v-if` que excluya explícitamente a Supervisor de botones de acción — hoy no debería haber ninguno porque Supervisor no tenía acceso en absoluto, pero revisar por si acaso.
+- [x] Agregar `supervisor` a `role:admin,produccion` (rutas de Producción) y `role:admin,inventario` (rutas de Embarques) en `routes/web.php`.
+- [x] Dar acceso de escritura a Supervisor en Productos/Inventario (hoy sin ninguna ruta).
+- [x] Confirmar que ninguna vista (`Production/Index.vue`, `Shipments/*.vue`, `Products/*.vue`) tenga un `v-if` que excluya explícitamente a Supervisor de botones de acción — hoy no debería haber ninguno porque Supervisor no tenía acceso en absoluto, pero revisar por si acaso.
 - [ ] Fuera de alcance por ahora: Ventas/Kanban y Configuración.
 
 ### 3. 🟡 Bug — pedido "entregado" cancelado cae en limbo
-- [ ] En `ShipmentController::cancel()`, reemplazar la lectura de `SaleHistory::latest()->from_stage` por un recálculo en vivo: si quedan piezas sin entregar tras la cancelación, la etapa siempre vuelve a `producción`.
-- [ ] Quitar el `SaleHistory::create()` manual y duplicado en `store()` — dejar que `SaleObserver` sea la única fuente de verdad.
-- [ ] Probar el escenario exacto que reportó el cliente: envío completo → confirmar entrega (llega a `entregado`) → cancelar embarque → confirmar que el pedido reaparece visible en Producción o Kanban según corresponda, no en limbo.
+- [x] En `ShipmentController::cancel()`, eliminar la lectura del historial de etapa.
+- [x] Al regresar las piezas al cancelar, verificar matemáticamente si faltan piezas en alguna partida de ese pedido; si es así, setear el `stage` dinámicamente a `produccion`.
+- [x] En `ShipmentController::store()`, eliminar la creación de `SaleHistory` duplicada.
 
 ### 4. 🟡 Stock mínimo por variante, solo para productos preferentes
 - [ ] Migración: `product_variants.min_stock` (int, nullable).

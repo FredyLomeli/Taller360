@@ -30,10 +30,11 @@
     *   Las respuestas esperadas de los endpoints hacia el frontend de Inertia.
 *   Incluye siempre la creación o actualización de los tests correspondientes dentro de tus **Planes de Implementación**.
 
-## 6. Cierre de Tareas y Actualización de Documentación (Prohibido tocar archivos maestros)
-*   Tienes estrictamente prohibido sobreescribir, editar o eliminar directamente los archivos de control del proyecto (`BACKLOG.md`, `CONTEXTO_TECNICO.md` y `GUIA_RUTA.md`).
-*   Al finalizar exitosamente la implementación y confirmar que las pruebas pasan, debes generar un **"Snippet de Actualización de Documentación"** en tu respuesta final.
-*   Este snippet debe contener, en formato Markdown claro:
-    1.  **Para el Backlog:** Las líneas exactas que deben marcarse como completadas (ej. `[x] Extraer lógica de...`).
-    2.  **Para el Contexto Técnico:** Si agregaste nuevas migraciones, tablas, campos en la base de datos, métodos base, dependencias o configuraciones (ej. nuevos `Settings`), redacta el texto técnico exacto que refleje este cambio.
-*   El Project Manager (humano) será el único encargado de revisar este snippet y pegarlo en los archivos maestros para evitar la corrupción de la documentación por desplazamiento de contexto.
+## 6. Fase de Revisión (Walkthrough) y Cierre de Tareas
+*   Al finalizar la codificación y confirmar que las pruebas pasan, **NO** generes los snippets de documentación ni el comando de commit inmediatamente.
+*   **Paso 1 (Walkthrough):** Debes entregar un "Resumen de Cambios". Explica brevemente qué archivos tocaste y cómo quedó la lógica para que el PM pueda auditarlo.
+*   **Paso 2 (Pausa de QA):** Detente y espera. El Project Manager revisará tu trabajo y realizará pruebas manuales o auditoría de código si es necesario.
+*   **Paso 3 (Cierre):** Solo cuando el PM te dé la instrucción explícita de "QA Aprobado" o "Cierra la tarea", procederás a generar:
+    1.  El comando de terminal para el **Git Commit** (usando Conventional Commits).
+    2.  El **"Snippet de Actualización de Documentación"** con las líneas exactas para `BACKLOG.md` y `CONTEXTO_TECNICO.md`.
+*   Recuerda: Tienes estrictamente prohibido editar los archivos maestros (`.md`) directamente.
