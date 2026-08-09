@@ -58,6 +58,7 @@ class ProductController extends Controller
             'variants.*.price_3' => 'nullable|numeric|min:0',
             'variants.*.price_4' => 'nullable|numeric|min:0',
             'variants.*.price_5' => 'nullable|numeric|min:0',
+            'variants.*.min_stock' => 'nullable|integer|min:0',
         ]);
 
         DB::transaction(function () use ($request) {
@@ -94,6 +95,7 @@ class ProductController extends Controller
                     'price_3' => $variantData['price_3'] ?? null,
                     'price_4' => $variantData['price_4'] ?? null,
                     'price_5' => $variantData['price_5'] ?? null,
+                    'min_stock' => $variantData['min_stock'] ?? null,
                 ]);
             }
         });
@@ -126,6 +128,7 @@ class ProductController extends Controller
             'variants.*.material' => 'required|string',
             'variants.*.stock' => 'required|integer|min:0',
             'variants.*.price_1' => 'required|numeric|min:0',
+            'variants.*.min_stock' => 'nullable|integer|min:0',
         ]);
 
         DB::transaction(function () use ($request, $product) {
@@ -172,6 +175,7 @@ class ProductController extends Controller
                         'price_3' => $variantData['price_3'] ?? null,
                         'price_4' => $variantData['price_4'] ?? null,
                         'price_5' => $variantData['price_5'] ?? null,
+                        'min_stock' => $variantData['min_stock'] ?? null,
                     ]
                 );
             }

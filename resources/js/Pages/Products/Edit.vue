@@ -39,7 +39,8 @@ const form = useForm({
         price_2: v.price_2,
         price_3: v.price_3,
         price_4: v.price_4,
-        price_5: v.price_5
+        price_5: v.price_5,
+        min_stock: v.min_stock
     }))
 });
 
@@ -101,7 +102,8 @@ const addVariant = () => {
         price_2: null, 
         price_3: null, 
         price_4: null, 
-        price_5: null 
+        price_5: null,
+        min_stock: null
     });
 };
 
@@ -264,9 +266,14 @@ const sanitizeNumber = (variant, field) => {
                                             <label class="block text-xs font-bold text-gray-500 mb-1">Stock</label>
                                             <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600">
                                         </div>
+
+                                        <div class="md:col-span-2" v-if="form.is_favorite">
+                                            <label class="block text-xs font-bold text-yellow-600 mb-1">Stock Mínimo</label>
+                                            <input v-model="variant.min_stock" type="number" min="0" @blur="sanitizeNumber(variant, 'min_stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-yellow-500 text-gray-600">
+                                        </div>
                                         
                                         <!-- PRECIO PÚBLICO (P1) convertido a text con control estricto de punto -->
-                                        <div class="md:col-span-3">
+                                        <div :class="form.is_favorite ? 'md:col-span-3' : 'md:col-span-5'">
                                             <label class="block text-xs font-bold text-green-700 mb-1">Precio Público (P1) <span class="text-red-500">*</span></label>
                                             <div class="relative">
                                                 <span class="absolute left-3 top-2 text-gray-500 font-bold">$</span>

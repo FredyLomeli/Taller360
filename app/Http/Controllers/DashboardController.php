@@ -60,7 +60,7 @@ class DashboardController extends Controller
                 ->get();
             
             // D. ALERTA DE STOCK (Solo Favoritos)
-            $lowStockProducts = ProductVariant::where('stock', '<=', 5)
+            $lowStockProducts = ProductVariant::whereRaw('stock <= COALESCE(min_stock, 5)')
                 ->whereHas('product', function ($query) {
                     // AQUÍ ESTÁ EL FILTRO CLAVE: Solo productos favoritos
                     $query->where('is_favorite', true);

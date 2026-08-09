@@ -25,7 +25,7 @@ const form = useForm({
     image: null,
     is_favorite: false,
     variants: [
-        { material: '', measurements: '', sku: '', stock: 0, price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null }
+        { material: '', measurements: '', sku: '', stock: 0, min_stock: null, price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null }
     ]
 });
 
@@ -60,7 +60,7 @@ const formatPriceInput = (variant, field, event) => {
 
 const addVariant = () => {
     form.variants.push({ 
-        material: '', measurements: '', sku: '', stock: 0, 
+        material: '', measurements: '', sku: '', stock: 0, min_stock: null,
         price_1: 0, price_2: null, price_3: null, price_4: null, price_5: null 
     });
 };
@@ -220,8 +220,13 @@ const sanitizeNumber = (variant, field) => {
                                             <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600">
                                         </div>
 
+                                        <div class="md:col-span-2" v-if="form.is_favorite">
+                                            <label class="block text-xs font-bold text-yellow-600 mb-1">Stock Mínimo</label>
+                                            <input v-model="variant.min_stock" type="number" min="0" @blur="sanitizeNumber(variant, 'min_stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-yellow-500 text-gray-600">
+                                        </div>
+
                                         <!-- PRECIO PÚBLICO (P1) con control estricto de punto decimal -->
-                                        <div class="md:col-span-3">
+                                        <div :class="form.is_favorite ? 'md:col-span-3' : 'md:col-span-5'">
                                             <label class="block text-xs font-bold text-green-700 mb-1">Precio Público (P1) <span class="text-red-500">*</span></label>
                                             <div class="relative">
                                                 <span class="absolute left-3 top-2 text-gray-500 font-bold">$</span>
