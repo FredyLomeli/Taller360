@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Shipment extends Model
 {
     protected $fillable = [
-        'driver_name', 'license_plate', 'destination', 'status', 
+        'driver_name', 'license_plate', 'destination', 'status', 'pickup_type',
         'shipped_at', 'delivered_at', 'notes', 'user_id'
     ];
 

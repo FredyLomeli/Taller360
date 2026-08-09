@@ -140,4 +140,49 @@ class ShipmentControllerTest extends TestCase
             'stock' => 45 // Not returned
         ]);
     }
+    public function test_cancel_shipment_reverts_entregado_to_produccion_on_partial_delivery()
+    {
+        $inventario = User::factory()->create(['role' => 'inventario']);
+        $variant = ProductVariant::factory()->create(['stock' => 40, 'material' => 'Madera', 'measurements' => '2x2']);
+        
+        // Creamos una venta que ya fue "entregada"
+        $sale = Sale::factory()->create(['stage' => 'entregado']);
+        $detail = SaleDetail::create([
+            'sale_id' => $sale->id,
+            'product_variant_id' => $variant->id,
+            'quantity' => 10,
+            'product_name' => 'Silla Madera',
+            'unit_price' => 10,
+            'subtotal' => 100
+        ]);
+        
+        // Este embarque había entregado el 100% de la venta
+        $shipment = Shipment::create(['status' => 'entregado', 'pickup_type' => 'recoleccion_cliente', 'driver_name' => 'D', 'license_plate' => 'L', 'destination' => 'D', 'user_id' => $inventario->id]);
+        SaleDelivery::create([
+            'shipment_id' => $shipment->id,
+            'sale_detail_id' => $detail->id,
+            'quantity_delivered' => 10
+        ]);
+
+        // Cancelamos el embarque
+        $response = $this->actingAs($inventario)->patch("/shipments/{$shipment->id}/cancel");
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'status' => 'cancelado'
+        ]);
+
+        $this->assertDatabaseHas('product_variants', [
+            'id' => $variant->id,
+            'stock' => 50 // 40 + 10 regresadas
+        ]);
+
+        // Aseguramos que el estado volvió a 'produccion' porque hay 10 piezas faltantes
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'stage' => 'produccion'
+        ]);
+    }
 }

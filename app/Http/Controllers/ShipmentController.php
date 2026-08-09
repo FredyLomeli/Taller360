@@ -130,15 +130,6 @@ class ShipmentController extends Controller
                         $detail->sale->update(['stage' => 'enviado']);
                     }
 
-                    // 4. Registro en el Historial del Pedido (Sin cambiar el stage global)
-                    SaleHistory::create([
-                        'sale_id' => $detail->sale_id,
-                        'user_id' => auth()->id(),
-                        'to_stage' => $detail->sale->fresh()->stage,
-                        'notes' => $isCounterPickup
-                            ? "🏬 Recolección en mostrador: {$item['quantity']} unidades de {$detail->product_name}"
-                            : "📦 Envío #{$shipment->id}: {$item['quantity']} unidades de {$detail->product_name}"
-                    ]);
                 }
             });
             
@@ -225,6 +216,8 @@ class ShipmentController extends Controller
         }
 
         DB::transaction(function () use ($shipment) {
+            $salesToRecalculate = [];
+
             foreach ($shipment->deliveries as $delivery) {
                 $detail = $delivery->saleDetail;
                 if (!$detail) continue;
@@ -233,27 +226,34 @@ class ShipmentController extends Controller
                     $detail->variant->increment('stock', $delivery->quantity_delivered);
                 }
 
-                $sale = $detail->sale;
+                $salesToRecalculate[$detail->sale_id] = $detail->sale;
+            }
 
-                if (in_array($sale->stage, ['entregado', 'enviado'])) {
-                    $transition = SaleHistory::where('sale_id', $sale->id)
-                        ->whereIn('to_stage', ['entregado', 'enviado'])
-                        ->latest()
-                        ->first();
+            $shipment->update(['status' => 'cancelado']);
 
-                    $revertStage = $transition->from_stage ?? 'produccion';
-                    $sale->update(['stage' => $revertStage]);
+            foreach ($salesToRecalculate as $sale) {
+                // Recálculo en vivo de las piezas entregadas vs totales (excluyendo este embarque ya cancelado)
+                $saleWithDetails = Sale::with(['details' => function ($q) {
+                    $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
+                        $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
+                    }], 'quantity_delivered');
+                }])->find($sale->id);
+
+                $hasPendingItems = $saleWithDetails->details->contains(function ($d) {
+                    return ($d->delivered_quantity ?? 0) < $d->quantity;
+                });
+
+                if ($hasPendingItems && in_array($sale->stage, ['entregado', 'enviado'])) {
+                    $sale->update(['stage' => 'produccion']);
                 }
 
                 SaleHistory::create([
                     'sale_id' => $sale->id,
                     'user_id' => auth()->id(),
                     'to_stage' => $sale->fresh()->stage,
-                    'notes' => "❌ Embarque #{$shipment->id} cancelado: se regresan {$delivery->quantity_delivered} unidades de {$detail->product_name} a inventario."
+                    'notes' => "❌ Embarque #{$shipment->id} cancelado. Se restituyó stock."
                 ]);
             }
-
-            $shipment->update(['status' => 'cancelado']);
         });
 
         return back()->with('success', 'Embarque cancelado y stock restituido correctamente.');
