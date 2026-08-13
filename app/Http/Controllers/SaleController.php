@@ -219,6 +219,17 @@ class SaleController extends Controller
 
         if ($newStage === $oldStage) return back();
 
+        // VALIDACIÓN: Fecha compromiso obligatoria para Confirmado y Producción
+        if (in_array($newStage, ['confirmado', 'produccion'])) {
+            $promisedDate = $request->input('promised_date', $sale->promised_date);
+            if (empty($promisedDate)) {
+                return back()->withErrors(['error' => 'La fecha compromiso es obligatoria para confirmar o mandar a producción.']);
+            }
+            if ($request->has('promised_date')) {
+                $sale->promised_date = $request->promised_date;
+            }
+        }
+
         try {
             DB::transaction(function () use ($sale, $newStage, $oldStage) {
                 // Actualizamos el estado (El Observer guardará el historial)

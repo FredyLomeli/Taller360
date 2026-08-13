@@ -23,10 +23,8 @@ use Illuminate\Support\Facades\Auth;
 */
 
 // --- RUTA PÚBLICA (Catálogo / Landing Page) ---
-Route::get('/', function () {
-    // Cualquier visitante que entre a la raíz verá el catálogo público
-    return view('catalogo.index');
-})->name('home');
+use App\Http\Controllers\CatalogController;
+Route::get('/', [CatalogController::class, 'index'])->name('home');
 
 // --- RUTAS AUTENTICADAS ---
 Route::middleware(['auth', 'verified'])->group(function () {

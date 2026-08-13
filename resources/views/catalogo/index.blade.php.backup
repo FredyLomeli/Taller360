@@ -81,14 +81,20 @@
 
         <!-- Grid de Productos -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-12" id="products-grid">
-            @php $globalIndex = 0; @endphp
             @foreach($categories as $category)
                 @foreach($category->products as $product)
                     @php
-                        $safeImageUrl = $product->image ? asset('storage/products/' . implode('/', array_map('rawurlencode', explode('/', $product->image)))) : null;
+                        $safeImageUrl = $product->image ? asset('storage/products/' . implode('/', array_map('rawurlencode', explode('/', $product->image)))) : 'https://via.placeholder.com/600x400?text=Sin+Imagen';
                     @endphp
-                    <div class="product-card group fade-in cursor-pointer" data-category="category-{{ $category->id }}" onclick="openProductModal({{ $globalIndex }})">
-                        @php $globalIndex++; @endphp
+                    <div class="product-card group fade-in cursor-pointer" data-category="category-{{ $category->id }}" onclick="openProductModal({{ json_encode([
+                        'id' => $product->id,
+                        'name' => $product->name,
+                        'description' => $product->description,
+                        'image' => $product->image ? $safeImageUrl : null,
+                        'category' => $category->name,
+                        'is_favorite' => $product->is_favorite,
+                        'variants' => $product->variants
+                    ]) }})">
                         
                         <div class="relative overflow-hidden rounded-xl bg-gray-100 aspect-square mb-4 shadow-sm group-hover:shadow-xl transition-all duration-500">
                             @if($product->image)
@@ -145,19 +151,11 @@
     <div id="productModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <!-- Backdrop -->
         <div class="fixed inset-0 bg-gray-900/70 backdrop-blur-sm transition-opacity opacity-0" id="modalBackdrop" onclick="closeProductModal()"></div>
-        
-        <!-- Flechas de navegación globales del modal -->
-        <button id="modalPrevBtn" onclick="prevProduct(event)" class="fixed left-2 sm:left-6 top-1/2 -translate-y-1/2 z-[60] bg-white/90 hover:bg-white text-gray-900 p-3 sm:p-4 rounded-full shadow-2xl transition-all backdrop-blur-md border border-gray-200 hidden opacity-0 translate-x-4">
-            <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
-        </button>
-        <button id="modalNextBtn" onclick="nextProduct(event)" class="fixed right-2 sm:right-6 top-1/2 -translate-y-1/2 z-[60] bg-white/90 hover:bg-white text-gray-900 p-3 sm:p-4 rounded-full shadow-2xl transition-all backdrop-blur-md border border-gray-200 hidden opacity-0 -translate-x-4">
-            <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
-        </button>
 
-        <div class="fixed inset-0 z-10 overflow-y-auto pointer-events-none">
-            <div class="flex min-h-full items-end justify-center p-0 text-center sm:items-center sm:p-4 pointer-events-none">
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-0 text-center sm:items-center sm:p-4">
                 <!-- Panel del modal -->
-                <div class="relative transform overflow-hidden bg-white text-left shadow-2xl transition-all duration-300 sm:my-8 w-full sm:max-w-4xl rounded-t-3xl sm:rounded-3xl max-h-[90vh] opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95 flex flex-col md:flex-row pointer-events-auto" id="modalPanel">
+                <div class="relative transform overflow-hidden bg-white text-left shadow-2xl transition-all sm:my-8 w-full sm:max-w-4xl sm:rounded-2xl opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95 flex flex-col md:flex-row h-[90vh] sm:h-auto" id="modalPanel">
                     
                     <!-- Botón Cerrar (Mobile y Desktop) -->
                     <button type="button" onclick="closeProductModal()" class="absolute top-4 right-4 z-20 text-gray-400 hover:text-gray-900 bg-white/50 hover:bg-white backdrop-blur-md rounded-full p-2 transition-all">
@@ -166,7 +164,7 @@
                     </button>
 
                     <!-- Lado Izquierdo: Imagen -->
-                    <div class="w-full md:w-1/2 bg-slate-100 h-64 md:h-auto relative flex items-center justify-center shrink-0">
+                    <div class="w-full md:w-1/2 bg-slate-100 h-64 md:h-auto relative shrink-0">
                         <img id="modalImage" src="" alt="" class="w-full h-full object-cover absolute inset-0">
                         <div id="modalNoImage" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-400">
                              <svg class="w-16 h-16 mb-4 stroke-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,7 +176,7 @@
                     </div>
 
                     <!-- Lado Derecho: Contenido -->
-                    <div class="w-full md:w-1/2 p-6 sm:p-8 overflow-y-auto max-h-[90vh] flex flex-col justify-between">
+                    <div class="w-full md:w-1/2 px-6 py-8 md:p-10 overflow-y-auto flex flex-col">
                         <div class="mb-2">
                             <span id="modalCategory" class="text-xs font-bold text-gray-500 uppercase tracking-widest">Categoría</span>
                         </div>
@@ -228,40 +226,7 @@
 
     <!-- Scripts Javascript Nativo -->
     <script>
-        // --- 1. Estado Global de Productos ---
-        const allProducts = [
-            @foreach($categories as $category)
-                @foreach($category->products as $product)
-                    @php
-                        $safeImageUrl = $product->image ? asset('storage/products/' . implode('/', array_map('rawurlencode', explode('/', $product->image)))) : null;
-                    @endphp
-                    {
-                        id: {{ $product->id }},
-                        name: @json($product->name),
-                        description: @json($product->description),
-                        image: @json($safeImageUrl),
-                        category: @json($category->name),
-                        category_id: 'category-{{ $category->id }}',
-                        variants: @json($product->variants)
-                    },
-                @endforeach
-            @endforeach
-        ];
-
-        let currentFilter = 'all';
-        let visibleProducts = [];
-        let currentIndex = 0;
-
-        function updateVisibleProducts() {
-            if (currentFilter === 'all') {
-                visibleProducts = allProducts.map((p, i) => i);
-            } else {
-                visibleProducts = allProducts.map((p, i) => i).filter(i => allProducts[i].category_id === currentFilter);
-            }
-        }
-        updateVisibleProducts(); // inicializar
-
-        // --- 2. Lógica de Filtros ---
+        // --- 1. Lógica de Filtros ---
         const filterBtns = document.querySelectorAll('.filter-btn');
         const productCards = document.querySelectorAll('.product-card');
         const emptyState = document.getElementById('empty-state');
@@ -276,12 +241,11 @@
                 btn.classList.add('bg-red-600', 'text-white', 'border-red-600');
                 btn.classList.remove('bg-white', 'text-gray-600', 'border-gray-300');
 
-                currentFilter = btn.getAttribute('data-filter');
-                updateVisibleProducts();
+                const filter = btn.getAttribute('data-filter');
                 let count = 0;
 
                 productCards.forEach(card => {
-                    if (currentFilter === 'all' || card.getAttribute('data-category') === currentFilter) {
+                    if (filter === 'all' || card.getAttribute('data-category') === filter) {
                         card.style.display = 'block';
                         // Pequeño hack para reiniciar la animación
                         card.classList.remove('fade-in');
@@ -348,7 +312,7 @@
             const baseWaUrl = "";
         @endif
 
-        function renderModalData(product) {
+        function openProductModal(product) {
             // Llenar datos textuales
             mTitle.textContent = product.name;
             mCategory.textContent = product.category;
@@ -446,19 +410,9 @@
                 const text = encodeURIComponent(`Hola, me interesa cotizar el modelo ${product.name} que vi en el catálogo.`);
                 mWhatsappBtn.href = baseWaUrl + text;
             }
-        }
-
-        function openProductModal(index) {
-            currentIndex = index;
-            const product = allProducts[index];
-            if (!product) return;
-            
-            renderModalData(product);
 
             // Mostrar Modal (Remover clase hidden y animar opacidad/transform)
             modal.classList.remove('hidden');
-            document.getElementById('modalPrevBtn').classList.remove('hidden');
-            document.getElementById('modalNextBtn').classList.remove('hidden');
             document.body.style.overflow = 'hidden'; // Evita scroll de fondo
             
             // Timeout pequeño para que Tailwind aplique la transición
@@ -466,38 +420,7 @@
                 backdrop.classList.remove('opacity-0');
                 panel.classList.remove('opacity-0', 'translate-y-4', 'sm:translate-y-0', 'sm:scale-95');
                 panel.classList.add('opacity-100', 'translate-y-0', 'sm:scale-100');
-                
-                document.getElementById('modalPrevBtn').classList.remove('opacity-0', 'translate-x-4');
-                document.getElementById('modalNextBtn').classList.remove('opacity-0', '-translate-x-4');
             }, 10);
-        }
-
-        function nextProduct(e) {
-            if (e) e.stopPropagation();
-            if (visibleProducts.length <= 1) return;
-            let pos = visibleProducts.indexOf(currentIndex);
-            if (pos === -1) pos = 0;
-            pos = (pos + 1) % visibleProducts.length;
-            currentIndex = visibleProducts[pos];
-            animateModalTransition(() => renderModalData(allProducts[currentIndex]));
-        }
-
-        function prevProduct(e) {
-            if (e) e.stopPropagation();
-            if (visibleProducts.length <= 1) return;
-            let pos = visibleProducts.indexOf(currentIndex);
-            if (pos === -1) pos = 0;
-            pos = (pos - 1 + visibleProducts.length) % visibleProducts.length;
-            currentIndex = visibleProducts[pos];
-            animateModalTransition(() => renderModalData(allProducts[currentIndex]));
-        }
-
-        function animateModalTransition(callback) {
-            panel.classList.add('opacity-50', 'scale-[0.98]');
-            setTimeout(() => {
-                callback();
-                panel.classList.remove('opacity-50', 'scale-[0.98]');
-            }, 150);
         }
 
         function closeProductModal() {
@@ -506,43 +429,11 @@
             panel.classList.remove('opacity-100', 'translate-y-0', 'sm:scale-100');
             panel.classList.add('opacity-0', 'translate-y-4', 'sm:translate-y-0', 'sm:scale-95');
             
-            document.getElementById('modalPrevBtn').classList.add('opacity-0', 'translate-x-4');
-            document.getElementById('modalNextBtn').classList.add('opacity-0', '-translate-x-4');
-            
             // Esperar a la transición para ocultar el div real
             setTimeout(() => {
                 modal.classList.add('hidden');
-                document.getElementById('modalPrevBtn').classList.add('hidden');
-                document.getElementById('modalNextBtn').classList.add('hidden');
                 document.body.style.overflow = ''; // Restaurar scroll
-            }, 300);
-        }
-
-        // --- 4. Eventos de Navegación (Teclado y Touch) ---
-        document.addEventListener('keydown', e => {
-            if (!modal.classList.contains('hidden')) {
-                if (e.key === 'ArrowLeft') prevProduct();
-                if (e.key === 'ArrowRight') nextProduct();
-                if (e.key === 'Escape') closeProductModal();
-            }
-        });
-
-        let touchstartX = 0;
-        let touchendX = 0;
-        const modalContainer = document.getElementById('productModal');
-
-        modalContainer.addEventListener('touchstart', e => {
-            touchstartX = e.changedTouches[0].screenX;
-        }, {passive: true});
-
-        modalContainer.addEventListener('touchend', e => {
-            touchendX = e.changedTouches[0].screenX;
-            handleSwipe();
-        }, {passive: true});
-
-        function handleSwipe() {
-            if (touchendX < touchstartX - 50) nextProduct(); // Swipe izquierda -> Siguiente
-            if (touchendX > touchstartX + 50) prevProduct(); // Swipe derecha -> Anterior
+            }, 300); // 300ms debe coincidir con las clases de transition-all duration...
         }
     </script>
 </body>

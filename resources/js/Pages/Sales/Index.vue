@@ -88,6 +88,43 @@ const advanceStage = (id, currentStage) => {
 
     // 2. ESPERAMOS LA ANIMACIÓN Y LANZAMOS LA PREGUNTA
     setTimeout(() => {
+        // Si no hay fecha compromiso y vamos a confirmar/producción, exigirla
+        if (!selectedSale.value.promised_date) {
+            Swal.fire({
+                title: 'Fecha Compromiso Requerida',
+                text: 'Debes asignar una fecha compromiso antes de avanzar el pedido.',
+                icon: 'warning',
+                input: 'date',
+                inputAttributes: { required: true },
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Guardar y Avanzar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: (date) => {
+                    if (!date) {
+                        Swal.showValidationMessage('La fecha es requerida');
+                    }
+                    return date;
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    router.patch(route('sales.update-stage', id), { 
+                        stage: nextStage, 
+                        promised_date: result.value 
+                    }, {
+                        onSuccess: () => {
+                            Swal.fire({ title: 'Etapa Actualizada', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                            selectedSale.value.promised_date = result.value;
+                        },
+                        onError: (errors) => Swal.fire('Error', errors.error || 'No se pudo actualizar.', 'error')
+                    });
+                }
+            });
+            return;
+        }
+
+        // Flujo normal si ya tiene fecha
         Swal.fire({
             title: confirmTitle,
             text: confirmText,

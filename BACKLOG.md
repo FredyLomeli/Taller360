@@ -31,16 +31,15 @@ Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño té
 - [x] Formulario de variantes (`Products/Create.vue` / `Edit.vue`): mostrar el campo `min_stock` solo cuando el producto padre tiene `is_favorite = true`.
 - [x] `DashboardController`: cambiar `stock <= 5` fijo por `stock <= COALESCE(min_stock, 5)`. Adicionalmente, se configuró para mostrar *siempre* los productos favoritos y colorearlos dinámicamente.
 
-### 5. 🟠 Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales
-*(el más grande de los 5, tocar al final una vez los otros 4 estén probados)*
-- [ ] Migración: nueva tabla `work_orders` (`product_variant_id`, `quantity_requested`, `target_date` nullable, `status` abierta/cerrada, `origin_sale_detail_id` nullable, `notes`, `created_by`, timestamps).
-- [ ] Migración: `sale_details.production_hold` (boolean, default `false`).
-- [ ] Migración: hacer `production_completions.sale_detail_id` nullable + agregar `production_completions.work_order_id` (nullable) — una fila pertenece a una fuente u otra, nunca ambas.
-- [ ] `ProductionController::index()`: unir necesidades de `sale_details` (como hoy) + `work_orders` abiertas en la misma cola.
-- [ ] `ProductionController::index()`: excluir de "pendiente de fabricar" las líneas con `production_hold = true`; mostrarlas en una sección aparte ("en espera de decisión").
-- [ ] Lógica para activar `production_hold = true` automáticamente cuando un envío parcial deja remanente sin fabricar en una línea (`ShipmentController::store()`).
-- [ ] Botón "Liberar a producción" en `Production/Index.vue` — visible para cualquier rol con acceso a Producción (`admin`, `produccion`, `supervisor` tras el punto 2) — apaga el flag y/o genera un `work_order` con `origin_sale_detail_id`.
-- [ ] UI nueva: formulario para crear `work_order` standalone (variante + cantidad + fecha objetivo opcional + notas) y para "cerrar" una orden registrando lo fabricado.
+### 5. 🟢 Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales (COMPLETADO)
+- [x] Migración: nueva tabla `work_orders` (`product_variant_id`, `quantity_requested`, `target_date` nullable, `status` abierta/cerrada, `origin_sale_detail_id` nullable, `notes`, `created_by`, timestamps).
+- [x] Migración: `sale_details.production_hold` (boolean, default `false`).
+- [x] Migración: hacer `production_completions.sale_detail_id` nullable + agregar `production_completions.work_order_id` (nullable).
+- [x] `ProductionController::index()`: unir necesidades de `sale_details` + `work_orders` abiertas en la misma cola.
+- [x] `ProductionController::index()`: excluir de "pendiente de fabricar" las líneas con `production_hold = true`; mostrarlas en una sección aparte ("en espera de decisión").
+- [x] Lógica para activar `production_hold = true` automáticamente cuando un envío parcial deja remanente.
+- [x] Botón "Liberar a producción" en `Production/Index.vue` para apagar el flag y/o generar `work_order`.
+- [x] UI nueva: formulario (Combobox autocompletable) para crear `work_order` standalone y para "cerrar" una orden registrando lo fabricado.
 
 ---
 
