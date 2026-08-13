@@ -15,6 +15,7 @@ protected $fillable = [
         'measurements',
         'sku',
         'stock',
+        'min_stock',
         'price_1',
         'price_2',
         'price_3',

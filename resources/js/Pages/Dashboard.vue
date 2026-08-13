@@ -192,9 +192,9 @@ const stageLabels = {
 
                     <div class="bg-white shadow-sm rounded-3xl border border-red-100 flex flex-col min-h-0 overflow-hidden">
                         <div class="px-6 py-5 bg-red-50/50 border-b border-red-100 flex justify-between items-center shrink-0">
-                            <h3 class="font-bold text-red-800 text-[10px] uppercase tracking-[0.1em] flex items-center gap-2">
+                            <h3 class="font-bold text-gray-800 text-[10px] uppercase tracking-[0.1em] flex items-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                Stock Crítico
+                                Monitoreo de Stock
                             </h3>
                             <Link :href="route('products.index')" class="text-[10px] text-red-600 font-black hover:underline uppercase">Gestionar</Link>
                         </div>
@@ -207,9 +207,12 @@ const stageLabels = {
                                             {{ variant.material }} <span v-if="variant.sku" class="text-gray-300 px-1">|</span> {{ variant.sku }}
                                         </div>
                                     </div>
-                                    <div class="text-center bg-red-100 px-4 py-1.5 rounded-2xl ml-4">
-                                        <span class="block text-base font-black text-red-600 leading-none">{{ variant.stock }}</span>
-                                        <span class="text-[8px] text-red-400 uppercase font-black tracking-tighter">Pzas</span>
+                                    <div class="text-center px-4 py-1.5 rounded-2xl ml-4"
+                                         :class="variant.stock <= (variant.min_stock ?? 5) ? 'bg-red-100' : 'bg-green-100'">
+                                        <span class="block text-base font-black leading-none"
+                                              :class="variant.stock <= (variant.min_stock ?? 5) ? 'text-red-600' : 'text-green-700'">{{ variant.stock }}</span>
+                                        <span class="text-[8px] uppercase font-black tracking-tighter"
+                                              :class="variant.stock <= (variant.min_stock ?? 5) ? 'text-red-400' : 'text-green-600'">Pzas</span>
                                     </div>
                                 </li>
                             </ul>

@@ -58,6 +58,15 @@ product_variants.min_stock (int, nullable)
 - **Ventas:** En `SaleController`, se refactorizó el envío de correos al método `private function sendSaleNoteMail(Sale $sale)`. En el método `store()`, se llama al envío de correos fuera del bloque de transacción (`DB::transaction`) y envuelto en un `try-catch` (`Log::error()`) para evitar que fallas SMTP aborten el pedido.
 - **Testing (Línea Base):** Configurado `phpunit.xml` a base de datos `:memory:` (SQLite). Creadas suites de Feature Tests para asegurar comportamiento del middleware de roles (`RoleMiddlewareTest`), control de transiciones y ventas (`SaleControllerTest`), administración y consistencia del inventario (`ShipmentControllerTest`) y disparo del sistema de correos (`SaleAutoEmailTest`).
 
+## Arquitectura de Correos y PDFs (Producción)
+**Fecha:** 2026-08-13
+**Decisión:** Uso de procesamiento diferido síncrono (`afterResponse`) vs. Colas de Base de Datos.
+**Contexto:** Debido a las restricciones de ejecución persistente y configuración de binarios PHP en hostings compartidos (DirectAdmin/cPanel) que dificultan mantener un Worker activo, se descartó el uso del driver `database` para las colas.
+**Implementación:**
+1. **Frontend:** Se bloquea el botón de envío en Vue.js tras el primer clic para evitar el doble submit por parte del usuario.
+2. **Controlador:** Los BLOBs pesados de firmas se guardan temporalmente como archivos físicos (`storage/app/public`) y los assets locales (logos) se inyectan como Base64 para evadir las restricciones `chroot` de seguridad de DOMPDF.
+3. **Despacho Diferido:** La generación intensiva del PDF y la conexión SMTP se ejecutan encapsuladas dentro de `dispatch()->afterResponse()`. Esto libera al usuario en milisegundos entregando el código HTTP 200, mientras el servidor finaliza la tarea pesada en segundo plano de manera segura.
+
 ## 0. Hallazgos de la ronda 2 de auditoría (25 jul 2026, con `UserController.php`, `package.json`, `vite.config.js`)
 
 ### ✅ Cerrado — `UserController.php` sí existe
@@ -464,3 +473,4 @@ Al iniciar sesión nueva:
 4. Describe qué quieres hacer.
 
 Para tareas grandes de Fase 3 en adelante, abre sesiones separadas por sub-tarea.
+

@@ -59,15 +59,12 @@ class DashboardController extends Controller
                 }])
                 ->get();
             
-            // D. ALERTA DE STOCK (Solo Favoritos)
-            $lowStockProducts = ProductVariant::whereRaw('stock <= COALESCE(min_stock, 5)')
-                ->whereHas('product', function ($query) {
-                    // AQUÍ ESTÁ EL FILTRO CLAVE: Solo productos favoritos
-                    $query->where('is_favorite', true);
+            // D. ALERTA DE STOCK (Exclusivo Favoritos / Destacados)
+            $lowStockProducts = ProductVariant::whereHas('product', function ($q) {
+                    $q->where('is_favorite', true);
                 })
                 ->with('product')
                 ->orderBy('stock', 'asc')
-                ->take(5)
                 ->get();
 
             return Inertia::render('Dashboard', [
