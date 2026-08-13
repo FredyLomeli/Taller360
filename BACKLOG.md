@@ -26,10 +26,10 @@ Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño té
 - [x] Al regresar las piezas al cancelar, verificar matemáticamente si faltan piezas en alguna partida de ese pedido; si es así, setear el `stage` dinámicamente a `produccion`.
 - [x] En `ShipmentController::store()`, eliminar la creación de `SaleHistory` duplicada.
 
-### 4. 🟡 Stock mínimo por variante, solo para productos preferentes
-- [ ] Migración: `product_variants.min_stock` (int, nullable).
-- [ ] Formulario de variantes (`Products/Create.vue` / `Edit.vue`): mostrar el campo `min_stock` solo cuando el producto padre tiene `is_favorite = true`.
-- [ ] `DashboardController`: cambiar `stock <= 5` fijo por `stock <= COALESCE(min_stock, 5)`.
+### 4. 🟢 Stock mínimo por variante, solo para productos preferentes (COMPLETADO)
+- [x] Migración: `product_variants.min_stock` (int, nullable).
+- [x] Formulario de variantes (`Products/Create.vue` / `Edit.vue`): mostrar el campo `min_stock` solo cuando el producto padre tiene `is_favorite = true`.
+- [x] `DashboardController`: cambiar `stock <= 5` fijo por `stock <= COALESCE(min_stock, 5)`. Adicionalmente, se configuró para mostrar *siempre* los productos favoritos y colorearlos dinámicamente.
 
 ### 5. 🟠 Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales
 *(el más grande de los 5, tocar al final una vez los otros 4 estén probados)*

@@ -107,7 +107,6 @@ class ProductionController extends Controller
             return sprintf('%d-%s', $priority, $earliestDate);
         });
 
-        // 4. Pausados
         $pausedItems = SaleDetail::where('production_hold', true)
             ->whereHas('sale', function ($query) {
                 $query->whereIn('stage', ['produccion', 'confirmado', 'enviado']);
@@ -116,9 +115,12 @@ class ProductionController extends Controller
             ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get();
 
+        $allVariants = \App\Models\ProductVariant::with('product:id,name')->get();
+
         return Inertia::render('Production/Index', [
             'productionQueue' => $grouped,
             'pausedItems' => $pausedItems,
+            'allVariants' => $allVariants,
             'weekRange' => [
                 'start' => $startWeek->format('Y-m-d'),
                 'end' => $endWeek->format('Y-m-d')

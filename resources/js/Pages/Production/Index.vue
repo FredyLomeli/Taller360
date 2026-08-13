@@ -8,6 +8,7 @@ const props = defineProps({
     productionQueue: Object, 
     weekRange: Object, 
     pausedItems: Array,
+    allVariants: Array,
 });
 
 const completionData = ref({});
@@ -28,16 +29,29 @@ const filteredQueue = computed(() => {
 });
 
 const availableVariants = computed(() => {
-    const variants = [];
-    Object.keys(props.productionQueue).forEach(key => {
-        const group = props.productionQueue[key];
-        variants.push({
-            id: key,
-            name: group.name + ' - ' + group.material + (group.measurements ? ' (' + group.measurements + ')' : '')
-        });
+    if (!props.allVariants) return [];
+    return props.allVariants.map(variant => {
+        return {
+            id: variant.id,
+            name: variant.product.name + ' - ' + variant.material + (variant.measurements ? ' (' + variant.measurements + ')' : '')
+        };
     });
-    return variants;
 });
+
+const searchQuery = ref('');
+const showDropdown = ref(false);
+
+const filteredVariants = computed(() => {
+    if (!searchQuery.value) return availableVariants.value;
+    const lowerCaseQuery = String(searchQuery.value).toLowerCase();
+    return availableVariants.value.filter(v => v.name.toLowerCase().includes(lowerCaseQuery));
+});
+
+const selectVariant = (variant) => {
+    workOrderForm.product_variant_id = variant.id;
+    searchQuery.value = variant.name;
+    showDropdown.value = false;
+};
 
 const showWorkOrderModal = ref(false);
 const workOrderForm = useForm({
@@ -48,11 +62,17 @@ const workOrderForm = useForm({
 });
 
 const submitWorkOrder = () => {
+    if (!workOrderForm.product_variant_id) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor selecciona una variante de la lista.' });
+        return;
+    }
+
     workOrderForm.post(route('work-orders.store'), {
         preserveScroll: true,
         onSuccess: () => {
             showWorkOrderModal.value = false;
             workOrderForm.reset();
+            searchQuery.value = '';
             Swal.fire({ icon: 'success', title: 'Orden Creada', text: 'Se ha añadido a la cola de producción.', timer: 2000, showConfirmButton: false });
         }
     });
@@ -373,11 +393,31 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                 <form @submit.prevent="submitWorkOrder" class="p-6 space-y-5">
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Variante a Producir</label>
-                        <select v-model="workOrderForm.product_variant_id" required class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm p-2.5">
-                            <option value="" disabled>Selecciona una variante del plan actual...</option>
-                            <option v-for="v in availableVariants" :key="v.id" :value="v.id">{{ v.name }}</option>
-                        </select>
-                        <p class="text-[10px] text-gray-500 mt-1">Solo muestra variantes actualmente en la cola de producción.</p>
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                v-model="searchQuery" 
+                                @focus="showDropdown = true"
+                                @blur="setTimeout(() => showDropdown = false, 200)"
+                                placeholder="Escribe para buscar..." 
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm p-2.5"
+                                required
+                            >
+                            <ul v-show="showDropdown" class="absolute z-10 w-full bg-white border border-gray-200 shadow-xl max-h-48 rounded-lg py-1 text-sm overflow-auto focus:outline-none mt-1">
+                                <li 
+                                    v-for="v in filteredVariants" 
+                                    :key="v.id" 
+                                    @click="selectVariant(v)"
+                                    class="cursor-pointer select-none relative py-2.5 px-4 hover:bg-purple-50 text-gray-700 font-medium transition-colors"
+                                >
+                                    {{ v.name }}
+                                </li>
+                                <li v-if="filteredVariants.length === 0" class="text-gray-400 py-3 px-4 text-sm italic text-center">
+                                    No se encontraron variantes
+                                </li>
+                            </ul>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-1">Selecciona cualquier variante del catálogo.</p>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
