@@ -313,7 +313,7 @@ class SaleController extends Controller
     {
         $settings = Setting::all()->pluck('value', 'key');
         
-        // Preparar Datos (Igual que printNote)
+        // Preparar Datos
         $company = [
             'name' => $settings['company_name'] ?? 'Mi Empresa',
             'address' => $settings['company_address'] ?? '',
@@ -322,19 +322,16 @@ class SaleController extends Controller
             'footer_text' => $settings['ticket_footer_text'] ?? ''
         ];
 
-        $logoPath = null;
+        $logoBase64 = null;
         if (isset($settings['company_logo']) && $settings['company_logo']) {
             $rootPath = env('FILESYSTEM_PUBLIC_ROOT', public_path('storage'));
             $logoPath = $rootPath . '/' . $settings['company_logo'];
-            if (!file_exists($logoPath)) {
-                $logoPath = null; 
+            if (file_exists($logoPath)) {
+                $mime = mime_content_type($logoPath);
+                $data = file_get_contents($logoPath);
+                $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($data);
             }
         }
-
-        // Generar PDF en Memoria
-        $pdf = Pdf::loadView('pdf.sale_note', compact('sale', 'company', 'logoPath'));
-        $pdf->setPaper('letter', 'portrait');
-        $pdfOutput = $pdf->output();
 
         // Obtener Destinatarios
         $emails = [];
@@ -348,9 +345,59 @@ class SaleController extends Controller
         
         $emails = array_unique(array_filter($emails));
 
-        if (!empty($emails)) {
-            Mail::to($emails)->send(new SaleNoteEmail($sale, $pdfOutput));
+        if (empty($emails)) {
+            return $emails;
         }
+
+        // 1. Guardar firma Base64 como archivo temporal
+        $tempSigPath = null;
+        if (!empty($sale->signature)) {
+            $sigData = $sale->signature;
+            if (strpos($sigData, 'data:image') === 0) {
+                $parts = explode(',', $sigData);
+                if (count($parts) === 2) {
+                    $decodedSignature = base64_decode($parts[1]);
+                    if ($decodedSignature) {
+                        $tempSigPath = storage_path('app/public/temp_sig_' . $sale->id . '_' . uniqid() . '.png');
+                        file_put_contents($tempSigPath, $decodedSignature);
+                    }
+                }
+            }
+        }
+
+        // 2. Obtener el ID de la venta
+        $saleId = $sale->id;
+
+        // 3. Despachar de forma diferida pasando SOLO TEXTO/ARRAYS al closure
+        dispatch(function () use ($saleId, $emails, $tempSigPath, $company, $logoBase64) {
+            // 4. Re-consultar la venta
+            $sale = Sale::with('details', 'client')->find($saleId);
+            
+            if (!$sale) {
+                if ($tempSigPath && file_exists($tempSigPath)) {
+                    unlink($tempSigPath);
+                }
+                return;
+            }
+
+            // Generar el PDF con DOMPDF usando el archivo temporal
+            $pdf = Pdf::loadView('pdf.sale_note', [
+                'sale' => $sale,
+                'company' => $company,
+                'logoBase64' => $logoBase64,
+                'signaturePath' => $tempSigPath
+            ]);
+            $pdf->setPaper('letter', 'portrait');
+            $pdfOutput = $pdf->output();
+
+            // Despachar el correo síncronamente (pero en background por el afterResponse)
+            Mail::to($emails)->send(new SaleNoteEmail($sale, $pdfOutput));
+
+            // Eliminar la firma temporal
+            if ($tempSigPath && file_exists($tempSigPath)) {
+                unlink($tempSigPath);
+            }
+        })->afterResponse();
 
         return $emails;
     }

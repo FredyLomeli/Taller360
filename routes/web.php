@@ -13,6 +13,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\SalePaymentController;
 use App\Http\Controllers\ShipmentController;
+use App\Http\Controllers\WorkOrderController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -85,6 +86,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/production-plan', [ProductionController::class, 'index'])->name('production.plan');
         Route::post('/production-plan/complete', [ProductionController::class, 'storeCompletion'])->name('production.complete');
         Route::get('/production-plan/print', [ProductionController::class, 'printReport'])->name('production.print');
+
+        Route::post('/work-orders', [WorkOrderController::class, 'store'])->name('work-orders.store');
+        Route::patch('/sale-details/{detail}/release-hold', [WorkOrderController::class, 'releaseHold'])->name('sale-details.release-hold');
     });
 
     // ==========================================

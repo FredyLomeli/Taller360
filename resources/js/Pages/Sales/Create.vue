@@ -259,6 +259,8 @@ const openPaymentModal = () => {
 
 const remainingBalance = computed(() => Math.max(0, cartTotal.value - (parseFloat(paymentForm.value.amount_received) || 0)));
 
+const isProcessing = ref(false);
+
 const submitOrder = () => {
     const { isEmpty, data } = signaturePad.value.saveSignature();
     
@@ -266,6 +268,8 @@ const submitOrder = () => {
         Swal.fire({ title: 'Falta Firma', text: 'Es obligatorio que el cliente firme para autorizar el pedido.', icon: 'warning' });
         return;
     }
+
+    isProcessing.value = true;
 
     const payload = {
         client_id: selectedClient.value.id,
@@ -285,7 +289,8 @@ const submitOrder = () => {
             showPaymentModal.value = false; cart.value = []; selectedClient.value = null;
             Swal.fire({ title: 'Pedido Creado', icon: 'success', timer: 2000, showConfirmButton: false });
         },
-        onError: (e) => Swal.fire('Error', e.error || 'Revisa los datos', 'error')
+        onError: (e) => Swal.fire('Error', e.error || 'Revisa los datos', 'error'),
+        onFinish: () => isProcessing.value = false
     });
 };
 
@@ -541,8 +546,12 @@ const clearSignature = () => signaturePad.value.clearSignature();
 
                     <div class="flex gap-3">
                         <button @click="showPaymentModal = false" class="flex-1 py-3.5 border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition-colors">Cancelar</button>
-                        <button @click="submitOrder" class="flex-1 py-3.5 bg-green-600 rounded-xl font-bold text-white hover:bg-green-700 shadow-lg shadow-green-200 transition-all flex justify-center items-center gap-2">
-                            <span>Confirmar Pedido</span>
+                        <button @click="submitOrder" :disabled="isProcessing" class="flex-1 py-3.5 bg-green-600 rounded-xl font-bold text-white hover:bg-green-700 shadow-lg shadow-green-200 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span v-if="isProcessing" class="flex items-center gap-2">
+                                <svg class="animate-spin h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                Guardando...
+                            </span>
+                            <span v-else>Confirmar Pedido</span>
                         </button>
                     </div>
                 </div>

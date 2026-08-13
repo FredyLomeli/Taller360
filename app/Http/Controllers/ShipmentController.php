@@ -124,6 +124,13 @@ class ShipmentController extends Controller
                         'quantity_delivered' => $item['quantity'],
                     ]);
 
+                    $totalDelivered = SaleDelivery::where('sale_detail_id', $detail->id)->sum('quantity_delivered');
+                    $totalCompleted = \App\Models\ProductionCompletion::where('sale_detail_id', $detail->id)->sum('quantity_completed');
+                    
+                    if (($detail->quantity - $totalDelivered > 0) && ($detail->quantity - $totalCompleted > 0)) {
+                        $detail->update(['production_hold' => true]);
+                    }
+
                     if ($isCounterPickup) {
                         $this->closeOrderIfComplete($detail);
                     } elseif (!in_array($detail->sale->stage, ['enviado', 'entregado'])) {

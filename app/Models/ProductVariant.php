@@ -26,4 +26,9 @@ protected $fillable = [
     {
         return $this->belongsTo(Product::class);
     }
+
+    public function workOrders()
+    {
+        return $this->hasMany(WorkOrder::class);
+    }
 }

@@ -19,6 +19,7 @@ const form = useForm({
     
     // Checkbox: Convertimos el string '1'/'0' a booleano real
     allow_negative_stock: props.settings.allow_negative_stock === '1',
+    auto_email_on_sale: props.settings.auto_email_on_sale === '1',
     
     // Campo especial para el archivo (null al inicio)
     company_logo: null 
@@ -42,6 +43,7 @@ const submit = () => {
     form.transform((data) => ({
         ...data,
         allow_negative_stock: data.allow_negative_stock ? '1' : '0',
+        auto_email_on_sale: data.auto_email_on_sale ? '1' : '0',
     })).post(route('settings.update'), {
         onSuccess: () => {
             Swal.fire({
@@ -132,6 +134,17 @@ const submit = () => {
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" v-model="form.allow_negative_stock" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                </label>
+                            </div>
+
+                            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                <div>
+                                    <span class="block font-bold text-gray-800">Auto-enviar Recibo</span>
+                                    <span class="text-sm text-gray-500">Enviar nota de venta al cliente automáticamente al cerrar pedido.</span>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" v-model="form.auto_email_on_sale" class="sr-only peer">
                                     <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                                 </label>
                             </div>

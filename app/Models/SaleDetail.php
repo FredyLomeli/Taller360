@@ -20,6 +20,11 @@ class SaleDetail extends Model
         'unit_price',
         'subtotal',
         'discount_percent',
+        'production_hold',
+    ];
+
+    protected $casts = [
+        'production_hold' => 'boolean',
     ];
 
     public function sale()
@@ -40,5 +45,10 @@ class SaleDetail extends Model
     public function deliveries()
     {
         return $this->hasMany(SaleDelivery::class);
+    }
+
+    public function workOrders()
+    {
+        return $this->hasMany(WorkOrder::class, 'origin_sale_detail_id');
     }
 }

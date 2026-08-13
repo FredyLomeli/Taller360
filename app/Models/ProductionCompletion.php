@@ -13,7 +13,8 @@ class ProductionCompletion extends Model
         'sale_detail_id',
         'quantity_completed',
         'user_id',
-        'completed_at'
+        'completed_at',
+        'work_order_id'
     ];
 
     protected $casts = [
@@ -28,5 +29,10 @@ class ProductionCompletion extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function workOrder()
+    {
+        return $this->belongsTo(WorkOrder::class);
     }
 }
