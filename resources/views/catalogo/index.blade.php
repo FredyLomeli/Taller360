@@ -7,7 +7,7 @@
     
     <!-- Meta SEO -->
     <meta name="description" content="Catálogo exclusivo de muebles. Descubre nuestros diseños de alta gama y solicita una asesoría personalizada.">
-    <meta name="keywords" content="Muebles, Showroom, Alta Gama, Catálogo">
+    <meta name="keywords" content="Muebles, Catálogo Digital, Alta Gama, Catálogo">
     
     <!-- Tailwind CSS (Cargado por Vite en Laravel) -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -23,47 +23,76 @@
 </head>
 <body class="bg-[#fafafa] text-gray-800 font-sans antialiased min-h-screen flex flex-col">
 
-    <!-- Header / Nav -->
-    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b-2 border-red-600 shadow-sm transition-all">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-20">
-                <div class="flex items-center gap-3">
-                    @if(isset($settings['company_logo']) && $settings['company_logo'])
-                        <img src="{{ asset('storage/' . $settings['company_logo']) }}" alt="Logo" class="h-10 w-auto object-contain">
-                    @else
-                        <h1 class="text-2xl font-black tracking-tighter text-gray-900 uppercase">
-                            <span class="text-red-600">ISC</span> TEPATITLÁN
-                        </h1>
-                    @endif
-                </div>
-
+    <!-- NAVBAR -->
+    <nav class="sticky top-0 z-50 w-full bg-white border-b border-gray-100 shadow-sm transition-all duration-300" id="navbar">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
                 <div class="flex items-center">
+                    <a href="{{ route('landing') }}" class="flex items-center gap-3 group">
+                        @if(!empty($settings['company_logo']))
+                            <img src="{{ asset('storage/' . $settings['company_logo']) }}" alt="Logo" class="h-10 w-auto object-contain transition-transform group-hover:scale-105">
+                        @else
+                            <div class="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-red-600/30">
+                                360
+                            </div>
+                        @endif
+                        <span class="text-xl font-bold tracking-tight text-gray-900 group-hover:text-red-600 transition-colors">
+                            {{ $settings['company_name'] ?? 'Taller 360' }}
+                        </span>
+                    </a>
+                </div>
+                
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="{{ route('landing') }}#nosotros" class="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors">Nosotros</a>
+                    <a href="{{ route('landing') }}#ventajas" class="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors">Por Qué Elegirnos</a>
+                    <a href="{{ route('landing') }}#contacto" class="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors">Contacto</a>
                     @if(isset($settings['company_whatsapp']))
                         @php
                             $waNumber = preg_replace('/[^0-9]/', '', $settings['company_whatsapp']);
                         @endphp
-                        <a href="https://wa.me/{{ $waNumber }}?text=Hola,%20me%20gustar%C3%ADa%20recibir%20asesor%C3%ADa." 
-                           target="_blank"
-                           class="inline-flex items-center gap-2 bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-full text-sm font-semibold transition-all shadow-md hover:shadow-lg">
+                        <a href="https://wa.me/{{ $waNumber }}?text=Hola,%20me%20gustar%C3%ADa%20recibir%20asesor%C3%ADa." target="_blank" class="bg-black hover:bg-gray-800 text-white px-6 py-2.5 rounded-full text-sm font-semibold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center gap-2">
                             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.418-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964.984-3.595c-.607-1.052-.927-2.246-.926-3.468.001-3.825 3.113-6.937 6.937-6.937 3.825.001 6.938 3.113 6.939 6.938-.001 3.825-3.114 6.937-6.939 6.942z"/></svg>
-                            <span class="hidden sm:inline">Asesoría / Cotizar</span>
+                            Cotizar
                         </a>
                     @endif
                 </div>
+
+                <!-- Mobile Menu Button -->
+                <div class="flex items-center md:hidden">
+                    <button type="button" onclick="toggleMobileMenu()" class="text-gray-600 hover:text-gray-900 focus:outline-none p-2">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+        <!-- Mobile Menu Panel -->
+        <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-100">
+            <div class="px-4 pt-2 pb-6 space-y-1 shadow-xl">
+                <a href="{{ route('landing') }}#nosotros" class="block px-3 py-3 text-base font-medium text-gray-800 hover:bg-gray-50 rounded-md" onclick="toggleMobileMenu()">Nosotros</a>
+                <a href="{{ route('landing') }}#ventajas" class="block px-3 py-3 text-base font-medium text-gray-800 hover:bg-gray-50 rounded-md" onclick="toggleMobileMenu()">Ventajas</a>
+                <a href="{{ route('landing') }}#contacto" class="block px-3 py-3 text-base font-medium text-gray-800 hover:bg-gray-50 rounded-md" onclick="toggleMobileMenu()">Contacto</a>
+                @if(isset($settings['company_whatsapp']))
+                    <a href="https://wa.me/{{ $waNumber ?? '' }}?text=Hola,%20me%20gustar%C3%ADa%20recibir%20asesor%C3%ADa." class="block mt-4 px-3 py-3 text-center text-base font-semibold text-white bg-black rounded-lg shadow-md" onclick="toggleMobileMenu()">
+                        Cotizar por WhatsApp
+                    </a>
+                @endif
             </div>
         </div>
-    </header>
+    </nav>
 
-    <!-- Hero Banner (Minimalista) -->
-    <div class="bg-gray-900 text-white py-16 sm:py-24 relative overflow-hidden">
-        <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-            <h2 class="text-4xl md:text-5xl font-black tracking-tight mb-4 fade-in">Colección <span class="text-red-600">Exclusiva</span></h2>
-            <p class="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto font-light fade-in" style="animation-delay: 0.1s; animation-fill-mode: backwards;">
-                Descubre la excelencia en madera. Cada pieza es diseñada con atención al detalle.
+    <!-- Banner Hero Catálogo Centrado y Ajustado -->
+    <section class="w-full bg-[#0B1120] text-white py-8 sm:py-10 my-0 relative overflow-hidden">
+        <div class="max-w-4xl mx-auto px-4 text-center relative z-10">
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">
+                Colección <span class="text-red-600">Exclusiva</span>
+            </h1>
+            <p class="text-slate-300 text-xs sm:text-sm max-w-2xl mx-auto mt-2 leading-relaxed font-light">
+                Descubre la excelencia en madera. Cada pieza es diseñada con atención al detalle y la máxima calidad de fabricación.
             </p>
         </div>
-    </div>
+    </section>
 
     <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
         
@@ -90,12 +119,12 @@
                     <div class="product-card group fade-in cursor-pointer" data-category="category-{{ $category->id }}" onclick="openProductModal({{ $globalIndex }})">
                         @php $globalIndex++; @endphp
                         
-                        <div class="relative overflow-hidden rounded-xl bg-gray-100 aspect-square mb-4 shadow-sm group-hover:shadow-xl transition-all duration-500">
+                        <div class="relative w-full aspect-square bg-slate-50/80 rounded-2xl overflow-hidden flex items-center justify-center p-3 mb-4 shadow-sm group-hover:shadow-xl transition-all duration-500">
                             @if($product->image)
-                                <img src="{{ $safeImageUrl }}" alt="{{ $product->name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-in-out">
+                                <img src="{{ $safeImageUrl }}" alt="{{ $product->name }}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500">
                             @else
                                 <div class="w-full h-full bg-slate-100 flex flex-col items-center justify-center p-6 text-slate-400 group-hover:bg-slate-200/60 transition-colors">
-                                    <!-- Ícono SVG elegante de Mueble / Showroom -->
+                                    <!-- Ícono SVG elegante de Mueble / Catálogo -->
                                     <svg class="w-12 h-12 mb-2 stroke-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
                                     </svg>
@@ -113,7 +142,7 @@
 
                         <div class="px-1">
                             <h3 class="text-lg font-bold text-gray-900 mb-1 group-hover:text-red-600 transition-colors">{{ $product->name }}</h3>
-                            <p class="text-sm text-gray-500 line-clamp-2 leading-relaxed mb-3">{{ $product->description ?? 'Sin descripción disponible.' }}</p>
+                            <span class="text-xs font-semibold text-red-600 uppercase tracking-wider block mt-1 mb-3">{{ $product->category->name ?? 'Mueble' }}</span>
                             <span class="inline-flex items-center text-sm font-semibold text-gray-900 group-hover:text-red-600 group-hover:underline decoration-2 underline-offset-4 transition-colors">
                                 Ver Variantes <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </span>
@@ -129,17 +158,6 @@
         </div>
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-white border-t border-gray-100 py-10 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <p class="text-sm text-gray-500 font-medium">
-                &copy; {{ date('Y') }} {{ $settings['company_name'] ?? 'Mueblería' }}. Todos los derechos reservados.
-            </p>
-            @if(isset($settings['company_phone']))
-                <p class="text-sm text-gray-400 mt-2">Tel: {{ $settings['company_phone'] }}</p>
-            @endif
-        </div>
-    </footer>
 
     <!-- MODAL PRODUCTO (JavaScript Nativo) -->
     <div id="productModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -226,8 +244,82 @@
         </div>
     </div>
 
+    <!-- CONTACTO Y UBICACIÓN -->
+    <section id="contacto" class="bg-gray-900 py-24 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-16">
+                <div>
+                    <h2 class="text-3xl font-bold mb-6">Visítanos o Contáctanos</h2>
+                    <p class="text-gray-400 mb-8">Estamos listos para asesorarte y encontrar el mueble perfecto para ti. Habla directamente con los fabricantes.</p>
+                    
+                    <div class="space-y-6">
+                        <div class="flex items-start">
+                            <div class="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center shrink-0 mr-4">
+                                <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-lg">Ubicación</h4>
+                                <p class="text-gray-400">Tepatitlán de Morelos, Jalisco, México.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center shrink-0 mr-4">
+                                <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-lg">Teléfono / WhatsApp</h4>
+                                <p class="text-gray-400">{{ $settings['company_whatsapp'] ?? ($settings['company_phone'] ?? 'Próximamente') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white/5 backdrop-blur-md p-8 rounded-2xl border border-white/10">
+                    <h3 class="text-2xl font-bold mb-6">Inicia tu Cotización</h3>
+                    <p class="text-gray-400 mb-8">Envíanos un mensaje por WhatsApp para consultar disponibilidad, precios de mayoreo o medidas personalizadas.</p>
+                    @php
+                        $rawPhone = $settings['company_whatsapp'] ?? ($settings['company_phone'] ?? '');
+                        $waNumber = preg_replace('/[^0-9]/', '', $rawPhone);
+                        if(strlen($waNumber) == 10 && substr($waNumber, 0, 1) != '5') {
+                            $waNumber = '52' . $waNumber;
+                        }
+                        $waUrl = $waNumber ? "https://wa.me/{$waNumber}?text=" . urlencode("Hola, me interesa conocer más sobre sus muebles.") : "#";
+                    @endphp
+                    <a href="{{ $waUrl }}" target="_blank" class="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-4 rounded-xl text-lg font-bold transition-colors flex items-center justify-center gap-3">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.183-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.765-5.77zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.099.824z"/></svg>
+                        Abrir WhatsApp
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="bg-gray-950 text-gray-500 py-12 text-center border-t border-gray-800 mt-auto">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>&copy; {{ date('Y') }} {{ $settings['company_name'] ?? 'Taller 360' }}. Todos los derechos reservados.</p>
+            <p class="text-sm mt-2">Fabricado en Tepatitlán de Morelos, Jal.</p>
+        </div>
+    </footer>
+
     <!-- Scripts Javascript Nativo -->
     <script>
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Navbar shadow on scroll
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if (window.scrollY > 10) {
+                nav.classList.add('shadow-md');
+                nav.classList.remove('shadow-sm');
+            } else {
+                nav.classList.remove('shadow-md');
+                nav.classList.add('shadow-sm');
+            }
+        });
         // --- 1. Estado Global de Productos ---
         const allProducts = [
             @foreach($categories as $category)

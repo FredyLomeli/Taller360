@@ -112,7 +112,12 @@ Sin colores, espaciados, breakpoints ni `@apply` custom. La fuente Figtree se ca
 
 > **Arquitectura clave:** Inertia.js conecta Laravel con Vue sin API REST. Los controladores devuelven `Inertia::render('Carpeta/Vista', $datos)`.
 
-> ✅ **Confirmado sobre `/`:** la ruta raíz devuelve `view('catalogo.index')` — es una **vista Blade estática con datos hardcodeados** (categorías fijas "Roperos/Trincheros/Bases", un solo producto de ejemplo "Ropero Clásico Santa Cecilia"). No consulta `products`, `categories` ni `product_variants`. La Fase 4 (Catálogo Público) no tiene avance funcional real, solo este mockup visual.
+> ✅ **Confirmado:** Las rutas públicas ya están conectadas a la base de datos real. La ruta raíz `/` devuelve `view('landing.index')` con un preview de 4 categorías, y `/catalogo` devuelve `view('catalogo.index')` con todos los productos reales filtrados de la BD. La Fase 4 está 100% completada y funcional.
+
+## Catálogo Público y Landing Page (Blade SSR)
+- **Estructura de Rutas Públicas:** La ruta `/` sirve una Landing Page corporativa y `/catalogo` sirve el catálogo completo. Ambas usan un layout fluido y compacto para maximizar SEO, con llamados a la acción dinámicos a WhatsApp.
+- **Control de Conflictos:** En `resources/js/app.js`, la iniciación de Inertia está condicionada al wrapper `<div id="app" data-page="...">` para evitar choques con el script nativo de las vistas públicas en Blade.
+- **Lógica de Fichas (Vanilla JS):** El modal de `/catalogo` opera sin framework. Conecta directamente con la base de datos, usando las matrices de materiales y acabados para personalizar la presentación. Se reestructuró con navegación tipo libro (carrusel continuo con swipe táctil y controles por teclado) y un diseño 100% responsivo limitado a `max-h-[90vh]`.
 
 ---
 

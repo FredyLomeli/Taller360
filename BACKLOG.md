@@ -128,14 +128,20 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 🟢 FASE 4 — Catálogo Público y Link por Cliente
-
-> **Confirmado en código:** la ruta `/` devuelve `view('catalogo.index')`, una plantilla Blade **estática con datos hardcodeados** (categorías fijas, un solo producto de ejemplo). No consulta ninguna tabla real. No hay avance funcional de esta fase más allá del mockup visual — construir desde cero cuando se retome.
+## Fase 4: Catálogo Público Digital [x] COMPLETADA
+**Objetivo:** Crear un catálogo web público, optimizado para SEO, que actúe como un "Showroom Digital" sin exponer precios, incitando a la cotización vía WhatsApp.
+**Especificaciones Técnicas (Strict):**
+- [x] Desarrollo en Laravel Blade puro (SSR) y Vanilla JS (Prohibido Inertia/Vue).
+- [x] Filtros por categoría y cuadrícula de productos elegante.
+- [x] Construcción segura de URLs de imágenes (evitando fallos por espacios con `rawurlencode`) y fallbacks "Showroom" de estética minimalista.
+- [x] Ficha de fabricante en Modal interactivo con matrices lógicas de taller (colores HEX condicionados por el material de la categoría).
+- [x] Modal tipo carrusel con navegación continua, swipe táctil y controles de teclado, restringido fluidamente al `max-h-[90vh]`.
+- [x] Call-To-Action (CTA) dinámico directo a WhatsApp para cotizaciones personalizadas.
 
 ### 4.1 Catálogo Público (sin precios)
-- [ ] Conectar la vista a `products`, `categories`, `product_variants` reales (hoy es 100% estático).
-- [ ] Rutas públicas: `/catalogo`, `/catalogo/{categoria}`, `/catalogo/producto/{id}` — no existen todavía.
-- [ ] Nunca exponer `price_1..price_5`.
+- [x] Conectar la vista a `products`, `categories`, `product_variants` reales.
+- [x] Rutas públicas: `/` (Landing Page corporativa) y `/catalogo` (Catálogo completo).
+- [x] Nunca exponer `price_1..price_5`.
 
 ### 4.2 Link Personalizado por Cliente (con precios)
 - [ ] Campo `catalog_token` (UUID) en `clients` — confirmado que no existe.

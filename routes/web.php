@@ -24,7 +24,10 @@ use Illuminate\Support\Facades\Auth;
 
 // --- RUTA PÚBLICA (Catálogo / Landing Page) ---
 use App\Http\Controllers\CatalogController;
-Route::get('/', [CatalogController::class, 'index'])->name('home');
+use App\Http\Controllers\LandingController;
+
+Route::get('/', [LandingController::class, 'index'])->name('landing');
+Route::get('/catalogo', [CatalogController::class, 'index'])->name('catalog.index');
 
 // --- RUTAS AUTENTICADAS ---
 Route::middleware(['auth', 'verified'])->group(function () {
