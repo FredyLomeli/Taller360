@@ -115,9 +115,12 @@ Sin colores, espaciados, breakpoints ni `@apply` custom. La fuente Figtree se ca
 > ✅ **Confirmado:** Las rutas públicas ya están conectadas a la base de datos real. La ruta raíz `/` devuelve `view('landing.index')` con un preview de 4 categorías, y `/catalogo` devuelve `view('catalogo.index')` con todos los productos reales filtrados de la BD. La Fase 4 está 100% completada y funcional.
 
 ## Catálogo Público y Landing Page (Blade SSR)
-- **Estructura de Rutas Públicas:** La ruta `/` sirve una Landing Page corporativa y `/catalogo` sirve el catálogo completo. Ambas usan un layout fluido y compacto para maximizar SEO, con llamados a la acción dinámicos a WhatsApp.
-- **Control de Conflictos:** En `resources/js/app.js`, la iniciación de Inertia está condicionada al wrapper `<div id="app" data-page="...">` para evitar choques con el script nativo de las vistas públicas en Blade.
+- **Estructura de Rutas Públicas:** La ruta `/` sirve una Landing Page corporativa (`LandingController@index` → `view('landing.index')`) con favoritos y accesos rápidos, y `/catalogo` sirve el catálogo digital completo (`CatalogController@index` → `view('catalogo.index')`). Ambas operan con Laravel Blade puro (SSR) para maximizar indexación SEO y velocidad de carga, incorporando llamados a la acción dinámicos a WhatsApp (`wa.me`).
+- **Filtrado de Catálogo por Configuración:** `CatalogController` consulta la clave `catalog_only_with_images` en `settings`. Cuando está activa (`1`/`true`), filtra estrictamente productos con imagen (`whereNotNull('image')->where('image', '!=', '')`) y excluye categorías sin productos fotográficos, sin afectar la visibilidad en POS o Inventario interno.
+- **Normalización de URLs de Imágenes:** Las vistas públicas y el frontend consumen el accesor `$product->image_url`, el cual normaliza rutas locales (con o sin prefijo `products/`) y URLs remotas, aplicando `rawurlencode()` para evitar rotura de enlaces por espacios o caracteres especiales.
+- **Control de Conflictos con Inertia:** En `resources/js/app.js`, la iniciación de Inertia está condicionada al wrapper `<div id="app" data-page="...">` para evitar choques con el script nativo de las vistas públicas en Blade.
 - **Lógica de Fichas (Vanilla JS):** El modal de `/catalogo` opera sin framework. Conecta directamente con la base de datos, usando las matrices de materiales y acabados para personalizar la presentación. Se reestructuró con navegación tipo libro (carrusel continuo con swipe táctil y controles por teclado) y un diseño 100% responsivo limitado a `max-h-[90vh]`.
+- **Despliegue y Compilación en Producción (Neubox / cPanel):** Tras cualquier cambio en frontend o assets públicos, es indispensable ejecutar `npm run build` y limpiar las cachés de Laravel con `php artisan config:cache`, `php artisan route:cache` y `php artisan view:cache`.
 
 ---
 
@@ -178,7 +181,7 @@ stage (enum: pedido|confirmado|produccion|enviado|entregado|cancelado, default:'
 promised_date (date, nullable), is_partial_shipping (boolean, default:false),
 timestamps
 ```
-⚠️ `promised_date` solo se captura al crear el pedido (`SaleController::store()`). **Confirmado: no existe forma de editarla después** — pendiente real, no se toca en `updateStage()` ni en ningún otro método.
+⚠️ `promised_date` se captura de forma obligatoria al crear el pedido en el POS (`SaleController::store()`). **Nota:** Actualmente no existe formulario para editarla posteriormente tras la creación del pedido.
 
 ### 📋 `sale_details`
 ```
@@ -432,10 +435,10 @@ JS — devDependencies (build/tooling):
 | POS / Crear pedido | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Ventas (Kanban, mover etapa) | ✅ todas | ❌ fuera de alcance de la reunión del 04 ago | ✅ solo las suyas | ❌ | ❌ | ❌ sin acceso hoy |
 | Clientes (CRUD) | ✅ completo | ❌ sin acceso hoy | ✅ crear/editar | ❌ | ❌ | ❌ sin acceso hoy |
-| Plan de Producción | ✅ | 🆕 **acordado — acceso completo, mismos permisos que Admin** | ❌ | ❌ | ✅ ver + registrar fabricado | ❌ |
-| Embarques (crear/confirmar/cancelar) | ✅ | 🆕 **acordado — acceso completo, mismos permisos que Admin** | ❌ | ✅ | ❌ sin acceso hoy | ❌ sin acceso hoy |
+| Plan de Producción | ✅ | ✅ **Implementado — acceso completo** | ❌ | ❌ | ✅ ver + registrar fabricado | ❌ |
+| Embarques (crear/confirmar/cancelar) | ✅ | ✅ **Implementado — acceso completo** | ❌ | ✅ | ❌ sin acceso hoy | ❌ sin acceso hoy |
 | Pagos/Abonos (`sale_payments`) | ✅ | ❌ | ✅ (de sus ventas) | ❌ | ❌ | ❌ sin acceso hoy |
-| Productos/Inventario (CRUD) | ✅ | 🆕 **acordado — acceso completo, mismos permisos que Admin** | 👁️ ver (para POS) | ❌ sin acceso hoy | ❌ | ❌ |
+| Productos/Inventario (CRUD) | ✅ | ✅ **Implementado — acceso completo** | 👁️ ver (para POS) | ❌ sin acceso hoy | ❌ | ❌ |
 | Usuarios | ✅ confirmado completo | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Configuración | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 

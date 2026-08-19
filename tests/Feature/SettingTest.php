@@ -12,12 +12,17 @@ test('un administrador puede actualizar la informacion de la empresa', function 
     $this->actingAs($admin)->post(route('settings.update'), [
         'company_name' => 'Muebles Finos SA',
         'company_phone' => '555-9999',
+        'company_whatsapp' => '3312345678',
         'allow_negative_stock' => '0', // Probamos cambiar la config de stock
+        'catalog_only_with_images' => '1',
     ])->assertRedirect(); // O assertStatus(200) dependiendo de tu controlador
 
     // Verificamos que en la BD se hayan actualizado las claves
     $this->assertDatabaseHas('settings', ['key' => 'company_name', 'value' => 'Muebles Finos SA']);
+    $this->assertDatabaseHas('settings', ['key' => 'company_phone', 'value' => '555-9999']);
+    $this->assertDatabaseHas('settings', ['key' => 'company_whatsapp', 'value' => '3312345678']);
     $this->assertDatabaseHas('settings', ['key' => 'allow_negative_stock', 'value' => '0']);
+    $this->assertDatabaseHas('settings', ['key' => 'catalog_only_with_images', 'value' => '1']);
 });
 
 test('un administrador puede subir un logotipo nuevo', function () {

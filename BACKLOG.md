@@ -111,6 +111,7 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ### Ventas
 - [ ] **Fecha compromiso (`promised_date`) editable después de creado el pedido.** Confirmado: solo se captura en `SaleController::store()`. Ni `updateStage()` ni ningún otro método permite corregirla después.
+- [ ] Verificar y auditar en entorno real si la captura obligatoria de Fecha Compromiso (`promised_date`) en el POS previene errores y si requiere edición posterior.
 - [ ] Forzar Modo Taller (sin precios) automáticamente por rol en el backend. Confirmado: `Sales/Show.vue` sigue dependiendo 100% del query param `?production=` — no hay lógica en `SaleController::show()` que lo fuerce para `supervisor`, `inventario` o `produccion`.
 
 ### Rendimiento (hosting compartido)
@@ -133,15 +134,18 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 **Especificaciones Técnicas (Strict):**
 - [x] Desarrollo en Laravel Blade puro (SSR) y Vanilla JS (Prohibido Inertia/Vue).
 - [x] Filtros por categoría y cuadrícula de productos elegante.
-- [x] Construcción segura de URLs de imágenes (evitando fallos por espacios con `rawurlencode`) y fallbacks "Showroom" de estética minimalista.
+- [x] Construcción segura de URLs de imágenes (evitando fallos por espacios con `rawurlencode`) y normalización mediante accesor `$product->image_url`.
 - [x] Ficha de fabricante en Modal interactivo con matrices lógicas de taller (colores HEX condicionados por el material de la categoría).
 - [x] Modal tipo carrusel con navegación continua, swipe táctil y controles de teclado, restringido fluidamente al `max-h-[90vh]`.
-- [x] Call-To-Action (CTA) dinámico directo a WhatsApp para cotizaciones personalizadas.
+- [x] Call-To-Action (CTA) dinámico directo a WhatsApp para cotizaciones personalizadas (`company_whatsapp` con fallback a `company_phone`).
+- [x] Configuración en panel de Settings: `company_whatsapp` para atención comercial y `catalog_only_with_images` para ocultar piezas sin foto en `/catalogo`.
 
 ### 4.1 Catálogo Público (sin precios)
 - [x] Conectar la vista a `products`, `categories`, `product_variants` reales.
 - [x] Rutas públicas: `/` (Landing Page corporativa) y `/catalogo` (Catálogo completo).
 - [x] Nunca exponer `price_1..price_5`.
+- [x] Ocultar productos sin imagen si la configuración `catalog_only_with_images` está activada.
+- [x] Configuración de WhatsApp empresarial (`company_whatsapp`).
 
 ### 4.2 Link Personalizado por Cliente (con precios)
 - [ ] Campo `catalog_token` (UUID) en `clients` — confirmado que no existe.

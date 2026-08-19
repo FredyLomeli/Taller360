@@ -164,7 +164,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
                 @forelse($previewProducts as $product)
                     @php
-                        $safeImageUrl = $product->image ? asset('storage/products/' . implode('/', array_map('rawurlencode', explode('/', $product->image)))) : null;
+                        $safeImageUrl = $product->image_url;
                     @endphp
                     <a href="{{ route('catalog.index') }}" class="group block">
                         <div class="relative overflow-hidden rounded-2xl bg-white aspect-square shadow-sm group-hover:shadow-xl transition-all duration-300 mb-4">

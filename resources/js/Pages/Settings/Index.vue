@@ -14,12 +14,14 @@ const form = useForm({
     company_rfc: props.settings.company_rfc || '',
     company_address: props.settings.company_address || '',
     company_phone: props.settings.company_phone || '',
+    company_whatsapp: props.settings.company_whatsapp || '',
     notification_emails: props.settings.notification_emails || '',
     ticket_footer_text: props.settings.ticket_footer_text || '',
     
     // Checkbox: Convertimos el string '1'/'0' a booleano real
     allow_negative_stock: props.settings.allow_negative_stock === '1',
     auto_email_on_sale: props.settings.auto_email_on_sale === '1',
+    catalog_only_with_images: props.settings.catalog_only_with_images === '1',
     
     // Campo especial para el archivo (null al inicio)
     company_logo: null 
@@ -44,6 +46,7 @@ const submit = () => {
         ...data,
         allow_negative_stock: data.allow_negative_stock ? '1' : '0',
         auto_email_on_sale: data.auto_email_on_sale ? '1' : '0',
+        catalog_only_with_images: data.catalog_only_with_images ? '1' : '0',
     })).post(route('settings.update'), {
         onSuccess: () => {
             Swal.fire({
@@ -106,15 +109,20 @@ const submit = () => {
                                     <label class="block text-sm font-bold text-gray-700">RFC </label>
                                     <input v-model="form.company_rfc" type="text" class="w-full border-gray-300 rounded focus:ring-green-500">
                                 </div>
-                                <div class="grid grid-cols-2 gap-4">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label class="block text-sm font-bold text-gray-700">Teléfono</label>
-                                        <input v-model="form.company_phone" type="text" class="w-full border-gray-300 rounded focus:ring-green-500">
+                                        <input v-model="form.company_phone" type="text" placeholder="ej. 3312345678" class="w-full border-gray-300 rounded focus:ring-green-500">
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-bold text-gray-700">Dirección</label>
-                                        <input v-model="form.company_address" type="text" placeholder="Calle, Número, Ciudad" class="w-full border-gray-300 rounded focus:ring-green-500">
+                                        <label class="block text-sm font-bold text-gray-700">WhatsApp (Catálogo)</label>
+                                        <input v-model="form.company_whatsapp" type="text" placeholder="ej. 3312345678" class="w-full border-gray-300 rounded focus:ring-green-500">
+                                        <p class="text-[11px] text-gray-400 mt-0.5">Para cotizaciones por WhatsApp en catálogo/landing.</p>
                                     </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700">Dirección</label>
+                                    <input v-model="form.company_address" type="text" placeholder="Calle, Número, Ciudad" class="w-full border-gray-300 rounded focus:ring-green-500">
                                 </div>
                             </div>
                         </div>
@@ -123,7 +131,7 @@ const submit = () => {
                     <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
                         <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center border-b pb-2">
                             <svg class="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                            Reglas de Negocio
+                            Reglas de Negocio y Catálogo Público
                         </h3>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -145,6 +153,17 @@ const submit = () => {
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" v-model="form.auto_email_on_sale" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                </label>
+                            </div>
+
+                            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                <div>
+                                    <span class="block font-bold text-gray-800">Solo Productos con Foto en Catálogo</span>
+                                    <span class="text-sm text-gray-500">Ocultar en el catálogo público (/catalogo) los productos sin imagen.</span>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" v-model="form.catalog_only_with_images" class="sr-only peer">
                                     <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                                 </label>
                             </div>

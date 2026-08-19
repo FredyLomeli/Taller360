@@ -136,7 +136,8 @@ class ProductController extends Controller
             $imagePath = $product->image;
             if ($request->hasFile('image')) {
                 if ($product->image) {
-                    Storage::disk('public')->delete($product->image);
+                    $oldRelative = str_starts_with($product->image, 'products/') ? $product->image : 'products/' . $product->image;
+                    Storage::disk('public')->delete($oldRelative);
                 }
                 $imagePath = $request->file('image')->store('products', 'public');
             }
@@ -191,7 +192,8 @@ class ProductController extends Controller
         // pero la BD impedirá esto si hay ventas ligadas a las variantes.
         try {
             if ($product->image) {
-                Storage::disk('public')->delete($product->image);
+                $oldRelative = str_starts_with($product->image, 'products/') ? $product->image : 'products/' . $product->image;
+                Storage::disk('public')->delete($oldRelative);
             }
             $product->delete();
             return redirect()->route('products.index')->with('success', 'Producto eliminado.');

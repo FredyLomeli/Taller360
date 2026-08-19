@@ -22,6 +22,13 @@
     </style>
 </head>
 <body class="bg-[#fafafa] text-gray-800 font-sans antialiased min-h-screen flex flex-col">
+    @php
+        $rawPhone = $settings['company_whatsapp'] ?? ($settings['company_phone'] ?? '');
+        $waNumber = preg_replace('/[^0-9]/', '', $rawPhone);
+        if(strlen($waNumber) == 10 && substr($waNumber, 0, 1) != '5') {
+            $waNumber = '52' . $waNumber;
+        }
+    @endphp
 
     <!-- NAVBAR -->
     <nav class="sticky top-0 z-50 w-full bg-white border-b border-gray-100 shadow-sm transition-all duration-300" id="navbar">
@@ -46,10 +53,7 @@
                     <a href="{{ route('landing') }}#nosotros" class="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors">Nosotros</a>
                     <a href="{{ route('landing') }}#ventajas" class="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors">Por Qué Elegirnos</a>
                     <a href="{{ route('landing') }}#contacto" class="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors">Contacto</a>
-                    @if(isset($settings['company_whatsapp']))
-                        @php
-                            $waNumber = preg_replace('/[^0-9]/', '', $settings['company_whatsapp']);
-                        @endphp
+                    @if($waNumber)
                         <a href="https://wa.me/{{ $waNumber }}?text=Hola,%20me%20gustar%C3%ADa%20recibir%20asesor%C3%ADa." target="_blank" class="bg-black hover:bg-gray-800 text-white px-6 py-2.5 rounded-full text-sm font-semibold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center gap-2">
                             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.418-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964.984-3.595c-.607-1.052-.927-2.246-.926-3.468.001-3.825 3.113-6.937 6.937-6.937 3.825.001 6.938 3.113 6.939 6.938-.001 3.825-3.114 6.937-6.939 6.942z"/></svg>
                             Cotizar
@@ -73,8 +77,8 @@
                 <a href="{{ route('landing') }}#nosotros" class="block px-3 py-3 text-base font-medium text-gray-800 hover:bg-gray-50 rounded-md" onclick="toggleMobileMenu()">Nosotros</a>
                 <a href="{{ route('landing') }}#ventajas" class="block px-3 py-3 text-base font-medium text-gray-800 hover:bg-gray-50 rounded-md" onclick="toggleMobileMenu()">Ventajas</a>
                 <a href="{{ route('landing') }}#contacto" class="block px-3 py-3 text-base font-medium text-gray-800 hover:bg-gray-50 rounded-md" onclick="toggleMobileMenu()">Contacto</a>
-                @if(isset($settings['company_whatsapp']))
-                    <a href="https://wa.me/{{ $waNumber ?? '' }}?text=Hola,%20me%20gustar%C3%ADa%20recibir%20asesor%C3%ADa." class="block mt-4 px-3 py-3 text-center text-base font-semibold text-white bg-black rounded-lg shadow-md" onclick="toggleMobileMenu()">
+                @if($waNumber)
+                    <a href="https://wa.me/{{ $waNumber }}?text=Hola,%20me%20gustar%C3%ADa%20recibir%20asesor%C3%ADa." class="block mt-4 px-3 py-3 text-center text-base font-semibold text-white bg-black rounded-lg shadow-md" onclick="toggleMobileMenu()">
                         Cotizar por WhatsApp
                     </a>
                 @endif
@@ -114,13 +118,13 @@
             @foreach($categories as $category)
                 @foreach($category->products as $product)
                     @php
-                        $safeImageUrl = $product->image ? asset('storage/products/' . implode('/', array_map('rawurlencode', explode('/', $product->image)))) : null;
+                        $safeImageUrl = $product->image_url;
                     @endphp
                     <div class="product-card group fade-in cursor-pointer" data-category="category-{{ $category->id }}" onclick="openProductModal({{ $globalIndex }})">
                         @php $globalIndex++; @endphp
                         
                         <div class="relative w-full aspect-square bg-slate-50/80 rounded-2xl overflow-hidden flex items-center justify-center p-3 mb-4 shadow-sm group-hover:shadow-xl transition-all duration-500">
-                            @if($product->image)
+                            @if($safeImageUrl)
                                 <img src="{{ $safeImageUrl }}" alt="{{ $product->name }}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500">
                             @else
                                 <div class="w-full h-full bg-slate-100 flex flex-col items-center justify-center p-6 text-slate-400 group-hover:bg-slate-200/60 transition-colors">
@@ -223,10 +227,7 @@
 
                         <!-- Botón WhatsApp Dinámico -->
                         <div class="pt-6 border-t mt-auto">
-                            @if(isset($settings['company_whatsapp']))
-                                @php
-                                    $waNumber = preg_replace('/[^0-9]/', '', $settings['company_whatsapp']);
-                                @endphp
+                            @if($waNumber)
                                 <a id="modalWhatsAppBtn" href="#" target="_blank" class="flex justify-center items-center w-full bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl text-lg font-bold transition-colors shadow-lg hover:shadow-xl gap-3">
                                     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.418-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964.984-3.595c-.607-1.052-.927-2.246-.926-3.468.001-3.825 3.113-6.937 6.937-6.937 3.825.001 6.938 3.113 6.939 6.938-.001 3.825-3.114 6.937-6.939 6.942z"/></svg>
                                     Cotizar este Modelo
@@ -325,7 +326,7 @@
             @foreach($categories as $category)
                 @foreach($category->products as $product)
                     @php
-                        $safeImageUrl = $product->image ? asset('storage/products/' . implode('/', array_map('rawurlencode', explode('/', $product->image)))) : null;
+                        $safeImageUrl = $product->image_url;
                     @endphp
                     {
                         id: {{ $product->id }},

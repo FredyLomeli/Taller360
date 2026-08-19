@@ -10,12 +10,22 @@ class CatalogController extends Controller
 {
     public function index()
     {
-        // Obtenemos solo las categorías que tienen productos y filtramos estrictamente las columnas
-        $categories = Category::has('products')
+        $onlyWithImages = Setting::getValue('catalog_only_with_images', '0');
+        $filterImages = ($onlyWithImages === '1' || filter_var($onlyWithImages, FILTER_VALIDATE_BOOLEAN));
+
+        // Obtenemos solo las categorías que tienen productos (respetando el filtro de imagen si aplica)
+        $categories = Category::whereHas('products', function ($query) use ($filterImages) {
+                if ($filterImages) {
+                    $query->whereNotNull('image')->where('image', '!=', '');
+                }
+            })
             ->with([
-                'products' => function ($query) {
+                'products' => function ($query) use ($filterImages) {
                     // Solo campos esenciales de los productos, NADA de precios
                     $query->select('id', 'category_id', 'name', 'description', 'image', 'is_favorite');
+                    if ($filterImages) {
+                        $query->whereNotNull('image')->where('image', '!=', '');
+                    }
                 },
                 'products.variants' => function ($query) {
                     // Solo material y medidas de las variantes, NADA de precios ni stock
