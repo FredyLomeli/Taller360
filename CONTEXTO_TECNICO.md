@@ -1,5 +1,5 @@
 # 🧠 CONTEXTO TÉCNICO — TALLER 360
-**Versión Real:** 2.7 | **Sincronizado directamente contra el código fuente:** 05 de septiembre 2026
+**Versión Real:** 2.8 | **Sincronizado directamente contra el código fuente:** 07 de septiembre 2026
 **Para:** Retomar desarrollo con IA o desarrollador nuevo sin perder contexto ni repetir trabajo ya completado.
 **IMPORTANTE:** A diferencia de la versión anterior de este documento (que auditaba solo texto/reportes previos), esta versión se verificó línea por línea contra controladores, modelos, migraciones, rutas y componentes Vue reales. Compartir siempre este archivo al iniciar una nueva sesión.
 
@@ -172,7 +172,10 @@ timestamps
 - `min_stock`: umbral configurable solo visible en formulario si el producto padre tiene `is_favorite = true`.
 - El stock sube al registrar producción (`production_completions`, confirmado en `ProductionController::storeCompletion`) y baja al confirmar un embarque (`ShipmentController::store`, confirmado con `lockForUpdate`).
 - ✅ **Confirmado resuelto:** el motor de etapas del Kanban (`SaleController::updateStage`) **ya no toca stock**. Embarques es el único mecanismo de salida. (Antes era un bug crítico documentado; ver sección 5.)
-*   **NUEVA REGLA DE NEGOCIO (Stock Reservado):** Para evitar inventarios negativos y falsos positivos de disponibilidad en Producción, se implementa `reserved_stock`. Al pasar piezas a la etapa operativa de "Detallado" (pre-embarque, ya asignadas a un cliente), se incrementa este valor. El motor de Producción y el POS deben calcular siempre la disponibilidad como `(stock - reserved_stock)`. El módulo de Embarques es el responsable final de deducir ambos valores al subir la mercancía al camión.
+*   **NUEVA REGLA DE NEGOCIO (Stock Reservado / Detallado v2.8):** Para evitar inventarios negativos y disonancias numéricas al enviar remanentes a detallado, se implementó `reserved_stock`. 
+    - Al enviar piezas a "Detallado", se incrementa este valor. 
+    - El stock real disponible en todo el sistema se calcula como `(stock - reserved_stock)`. 
+    - **Remanente de Producción (Matemática Estricta):** El cálculo de `pending_to_fabricate` (lo que falta por producir) en `ProductionController` se estabilizó usando la fórmula de "Avance Máximo": `MAX(completados, detallados, enviados)`. Esto previene que una misma pieza descuente múltiples veces del total necesitado mientras transita por las diferentes fases del taller.
 
 ### 💼 `sales`
 ```

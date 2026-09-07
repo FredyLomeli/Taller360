@@ -4,7 +4,7 @@
 ![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
 ![Inertia.js](https://img.shields.io/badge/Inertia.js-7855FA?style=for-the-badge&logo=inertia&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Status](https://img.shields.io/badge/Estado-v2.7_Sincronizado_con_código_real-brightgreen?style=for-the-badge)
+![Status](https://img.shields.io/badge/Estado-v2.8_Sincronizado_con_código_real-brightgreen?style=for-the-badge)
 
 Sistema de gestión de pedidos y manufactura diseñado específicamente para **mueblerías que fabrican sobre pedido**. Integra control de producción, ciclo financiero completo, gestión de inventario por variantes de material, **órdenes de trabajo para manufactura autónoma**, **catálogo digital público en Blade SSR** y **módulo de logística y embarques parciales**.
 
@@ -14,9 +14,9 @@ Sistema de gestión de pedidos y manufactura diseñado específicamente para **m
 
 | Campo | Detalle |
 |-------|---------|
-| **Versión** | 2.7 — Manufactura Avanzada & Catálogo Digital |
-| **Última auditoría** | 05 de septiembre 2026 — sincronizado directamente contra el código fuente real |
-| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado) y Catálogo Blade SSR integrados. 16 suites de tests automatizados. |
+| **Versión** | 2.8 — Estado Detallado y Reserva de Stock |
+| **Última auditoría** | 07 de septiembre 2026 — sincronizado directamente contra el código fuente real |
+| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado), Catálogo Blade SSR y lógica de Avance Máximo (v2.8) integrados. 16 suites de tests automatizados. |
 | **Frontend** | Funcional en Vue 3 / Inertia.js para gestión interna; Laravel Blade SSR puro para Landing y Catálogo Comercial público. |
 | **Repositorio** | https://github.com/FredyLomeli/Taller360 |
 

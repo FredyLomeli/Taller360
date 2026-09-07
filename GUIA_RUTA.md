@@ -16,6 +16,7 @@
 ✅ BUGS CRÍTICOS JULIO                      (CONFIRMADOS RESUELTOS EN CÓDIGO)
 ✅ SPRINT CLIENTE (04 ago 2026)              (COMPLETADO: Auto-correo, Supervisor, Limbo, Min Stock, Work Orders)
 ✅ FASE 4.1 — Catálogo Público y Landing     (COMPLETADA: Blade SSR, SEO, modal y WhatsApp)
+✅ ESTADO DETALLADO Y RESERVA                (COMPLETADA: WIP aislado y deductivas MAX en backend)
                                      ↓
 🟢 TAREA 1 — FASE 2.5 Embarques              (selector multi-cliente UI + remisión agrupada)
 🟢 TAREA 2 — Limpieza dependencias Tailwind  (remover @tailwindcss/vite muerto o migrar a v4)
@@ -48,13 +49,17 @@ Los 5 puntos acordados con el cliente están completamente implementados y respa
 - Accesor `$product->image_url` con normalización segura de URLs vía `rawurlencode()`.
 
 ---
+
+## ✅ ESTADO DETALLADO Y STOCK RESERVADO — COMPLETADA EN CÓDIGO
+- Tablas `detallado_records` y columna `reserved_stock` implementadas exitosamente.
+- El remanente global y los envíos parciales están estabilizados usando lógica de MAX (`MAX(completados, detallados, enviados)`) implementada de forma segura en `ProductionController`.
+- Refactorización transaccional en el `ShipmentController::store`.
+- Visualización independiente del WIP para no ensuciar datos históricos en el frontend.
+
+---
 ## PRÓXIMA TAREA #0 (CRÍTICA): Resolución Bug Kanban
 **Tiempo estimado:** 30 min | **Prioridad:** Bloqueante
 - Corregir pérdida de reactividad `s.value is null` en `promised_date` dentro de `Sales/Index.vue`.
-
-## PRÓXIMA TAREA #1: Estado Detallado y Stock Reservado
-**Tiempo estimado:** 4-6 horas | **Prioridad:** Alta (Operativa)
-- Implementación de reserva parcial por partida (`detallado_records` y `product_variants.reserved_stock`), alteración de cálculo de producción y refactorización transaccional en Embarques.
 
 ## PRÓXIMA TAREA #1: Fase 2.5 — Embarques: Lo que falta en UI y Remisión
 **Tiempo estimado:** 2-3 horas | **Prioridad:** Alta (operativa)

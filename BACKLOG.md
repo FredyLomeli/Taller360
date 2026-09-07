@@ -185,11 +185,12 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 - [ ] **Fallo de Reactividad en Kanban:** Al intentar cambiar de estado a `confirmado`, Vue arroja `Uncaught TypeError: can't access property "promised_date", s.value is null` en `Index.vue`. Pérdida de referencia reactiva del objeto venta al arrastrar la tarjeta.
 
 ### 🏭 NUEVA FUNCIONALIDAD: Estado "Detallado" y Stock Reservado
-- [ ] **Esquema:** Añadir columna `reserved_stock` (int, default 0) a `product_variants`.
-- [ ] **Esquema:** Crear tabla `detallado_records` (similar a `sale_deliveries`) vinculada a `sale_detail_id` para registrar envíos parciales a detallado.
-- [ ] **Backend (Ventas/POS y Producción):** Modificar el cálculo de disponibilidad en todo el sistema. El stock real disponible ahora será `stock - reserved_stock`.
-- [ ] **Backend (Embarques):** Refactorizar `ShipmentController::store`. Al confirmar un viaje usando piezas que vienen de detallado, descontar simultáneamente de `stock` físico y `reserved_stock` utilizando `lockForUpdate()`.
-- [ ] **Frontend:** UI en el Detalle del Pedido (`Sales/Show.vue`) para enviar piezas parciales a la etapa de Detallado sin alterar el `stage` global del pedido en el Kanban.
+- [x] **Esquema:** Añadir columna `reserved_stock` (int, default 0) a `product_variants`.
+- [x] **Esquema:** Crear tabla `detallado_records` (similar a `sale_deliveries`) vinculada a `sale_detail_id` para registrar envíos parciales a detallado.
+- [x] **Backend (Ventas/POS y Producción):** Modificar el cálculo de disponibilidad en todo el sistema. El stock real disponible ahora será `stock - reserved_stock`.
+- [x] **Backend (Embarques):** Refactorizar `ShipmentController::store`. Al confirmar un viaje usando piezas que vienen de detallado, descontar simultáneamente de `stock` físico y `reserved_stock` utilizando `lockForUpdate()`.
+- [x] **Frontend:** UI en el Detalle del Pedido (`Sales/Show.vue`) para enviar piezas parciales a la etapa de Detallado sin alterar el `stage` global del pedido en el Kanban.
+*Nota de implementación:* Se implementó la fórmula de "Avance Máximo" (`MAX(completados, detallados, enviados)`) en `ProductionController` para evitar deducciones dobles en el cálculo de remanentes, y se aisló exitosamente el WIP visual en el frontend (columna "En Detallado" mostrando solo piezas no embarcadas).
 
 ---
 
