@@ -15,6 +15,7 @@ protected $fillable = [
         'measurements',
         'sku',
         'stock',
+        'reserved_stock',
         'min_stock',
         'price_1',
         'price_2',
@@ -22,6 +23,13 @@ protected $fillable = [
         'price_4',
         'price_5',
     ];
+
+    protected $appends = ['available_stock'];
+
+    public function getAvailableStockAttribute()
+    {
+        return max(0, $this->stock - $this->reserved_stock);
+    }
 
     public function product()
     {

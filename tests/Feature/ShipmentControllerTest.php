@@ -186,3 +186,49 @@ class ShipmentControllerTest extends TestCase
         ]);
     }
 }
+    public function test_store_shipment_decreases_reserved_stock()
+    {
+        $inventario = User::factory()->create(['role' => 'inventario']);
+        $client = Client::factory()->create();
+        $product = Product::factory()->create();
+        $variant = ProductVariant::factory()->create([
+            'product_id' => $product->id, 
+            'stock' => 50, 
+            'reserved_stock' => 10,
+            'price_1' => 100, 
+            'material' => 'Tela', 
+            'measurements' => '2x2'
+        ]);
+        
+        $sale = Sale::factory()->create(['client_id' => $client->id, 'stage' => 'produccion']);
+        $detail = SaleDetail::create([
+            'sale_id' => $sale->id,
+            'product_variant_id' => $variant->id,
+            'product_name' => 'Test',
+            'quantity' => 15,
+            'unit_price' => 100,
+            'subtotal' => 1500
+        ]);
+
+        \App\Models\DetalladoRecord::create([
+            'sale_detail_id' => $detail->id,
+            'quantity' => 5,
+            'user_id' => $inventario->id
+        ]);
+
+        $response = $this->actingAs($inventario)->post('/shipments', [
+            'driver_name' => 'Juan',
+            'license_plate' => 'ABC-123',
+            'destination' => 'Test',
+            'pickup_type' => 'flota_propia',
+            'items' => [
+                ['sale_detail_id' => $detail->id, 'quantity' => 10]
+            ]
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $response->assertRedirect('/shipments');
+        
+        $this->assertEquals(40, $variant->fresh()->stock);
+        $this->assertEquals(5, $variant->fresh()->reserved_stock);
+}

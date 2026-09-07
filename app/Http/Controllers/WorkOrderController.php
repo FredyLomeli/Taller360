@@ -29,7 +29,13 @@ class WorkOrderController extends Controller
 
     public function releaseHold(Request $request, SaleDetail $detail)
     {
+        $request->validate([
+            'new_date' => 'required|date'
+        ]);
+
         $detail->update(['production_hold' => false]);
+        $detail->sale->update(['promised_date' => $request->new_date]);
+        
         return back()->with('success', 'Las piezas pausadas se han reincorporado a la cola de producción.');
     }
 }

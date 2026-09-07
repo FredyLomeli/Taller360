@@ -24,11 +24,12 @@ class SaleFactory extends Factory
             'client_id' => Client::factory(),
             
             // Datos de relleno para que la BD no se queje
-            'total' => $this->faker->randomFloat(2, 100, 5000), // Precio entre 100 y 5000
+            'total' => $this->faker->randomFloat(2, 100, 5000),
             'paid_amount' => $this->faker->randomFloat(2, 100, 5000),
             'change_amount' => 0,
             'payment_method' => 'Efectivo',
             'stage' => 'pedido',
+            'promised_date' => null, // Explícito para control preciso en tests de updateStage
             'created_at' => now(),
             'updated_at' => now(),
         ];

@@ -13,6 +13,7 @@ const props = defineProps({
 
 const completionData = ref({});
 const currentFilter = ref('todos');
+const isPausedExpanded = ref(false);
 
 const filteredQueue = computed(() => {
     if (currentFilter.value === 'todos') return props.productionQueue;
@@ -26,6 +27,25 @@ const filteredQueue = computed(() => {
         }
     }
     return filtered;
+});
+
+const groupedPausedItems = computed(() => {
+    if (!props.pausedItems) return [];
+    
+    const groups = {};
+    props.pausedItems.forEach(item => {
+        const saleId = item.sale_id;
+        if (!groups[saleId]) {
+            groups[saleId] = {
+                sale_id: saleId,
+                client_name: item.sale?.client?.name || 'Venta de Mostrador',
+                items: []
+            };
+        }
+        groups[saleId].items.push(item);
+    });
+    
+    return Object.values(groups).sort((a, b) => a.sale_id - b.sale_id);
 });
 
 const availableVariants = computed(() => {
@@ -80,19 +100,24 @@ const submitWorkOrder = () => {
 
 const releaseHold = (id) => {
     Swal.fire({
-        title: '¿Liberar remanente?',
-        text: 'Estas piezas volverán a la cola de producción activa.',
-        icon: 'question',
+        title: 'Reprogramar Remanente',
+        text: 'Selecciona la nueva fecha promesa para fabricar estas piezas:',
+        input: 'date',
         showCancelButton: true,
         confirmButtonColor: '#ea580c',
         cancelButtonText: 'Cancelar',
-        confirmButtonText: 'Sí, liberar'
+        confirmButtonText: 'Reprogramar',
+        inputValidator: (value) => {
+            if (!value) {
+                return 'Debes seleccionar una fecha'
+            }
+        }
     }).then((result) => {
         if (result.isConfirmed) {
-            router.patch(route('sale-details.release-hold', id), {}, {
+            router.patch(route('sale-details.release-hold', id), { new_date: result.value }, {
                 preserveScroll: true,
                 onSuccess: () => {
-                    Swal.fire({ icon: 'success', title: 'Liberado', timer: 1500, showConfirmButton: false });
+                    Swal.fire({ icon: 'success', title: 'Reprogramado', timer: 1500, showConfirmButton: false });
                 }
             });
         }
@@ -186,38 +211,50 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
         <div class="py-12" id="printable-area">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 
-                <!-- Remanentes Pausados -->
-                <div v-if="pausedItems && pausedItems.length > 0" class="mb-8 no-print">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">⏳ Remanentes en Espera (Pausados)</h3>
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                        <table class="w-full text-left text-sm whitespace-nowrap">
-                            <thead class="bg-orange-50 text-orange-800 uppercase text-[10px] font-bold border-b border-orange-200">
+                <!-- Remanentes Pausados (Acordeón Minimalista) -->
+                <div v-if="pausedItems && pausedItems.length > 0" class="mb-4 no-print">
+                    <div @click="isPausedExpanded = !isPausedExpanded" class="bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-lg cursor-pointer flex justify-between items-center shadow-sm hover:bg-amber-200 transition">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl">⚠️</span>
+                            <span class="font-bold text-sm">Hay {{ pausedItems.length }} remanentes de envíos parciales pendientes de reprogramar.</span>
+                        </div>
+                        <span class="text-xs font-bold bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                            {{ isPausedExpanded ? 'Ocultar' : 'Mostrar' }}
+                        </span>
+                    </div>
+
+                    <div v-show="isPausedExpanded" class="mt-2 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <table class="w-full text-left text-xs whitespace-nowrap">
+                            <thead class="bg-gray-50 text-gray-600 uppercase font-bold border-b border-gray-200">
                                 <tr>
-                                    <th class="px-6 py-4">Producto a Fabricar</th>
-                                    <th class="px-6 py-4">Pedido Original</th>
-                                    <th class="px-6 py-4 text-center">Cant. Pausada</th>
-                                    <th class="px-6 py-4 text-right">Acción</th>
+                                    <th class="px-4 py-2">Producto</th>
+                                    <th class="px-4 py-2">Pedido</th>
+                                    <th class="px-4 py-2 text-center">Cant.</th>
+                                    <th class="px-4 py-2 text-right">Acción</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr v-for="item in pausedItems" :key="item.id" class="hover:bg-orange-50/50 transition">
-                                    <td class="px-6 py-4">
-                                        <div class="font-bold text-gray-800">{{ item.product_name }}</div>
-                                        <div class="text-[10px] text-gray-500 uppercase font-bold">{{ item.variant?.material }}</div>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <Link :href="route('sales.show', item.sale_id)" class="text-blue-600 font-bold hover:underline">Pedido #{{ item.sale_id }}</Link>
-                                        <div class="text-[10px] text-gray-500">{{ item.sale?.client?.name }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 text-center font-bold text-orange-600 text-lg">
-                                        {{ item.quantity - (item.completed_quantity || 0) }}
-                                    </td>
-                                    <td class="px-6 py-4 text-right">
-                                        <button @click="releaseHold(item.id)" class="bg-orange-100 text-orange-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-200 border border-orange-300 transition shadow-sm">
-                                            ▶ Liberar a Producción
-                                        </button>
-                                    </td>
-                                </tr>
+                                <template v-for="group in groupedPausedItems" :key="group.sale_id">
+                                    <!-- Partidas del Pedido -->
+                                    <tr v-for="item in group.items" :key="item.id" class="hover:bg-gray-50 transition">
+                                        <td class="px-4 py-3">
+                                            <div class="font-bold text-gray-800 text-sm">{{ item.product_name }}</div>
+                                            <div class="text-[10px] text-gray-500 uppercase font-bold">{{ item.variant?.material }}</div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <Link :href="route('sales.show', group.sale_id)" class="text-blue-600 font-bold hover:underline">Pedido #{{ group.sale_id }}</Link>
+                                            <span class="text-gray-500 block text-xs mt-0.5">{{ group.client_name }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-center font-bold text-amber-600 text-sm">
+                                            {{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <button @click="releaseHold(item.id)" class="bg-amber-100 text-amber-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-200 border border-amber-300 transition whitespace-nowrap">
+                                                Reprogramar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
@@ -264,31 +301,37 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                     <table class="w-full text-left text-sm whitespace-nowrap">
                         <thead class="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold border-b border-gray-200">
                             <tr>
-                                <th class="px-6 py-4">Modelo a Fabricar</th>
-                                <th class="px-6 py-4 text-center">Estatus de Inventario</th>
-                                <th class="px-6 py-4">Requerimientos (Pedidos / Órdenes)</th>
-                                <th class="px-6 py-4 text-right no-print">Registrar Fabricación</th>
+                                <th class="p-3">Modelo a Fabricar</th>
+                                <th class="p-3 text-center">Estatus de Inventario</th>
+                                <th class="p-3">Requerimientos (Pedidos / Órdenes)</th>
+                                <th class="p-3 text-right no-print">Registrar Fabricación</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             <tr v-for="(group, key) in filteredQueue" :key="key" class="hover:bg-gray-50 transition">
                                 
-                                <td class="px-6 py-4 align-top">
+                                <td class="p-3 align-top">
                                     <div class="font-bold text-gray-800 text-sm">{{ group.name }}</div>
                                     <div class="text-[10px] text-gray-400 uppercase font-bold mt-0.5">
                                         Mat: {{ group.material }} <span v-if="group.measurements" class="text-gray-300">|</span> {{ group.measurements }}
                                     </div>
                                 </td>
 
-                                <td class="px-6 py-4 align-top text-center">
-                                    <div class="flex justify-center gap-4 text-[11px] mb-2 font-semibold">
+                                <td class="p-3 align-top text-center">
+                                    <div class="flex justify-center gap-2 text-[11px] mb-2 font-semibold">
                                         <div class="text-gray-500 text-center">
                                             Necesario<br><span class="text-gray-800 text-sm">{{ group.total_needed }}</span>
                                         </div>
-                                        <div class="text-gray-500 text-center border-l px-4">
+                                        <div class="text-gray-500 text-center border-l px-2">
                                             En Stock<br><span class="text-green-600 text-sm">{{ group.in_stock }}</span>
                                         </div>
-                                        <div class="text-gray-500 text-center border-l pl-4">
+                                        <div class="text-gray-500 text-center border-l px-2">
+                                            En Detallado<br><span :class="group.total_detailed > 0 ? 'text-amber-600' : 'text-gray-400'" class="text-sm">{{ group.total_detailed || 0 }}</span>
+                                        </div>
+                                        <div class="text-gray-500 text-center border-l px-2">
+                                            Enviados<br><span class="text-indigo-600 font-bold text-sm">{{ group.total_delivered || 0 }}</span>
+                                        </div>
+                                        <div class="text-gray-500 text-center border-l pl-2">
                                             Faltan<br><span class="text-red-500 text-sm">{{ group.pending_to_fabricate }}</span>
                                         </div>
                                     </div>
@@ -307,12 +350,12 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                     </span>
                                 </td>
 
-                                <td class="px-6 py-4 align-top w-[250px] whitespace-normal">
-                                    <div class="flex flex-wrap gap-2">
+                                <td class="p-3 align-top w-[250px] whitespace-normal">
+                                    <div class="flex flex-wrap gap-1">
                                         <template v-for="order in group.orders" :key="order.id">
-                                            <Link v-if="order.type === 'sale'" :href="route('sales.show', order.source_id)" 
+                                            <Link v-if="order.type === 'sale'" :href="route('sales.show', order.id.replace('Pedido-', ''))" 
                                                   :class="[
-                                                      'px-2 py-1.5 rounded text-[10px] font-bold border transition shadow-sm inline-flex items-center gap-1',
+                                                      'px-2 py-1 rounded text-[10px] font-bold border transition shadow-sm inline-flex items-center gap-1',
                                                       order.is_overdue ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
                                                   ]">
                                                 <span>{{ order.id }}</span>
@@ -321,7 +364,7 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                                 </span>
                                             </Link>
                                             
-                                            <span v-else class="px-2 py-1.5 rounded text-[10px] font-bold border border-purple-200 bg-purple-50 text-purple-700 shadow-sm inline-flex items-center gap-1">
+                                            <span v-else class="px-2 py-1 rounded text-[10px] font-bold border border-purple-200 bg-purple-50 text-purple-700 shadow-sm inline-flex items-center gap-1">
                                                 <span>🛠️ {{ order.id }}</span>
                                                 <span class="text-[9px] font-normal border-l pl-1 border-current opacity-80">Manual</span>
                                             </span>
@@ -329,46 +372,52 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                     </div>
                                 </td>
 
-                                <td class="px-6 py-4 align-top min-w-[280px] no-print">
+                                <td class="p-3 align-top min-w-[280px] no-print">
                                     <template v-for="item in group.details" :key="'action-'+item.source_type+'-'+item.source_id">
-                                        <div v-if="group.pending_to_fabricate > 0 && (item.quantity - (item.completed_quantity || 0)) > 0" class="flex items-center justify-between gap-3 mb-2 bg-gray-50/50 p-2 rounded border border-gray-200 shadow-sm last:mb-0">
+                                        <div v-if="group.pending_to_fabricate > 0" class="flex items-center justify-between gap-2 mb-1 bg-gray-50/50 p-2 rounded border border-gray-200 shadow-sm last:mb-0">
                                             
                                             <div class="flex flex-col">
-                                                <span v-if="item.source_type === 'sale_detail'" class="text-[11px] text-gray-700 font-bold">
-                                                    Ped. #{{ item.sale_id }} <span class="text-gray-400 ml-1 font-normal">| Restan: {{ item.quantity - (item.completed_quantity || 0) }}</span>
+                                                <span v-if="item.source_type === 'sale_detail'" class="text-[10px] text-gray-700 font-bold flex items-center flex-wrap gap-1">
+                                                    <Link :href="route('sales.show', item.sale_id)" class="text-blue-600 hover:underline">Ped. #{{ item.sale_id }}</Link>
+                                                    <span class="text-gray-400 font-normal">| Restan: {{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
+                                                    <span v-if="item.detailed_quantity > 0" class="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1 rounded font-bold">En Detallado: {{ item.detailed_quantity }}</span>
                                                 </span>
-                                                <span v-else class="text-[11px] text-purple-700 font-bold">
-                                                    WO #{{ item.source_id }} <span class="text-gray-400 ml-1 font-normal">| Restan: {{ item.quantity - (item.completed_quantity || 0) }}</span>
+                                                <span v-else class="text-[10px] text-purple-700 font-bold">
+                                                    WO #{{ item.source_id }} <span class="text-gray-400 ml-1 font-normal">| Restan: {{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
                                                 </span>
                                                 
-                                                <span v-if="item.source_type === 'sale_detail'" class="text-[9px] text-gray-500 mt-0.5 flex items-center gap-1">
+                                                <span v-if="item.source_type === 'sale_detail'" class="text-[9px] text-gray-500 flex items-center gap-1">
                                                     📅 Promesa: {{ formatPromisedDate(item.sale?.promised_date) }}
                                                 </span>
-                                                <span v-else class="text-[9px] text-purple-500 mt-0.5 flex items-center gap-1">
+                                                <span v-else class="text-[9px] text-purple-500 flex items-center gap-1">
                                                     🛠️ Orden de Trabajo Manual
                                                 </span>
                                             </div>
 
-                                            <div class="flex items-center gap-2">
-                                                <input 
-                                                    type="number" 
-                                                    v-model="completionData[item.source_type + '-' + item.source_id]" 
-                                                    min="1" 
-                                                    class="w-20 h-8 p-1 text-center border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 font-semibold shadow-inner" 
-                                                    placeholder="Cant."
-                                                >
-                                                <button 
-                                                    @click="submitCompletion(item.source_type, item.source_id, item.quantity - (item.completed_quantity || 0))" 
-                                                    class="bg-blue-600 text-white w-8 h-8 flex items-center justify-center rounded text-sm font-bold hover:bg-blue-700 transition shadow-sm"
-                                                    title="Registrar"
-                                                >
-                                                    ✓
-                                                </button>
+                                            <div class="flex items-center gap-1">
+                                                <template v-if="Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) <= 0">
+                                                    <span class="bg-gray-100 text-gray-500 text-[10px] px-2 py-1 rounded font-bold border border-gray-200">Cubierto por Detallado</span>
+                                                </template>
+                                                <template v-else>
+                                                    <input 
+                                                        type="number" 
+                                                        v-model="completionData[item.source_type + '-' + item.source_id]" 
+                                                        min="1" 
+                                                        class="w-16 h-7 p-1 text-center border-gray-300 rounded text-xs focus:ring-blue-500 focus:border-blue-500 font-semibold shadow-inner" 
+                                                        placeholder="Cant."
+                                                    >
+                                                    <button 
+                                                        @click="submitCompletion(item.source_type, item.source_id, Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)))" 
+                                                        class="bg-blue-600 text-white w-7 h-7 flex items-center justify-center rounded text-xs font-bold hover:bg-blue-700 transition shadow-sm"
+                                                        title="Registrar"
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                </template>
                                             </div>
                                         </div>
                                     </template>
-                                    
-                                    <div v-if="group.pending_to_fabricate === 0" class="text-xs text-green-600 font-bold text-center py-2 bg-green-50 rounded border border-green-100">
+                                    <div v-if="group.pending_to_fabricate === 0" class="text-xs text-green-600 font-bold text-center py-2 bg-green-50 rounded border border-green-100 mt-2">
                                         ✅ Producción Completada
                                     </div>
                                 </td>

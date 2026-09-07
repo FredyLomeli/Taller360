@@ -24,20 +24,57 @@ class ProductionController extends Controller
         // 1. Buscamos lo de esta semana + TODO LO ATRASADO + Los sin fecha (SOLO NO PAUSADOS)
         $saleItems = SaleDetail::where('production_hold', false)
             ->whereHas('sale', function ($query) use ($endWeek) {
-                $query->where('stage', 'produccion')
+                $query->whereIn('stage', ['confirmado', 'produccion', 'enviado', 'entregado'])
                       ->where(function($q) use ($endWeek) {
                           $q->whereDate('promised_date', '<=', $endWeek)
                             ->orWhereNull('promised_date');
                       });
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
+            ->withSum('detalladoRecords as detailed_quantity', 'quantity')
+            ->withSum(['deliveries as delivered_quantity' => function ($q) {
+                $q->whereHas('shipment', function ($sq) {
+                    $sq->where('status', '!=', 'cancelado');
+                });
+            }], 'quantity_delivered')
             ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
-                $item->source_type = 'sale_detail';
-                $item->source_id = $item->id;
-                return $item;
-            });
+                return (object)[
+                    'source_type' => 'sale_detail',
+                    'source_id' => $item->id,
+                    'sale_id' => $item->sale_id,
+                    'product_variant_id' => $item->product_variant_id,
+                    'product_name' => $item->product_name ?? ($item->variant->product->name ?? 'Mueble'),
+                    'quantity' => $item->quantity,
+                    'completed_quantity' => $item->completed_quantity ?? 0,
+                    'detailed_quantity' => $item->detailed_quantity ?? 0,
+                    'delivered_quantity' => $item->delivered_quantity ?? 0,
+                    'chosen_color' => $item->chosen_color,
+                    'variant' => $item->variant,
+                    'sale' => $item->sale,
+                ];
+            })
+            ->filter(function ($item) use ($startWeek, $endWeek) {
+                // Cálculo de faltantes previniendo la doble deducción incluyendo envíos directos
+                $faltantes = $item->quantity - max($item->completed_quantity ?? 0, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0);
+                
+                // Condición A: Aún faltan piezas por fabricar
+                if ($faltantes > 0) {
+                    return true;
+                }
+
+                // Condición B: Si faltan 0 piezas, revisamos si la fecha promesa es de esta semana
+                if ($item->sale && $item->sale->promised_date) {
+                    $promisedDate = \Carbon\Carbon::parse($item->sale->promised_date)->startOfDay();
+                    if ($promisedDate->between($startWeek->copy()->startOfDay(), $endWeek->copy()->endOfDay())) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
+            ->values();
 
         // 2. ORDENES DE TRABAJO (Pendientes o en proceso)
         $workOrders = WorkOrder::whereIn('status', ['pending', 'in_progress'])
@@ -52,6 +89,7 @@ class ProductionController extends Controller
                     'product_name' => $wo->productVariant->product->name,
                     'quantity' => $wo->quantity_requested,
                     'completed_quantity' => $wo->completed_quantity ?? 0,
+                    'detailed_quantity' => 0, // No aplica para WorkOrders
                     'chosen_color' => null,
                     'variant' => $wo->productVariant,
                     'sale' => null,
@@ -63,12 +101,17 @@ class ProductionController extends Controller
         // 3. Agrupación unificada
         $grouped = $items->groupBy('product_variant_id')->map(function ($group) {
             $variant = $group->first()->variant;
+            $totalNeeded = $group->sum('quantity');
+            $totalCompleted = $group->sum('completed_quantity') ?? 0;
+            $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
+            $totalDelivered = $group->sum(fn($i) => $i->delivered_quantity ?? 0);
+            $wipDetailed = max(0, $totalDetailed - $totalDelivered);
 
             return [
                 'name' => $group->first()->product_name,
                 'material' => $variant->material ?? 'Estándar',
                 'measurements' => $variant->measurements ?? null,
-                'total_quantity' => $group->sum('quantity'),
+                'total_quantity' => $totalNeeded,
                 'breakdown' => $group->groupBy('chosen_color'),
                 'orders' => $group->map(function($detail) {
                     if ($detail->source_type === 'work_order') {
@@ -91,14 +134,31 @@ class ProductionController extends Controller
                         'is_overdue' => $isOverdue,
                         'promised_date' => $promised,
                         'type' => 'sale',
-                        'source_id' => $detail->id,
+                        'source_id' => $detail->source_id,
                     ];
                 })->unique('id')->values(),
-                'details' => $group,
-                'total_needed' => $group->sum('quantity'),
-                'total_completed' => $group->sum('completed_quantity') ?? 0,
-                'in_stock' => $variant->stock ?? 0,
-                'pending_to_fabricate' => max(0, $group->sum('quantity') - ($group->sum('completed_quantity') ?? 0)),
+                'details' => $group->map(function ($item) {
+                    return (object)[
+                        'source_type' => $item->source_type,
+                        'source_id' => $item->source_id,
+                        'sale_id' => $item->sale_id ?? null,
+                        'product_variant_id' => $item->product_variant_id,
+                        'product_name' => $item->product_name ?? ($item->variant->product->name ?? 'Mueble'),
+                        'quantity' => $item->quantity,
+                        'completed_quantity' => $item->completed_quantity ?? 0,
+                        'detailed_quantity' => $item->detailed_quantity ?? 0,
+                        'delivered_quantity' => $item->delivered_quantity ?? 0,
+                        'chosen_color' => $item->chosen_color,
+                        'variant' => $item->variant,
+                        'sale' => $item->sale ?? null,
+                    ];
+                })->values(),
+                'total_needed' => $totalNeeded,
+                'total_completed' => $totalCompleted,
+                'total_detailed' => $wipDetailed,
+                'total_delivered' => $totalDelivered,
+                'in_stock' => $variant->available_stock ?? 0,
+                'pending_to_fabricate' => max(0, $totalNeeded - max($totalCompleted, $totalDetailed, $totalDelivered)),
             ];
         })
         ->sortBy(function ($group) {
@@ -200,12 +260,23 @@ class ProductionController extends Controller
                       });
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
+            ->withSum('detalladoRecords as detailed_quantity', 'quantity')
             ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
-                $item->source_type = 'sale_detail';
-                $item->source_id = $item->id;
-                return $item;
+                return (object)[
+                    'source_type' => 'sale_detail',
+                    'source_id' => $item->id,
+                    'sale_id' => $item->sale_id,
+                    'product_variant_id' => $item->product_variant_id,
+                    'product_name' => $item->product_name ?? ($item->variant->product->name ?? 'Mueble'),
+                    'quantity' => $item->quantity,
+                    'completed_quantity' => $item->completed_quantity ?? 0,
+                    'detailed_quantity' => $item->detailed_quantity ?? 0,
+                    'chosen_color' => $item->chosen_color,
+                    'variant' => $item->variant,
+                    'sale' => $item->sale,
+                ];
             });
 
         $workOrders = WorkOrder::whereIn('status', ['pending', 'in_progress'])
@@ -220,6 +291,7 @@ class ProductionController extends Controller
                     'product_name' => $wo->productVariant->product->name,
                     'quantity' => $wo->quantity_requested,
                     'completed_quantity' => $wo->completed_quantity ?? 0,
+                    'detailed_quantity' => 0,
                     'chosen_color' => null,
                     'variant' => $wo->productVariant,
                     'sale' => null,
@@ -228,7 +300,7 @@ class ProductionController extends Controller
 
         $items = collect($saleItems)->concat($workOrders)
             ->filter(function ($item) {
-                return ($item->quantity - ($item->completed_quantity ?? 0)) > 0;
+                return ($item->quantity - ($item->completed_quantity ?? 0) - ($item->detailed_quantity ?? 0)) > 0;
             })
             ->sortBy(function ($item) {
                 return $item->sale->promised_date ?? '9999-12-31';
@@ -238,15 +310,31 @@ class ProductionController extends Controller
             $variant = $group->first()->variant;
             $totalNeeded = $group->sum('quantity');
             $totalCompleted = $group->sum('completed_quantity') ?? 0;
+            $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
 
             return [
                 'name' => $group->first()->product_name,
                 'material' => $variant->material ?? 'Estándar',
                 'measurements' => $variant->measurements ?? null,
                 'total_needed' => $totalNeeded,
-                'in_stock' => $variant->stock ?? 0,
-                'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted),
-                'details' => $group
+                'in_stock' => $variant->available_stock ?? 0,
+                'total_detailed' => $totalDetailed,
+                'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted - $totalDetailed),
+                'details' => $group->map(function ($item) {
+                    return (object)[
+                        'source_type' => $item->source_type,
+                        'source_id' => $item->source_id,
+                        'sale_id' => $item->sale_id ?? null,
+                        'product_variant_id' => $item->product_variant_id,
+                        'product_name' => $item->product_name ?? ($item->variant->product->name ?? 'Mueble'),
+                        'quantity' => $item->quantity,
+                        'completed_quantity' => $item->completed_quantity ?? 0,
+                        'detailed_quantity' => $item->detailed_quantity ?? 0,
+                        'chosen_color' => $item->chosen_color,
+                        'variant' => $item->variant,
+                        'sale' => $item->sale ?? null,
+                    ];
+                })->values()
             ];
         });
 

@@ -63,93 +63,101 @@ const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-const advanceStage = (id, currentStage) => {
-    let nextStage = '';
+// Devuelve el <dialog> nativo activo para que SweetAlert2 se monte dentro de él.
+// El <dialog> abierto con .showModal() ocupa el top-layer del navegador; cualquier
+// elemento externo —sin importar su z-index— queda por debajo. Al pasar el <dialog>
+// como `target`, SweetAlert2 se convierte en parte del mismo contexto de apilamiento
+// y su input:date recibe foco correctamente sin conflictos con el focus trap nativo.
+const getSwalTarget = () => document.querySelector('dialog[open]') ?? document.body;
+
+// Normaliza cualquier representación de fecha que envíe Eloquent a YYYY-MM-DD estricto.
+// El input nativo type="date" solo reconoce este formato; cualquier otra representación
+// (ISO con hora, datetime MySQL) hace que el campo aparezca vacío aunque tenga valor.
+const formatDateForInput = (dateValue) => {
+    if (!dateValue) return '';
+    // Cubre: '2026-12-01', '2026-12-01T00:00:00.000000Z', '2026-12-01 00:00:00'
+    return String(dateValue).substring(0, 10);
+};
+
+const advanceStage = () => {
+    // Captura local inmutable: protege contra la anulación asíncrona de selectedSale.value
+    const sale = selectedSale.value;
+    if (!sale) return;
+
+    const id           = sale.id;
+    const currentStage = sale.stage;
+
+    let nextStage    = '';
     let confirmTitle = '';
-    let confirmText = '';
-    let btnText = '';
+    let btnText      = '';
+    let btnColor     = '#16a34a';
 
     if (currentStage === 'pedido') {
-        nextStage = 'confirmado';
+        nextStage    = 'confirmado';
         confirmTitle = '¿Confirmar Pedido?';
-        confirmText = 'El cliente ha confirmado. Pasará a estado Confirmado.';
-        btnText = 'Sí, confirmar';
+        btnText      = 'Sí, confirmar';
+        btnColor     = '#3b82f6';
     } else if (currentStage === 'confirmado') {
-        nextStage = 'produccion';
+        nextStage    = 'produccion';
         confirmTitle = '¿Pasar a Producción?';
-        confirmText = 'El taller podrá ver este pedido para comenzarlo.';
-        btnText = 'Sí, a producción';
+        btnText      = 'Sí, a producción';
     }
 
     if (!nextStage) return;
 
-    // 1. CERRAMOS EL MODAL PRIMERO
-    closeModal();
-
-    // 2. ESPERAMOS LA ANIMACIÓN Y LANZAMOS LA PREGUNTA
-    setTimeout(() => {
-        // Si no hay fecha compromiso y vamos a confirmar/producción, exigirla
-        if (!selectedSale.value.promised_date) {
-            Swal.fire({
-                title: 'Fecha Compromiso Requerida',
-                text: 'Debes asignar una fecha compromiso antes de avanzar el pedido.',
-                icon: 'warning',
-                input: 'date',
-                inputAttributes: { required: true },
-                showCancelButton: true,
-                confirmButtonColor: '#3b82f6',
-                cancelButtonColor: '#6b7280',
-                confirmButtonText: 'Guardar y Avanzar',
-                cancelButtonText: 'Cancelar',
-                preConfirm: (date) => {
-                    if (!date) {
-                        Swal.showValidationMessage('La fecha es requerida');
-                    }
-                    return date;
-                }
-            }).then((result) => {
-                if (result.isConfirmed && result.value) {
-                    router.patch(route('sales.update-stage', id), { 
-                        stage: nextStage, 
-                        promised_date: result.value 
-                    }, {
-                        onSuccess: () => {
-                            Swal.fire({ title: 'Etapa Actualizada', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-                            selectedSale.value.promised_date = result.value;
-                        },
-                        onError: (errors) => Swal.fire('Error', errors.error || 'No se pudo actualizar.', 'error')
-                    });
-                }
-            });
-            return;
-        }
-
-        // Flujo normal si ya tiene fecha
-        Swal.fire({
-            title: confirmTitle,
-            text: confirmText,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#16a34a',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: btnText,
-            cancelButtonText: 'Cancelar'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                router.patch(route('sales.update-stage', id), { stage: nextStage }, {
-                    onSuccess: () => Swal.fire({ title: 'Etapa Actualizada', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }),
-                    onError: (errors) => Swal.fire('Error', errors.error || 'No se pudo actualizar.', 'error')
-                });
-            } else {
-                // Si cancelan la acción, podemos volver a abrir el detalle si gustas
-                // openSaleDetails(selectedSale.value);
+    // Un único flujo para todos los casos: siempre se muestra el diálogo con la fecha.
+    // La fecha viene pre-cargada con el valor existente del pedido para que el usuario
+    // pueda confirmarla o modificarla antes de avanzar la etapa.
+    Swal.fire({
+        target:      getSwalTarget(),
+        title:       confirmTitle,
+        text:        'Confirma o ajusta la fecha compromiso del pedido.',
+        input:       'date',
+        inputValue:  formatDateForInput(sale.promised_date),
+        inputLabel:  'Fecha compromiso',
+        showCancelButton:   true,
+        confirmButtonColor: btnColor,
+        cancelButtonColor:  '#6b7280',
+        confirmButtonText:  btnText,
+        cancelButtonText:   'Cancelar',
+        preConfirm: (date) => {
+            if (!date) {
+                Swal.showValidationMessage('La fecha compromiso es requerida');
+                return false;
             }
-        });
-    }, 300); // 300ms es el tiempo que tarda el modal de Vue en cerrarse
+            return date;
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            router.patch(route('sales.update-stage', id), {
+                stage:         nextStage,
+                promised_date: result.value   // YYYY-MM-DD garantizado por el input nativo
+            }, {
+                onSuccess: () => {
+                    closeModal();
+                    Swal.fire({
+                        title:             'Etapa Actualizada',
+                        icon:              'success',
+                        toast:             true,
+                        position:          'top-end',
+                        timer:             3000,
+                        showConfirmButton:  false
+                    });
+                },
+                onError: (errors) => Swal.fire({
+                    target: getSwalTarget(),
+                    title:  'Error',
+                    text:   errors.error || 'No se pudo actualizar la etapa.',
+                    icon:   'error'
+                })
+            });
+        }
+    });
 };
 
 const cancelSale = (id) => {
     Swal.fire({
+        target: getSwalTarget(),
         title: '¿Cancelar Pedido?',
         text: "Se anulará el documento y se liberará el stock si ya fue enviado.",
         icon: 'warning',
@@ -157,13 +165,8 @@ const cancelSale = (id) => {
         confirmButtonColor: '#d33',
         cancelButtonColor: '#6b7280',
         confirmButtonText: 'Sí, cancelar pedido',
-        didOpen: () => {
-            const container = document.querySelector('.swal2-container');
-            if (container) container.style.zIndex = '99999';
-        }
     }).then((result) => {
         if (result.isConfirmed) {
-            // ¡Usamos tu misma ruta maestra enviando el estado 'cancelado'!
             router.patch(route('sales.update-stage', id), { stage: 'cancelado' }, {
                 onSuccess: () => {
                     closeModal();
@@ -179,8 +182,8 @@ const sendEmail = (id) => {
     sendingEmail.value = true;
     router.post(route('sales.email', id), {}, {
         onFinish: () => sendingEmail.value = false,
-        onSuccess: () => Swal.fire({ title: 'Enviado', text: 'Correo enviado al cliente.', icon: 'success', didOpen: () => document.querySelector('.swal2-container').style.zIndex = '99999'}),
-        onError: (errors) => Swal.fire({ title: 'Error', text: errors.error || 'No se pudo enviar el correo.', icon: 'error', didOpen: () => document.querySelector('.swal2-container').style.zIndex = '99999'})
+        onSuccess: () => Swal.fire({ target: getSwalTarget(), title: 'Enviado', text: 'Correo enviado al cliente.', icon: 'success' }),
+        onError: (errors) => Swal.fire({ target: getSwalTarget(), title: 'Error', text: errors.error || 'No se pudo enviar el correo.', icon: 'error' })
     });
 };
 </script>
@@ -226,6 +229,7 @@ const sendEmail = (id) => {
                     <button @click="setTab('pedido')" :class="activeTab === 'pedido' ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'" class="px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-gray-400"></span> Cotiz / Pedidos</button>
                     <button @click="setTab('confirmado')" :class="activeTab === 'confirmado' ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'" class="px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Confirmados</button>
                     <button @click="setTab('produccion')" :class="activeTab === 'produccion' ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'" class="px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Producción</button>
+                    <button @click="setTab('detallado')" :class="activeTab === 'detallado' ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'" class="px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Detallado</button>
                     <button @click="setTab('enviado')" :class="activeTab === 'enviado' ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'" class="px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-orange-500"></span> Enviados / Ruta</button>
                 </div>
 
@@ -267,10 +271,15 @@ const sendEmail = (id) => {
                                         {{ formatMoney(sale.total) }}
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-center">
-                                        <button @click="openSaleDetails(sale)" class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 hover:text-green-600 shadow-sm transition-all active:scale-95">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                                            Ver / Gestionar
-                                        </button>
+                                        <div class="flex justify-center gap-2">
+                                            <button @click="openSaleDetails(sale)" class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 hover:text-green-600 shadow-sm transition-all active:scale-95">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                                Ver / Gestionar
+                                            </button>
+                                            <Link v-if="sale.stage === 'produccion'" :href="route('sales.show', sale.id)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-sm font-bold text-orange-700 hover:bg-orange-100 hover:text-orange-800 shadow-sm transition-all active:scale-95" title="Acceso Rápido para Detallar">
+                                                🛠️ Detallar
+                                            </Link>
+                                        </div>
                                     </td>
                                 </tr>
                                 <tr v-if="!sales?.data?.length">
@@ -387,9 +396,10 @@ const sendEmail = (id) => {
                             <p class="text-xs font-bold text-gray-800">
                                 {{ record.user?.name || 'Sistema' }} 
                                 <span class="font-normal text-gray-500">movió de</span> 
-                                <span class="uppercase text-[9px] bg-gray-100 px-1 py-0.5 rounded font-bold border border-gray-200">{{ record.from_stage }}</span>
+                                <span class="uppercase text-[9px] bg-gray-100 px-1 py-0.5 rounded font-bold border border-gray-200">{{ record.from_stage || selectedSale.stage }}</span>
                                 <span class="font-normal text-gray-500">a</span>
-                                <span class="uppercase text-[9px] bg-blue-50 text-blue-600 px-1 py-0.5 rounded font-bold border border-blue-100">{{ record.to_stage }}</span>
+                                <span v-if="record.notes && record.notes.includes('Detallado')" class="uppercase text-[9px] bg-amber-50 text-amber-600 px-1 py-0.5 rounded font-bold border border-amber-100">DETALLADO</span>
+                                <span v-else class="uppercase text-[9px] bg-blue-50 text-blue-600 px-1 py-0.5 rounded font-bold border border-blue-100">{{ record.to_stage }}</span>
                             </p>
                             <p class="text-[10px] text-gray-400 mt-0.5">{{ formatDate(record.created_at) }} a las {{ new Date(record.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) }}</p>
                             
@@ -419,7 +429,7 @@ const sendEmail = (id) => {
                         </button>
 
                         <button v-if="['pedido', 'confirmado'].includes(selectedSale.stage)" 
-                            @click="advanceStage(selectedSale.id, selectedSale.stage)"
+                            @click="advanceStage()"
                             class="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200 transition-all active:scale-95">
                             <span>
                                 {{ selectedSale.stage === 'pedido' ? 'Confirmar Pedido' : 'A Producción' }}

@@ -1,5 +1,5 @@
 # 📋 BACKLOG — TALLER 360
-**Auditado directamente contra el código fuente (zip del proyecto):** 25 de julio 2026
+**Auditado directamente contra el código fuente:** 05 de septiembre 2026
 **Nota importante:** las versiones anteriores de este archivo (`README.md`, `GUIA_RUTA.md` y este mismo `BACKLOG.md`) se contradecían entre sí sobre qué bugs estaban resueltos. Esta versión es la única verificada línea por línea contra el código real — es la nueva fuente de verdad.
 
 ---
@@ -181,26 +181,34 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 | 1 | Input de moneda en Safari/iOS — permite caracteres no numéricos | No se revisó en esta auditoría (requiere prueba manual en Safari) |
 | 2 | `formatDate` sin usar en `Production/Index.vue` | ✅ Ya no existe en el código — resuelto |
 
+### 🐛 BUGS NUEVOS (Alta Prioridad)
+- [ ] **Fallo de Reactividad en Kanban:** Al intentar cambiar de estado a `confirmado`, Vue arroja `Uncaught TypeError: can't access property "promised_date", s.value is null` en `Index.vue`. Pérdida de referencia reactiva del objeto venta al arrastrar la tarjeta.
+
+### 🏭 NUEVA FUNCIONALIDAD: Estado "Detallado" y Stock Reservado
+- [ ] **Esquema:** Añadir columna `reserved_stock` (int, default 0) a `product_variants`.
+- [ ] **Esquema:** Crear tabla `detallado_records` (similar a `sale_deliveries`) vinculada a `sale_detail_id` para registrar envíos parciales a detallado.
+- [ ] **Backend (Ventas/POS y Producción):** Modificar el cálculo de disponibilidad en todo el sistema. El stock real disponible ahora será `stock - reserved_stock`.
+- [ ] **Backend (Embarques):** Refactorizar `ShipmentController::store`. Al confirmar un viaje usando piezas que vienen de detallado, descontar simultáneamente de `stock` físico y `reserved_stock` utilizando `lockForUpdate()`.
+- [ ] **Frontend:** UI en el Detalle del Pedido (`Sales/Show.vue`) para enviar piezas parciales a la etapa de Detallado sin alterar el `stage` global del pedido en el Kanban.
+
 ---
 
-## 📌 Orden de Dependencias (actualizado 25 jul 2026)
+## 📌 Orden de Dependencias (actualizado 05 sep 2026)
 
 ```
-Fase 0 ✅ → Fase 1 ✅ → Fase 2 (95%, filtro semanal + navegación de semana confirmados)
-                                     ↓
-                    ✅ Los 5 Bugs Críticos — CONFIRMADOS RESUELTOS en código real
-                    ✅ UserController — confirmado completo (era omisión del zip)
+Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
                                      ↓
                     Fase 2.5 — Selector multi-cliente + notas de entrega agrupadas
-                    (ambos confirmados pendientes, no solo "detalle menor")
+                    (ambos confirmados pendientes en UI/plantilla)
                                      ↓
                     Optimización de consultas (ProductController, SaleController::create)
+                    + Limpieza dependencias Tailwind (v3 vs v4)
                                      ↓
-                              Fase 3 (Dashboards) — confirmado sin empezar en código
+                    Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token)
                                      ↓
-                    Fase 4 (Catálogo) — confirmado: hoy es mockup estático, empezar desde cero
+                               Fase 3 (Dashboards) — confirmado sin empezar en código
                                      ↓
-                    Fase 5 (Flete) — depende de 4.2 (link personalizado)
+                    Fase 5 (Flete dinámico) — depende de 4.2 (link personalizado)
                                      ↓
                     Fase 6 (Reportes PDF) — depende de Fase 3
 ```

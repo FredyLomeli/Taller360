@@ -34,6 +34,42 @@ const submitPayment = () => {
     });
 };
 
+// --- MODAL DETALLADO ---
+const showDetalladoModal = ref(false);
+const activeDetailId = ref(null);
+const activeDetailMax = ref(0);
+const activeDetailName = ref('');
+
+const detalladoForm = useForm({
+    quantity: 1
+});
+
+const openDetalladoModal = (detail) => {
+    activeDetailId.value = detail.id;
+    activeDetailName.value = detail.product_name || (detail.variant?.product?.name + ' (' + detail.variant?.material + ')');
+    
+    const detalladoPrevio = detail.reserved_quantity || 0;
+    const entregado = detail.delivered_quantity || 0;
+    const maxLogico = detail.quantity - detalladoPrevio - entregado;
+    
+    const availableFisico = detail.variant?.available_stock || 0;
+    
+    // El límite real es el menor entre lo que falta en el pedido y el stock físico disponible
+    activeDetailMax.value = Math.min(maxLogico, availableFisico);
+    detalladoForm.quantity = 1;
+    showDetalladoModal.value = true;
+};
+
+const submitDetallado = () => {
+    detalladoForm.post(route('sale-details.detallado', activeDetailId.value), {
+        onSuccess: () => {
+            showDetalladoModal.value = false;
+            detalladoForm.reset();
+            Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, icon: 'success', title: 'Apartado en Detallado' });
+        }
+    });
+};
+
 // --- ESTADOS Y COLORES ---
 const statusColors = {
     'pedido': 'bg-gray-100 text-gray-800',
@@ -204,18 +240,23 @@ const formatDate = (dateString) => {
                                                 <span v-if="(item.delivered_quantity || 0) === item.quantity" class="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">✓ Completado</span>
 
                                                 <div v-else class="mt-1">
-                                                    <span :class="(item.variant?.stock || 0) >= (item.quantity - (item.delivered_quantity || 0)) ? 'text-green-600' : 'text-red-500'" class="font-bold">
-                                                        Stock disponible: {{ item.variant?.stock || 0 }}
+                                                    <span :class="(item.variant?.available_stock || 0) >= (item.quantity - (item.delivered_quantity || 0)) ? 'text-green-600' : 'text-red-500'" class="font-bold">
+                                                        Stock disponible libre: {{ item.variant?.available_stock || 0 }}
                                                     </span>
-                                                    <span v-if="(item.variant?.stock || 0) < (item.quantity - (item.delivered_quantity || 0))" class="text-red-500 ml-1">
+                                                    <span v-if="(item.variant?.available_stock || 0) < (item.quantity - (item.delivered_quantity || 0))" class="text-red-500 ml-1">
                                                         ⚠️ insuficiente para completar
                                                     </span>
                                                 </div>
+                                                <div v-if="item.reserved_quantity > 0" class="mt-1 text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded inline-block">
+                                                    🛠️ {{ item.reserved_quantity }} piezas en Detallado (Apartadas)
+                                                </div>
                                             </div>
 
-                                            <Link v-if="(item.quantity - (item.delivered_quantity || 0)) > 0" :href="route('shipments.create', { client_ids: [sale.client_id] })" class="text-xs font-bold text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
-                                                📦 Registrar salida en Embarques
-                                            </Link>
+                                            <div class="flex flex-col gap-2 items-end" v-if="(item.quantity - (item.delivered_quantity || 0)) > 0">
+                                                <button v-if="(sale.stage === 'produccion' || sale.stage === 'confirmado') && (item.variant?.available_stock || 0) > 0" @click="openDetalladoModal(item)" class="text-xs font-bold text-orange-600 hover:text-orange-800 underline flex items-center gap-1">
+                                                    🛠️ Mandar a Detallado
+                                                </button>
+                                            </div>
                                         </div>
                                     </td>
 
@@ -300,6 +341,31 @@ const formatDate = (dateString) => {
                         <button type="button" @click="showPaymentModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancelar</button>
                         <button type="submit" :disabled="paymentForm.processing" class="bg-green-600 text-white px-4 py-2 rounded font-bold hover:bg-green-700 shadow disabled:opacity-50">
                             Confirmar Pago
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Modal>
+
+        <Modal :show="showDetalladoModal" @close="showDetalladoModal = false" maxWidth="sm">
+            <div class="p-6">
+                <h2 class="text-lg font-bold text-gray-900 mb-2">Mandar a Detallado</h2>
+                <div class="bg-orange-50 border border-orange-100 rounded p-3 mb-4">
+                    <p class="font-bold text-gray-800">{{ activeDetailName }}</p>
+                    <p class="text-sm text-gray-600 mt-1">Límite para este pedido: <span class="font-bold text-orange-700">{{ activeDetailMax }}</span> piezas.</p>
+                </div>
+                
+                <form @submit.prevent="submitDetallado">
+                    <div class="mb-4">
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Cantidad a apartar</label>
+                        <input v-model="detalladoForm.quantity" type="number" min="1" :max="activeDetailMax" class="w-full border-gray-300 rounded focus:ring-orange-500" autoFocus>
+                        <p class="text-xs text-red-500 mt-1" v-if="detalladoForm.errors.quantity">{{ detalladoForm.errors.quantity }}</p>
+                    </div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button type="button" @click="showDetalladoModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancelar</button>
+                        <button type="submit" :disabled="detalladoForm.processing || detalladoForm.quantity < 1 || detalladoForm.quantity > activeDetailMax" class="bg-orange-600 text-white px-4 py-2 rounded font-bold hover:bg-orange-700 shadow disabled:opacity-50">
+                            Confirmar Apartado
                         </button>
                     </div>
                 </form>

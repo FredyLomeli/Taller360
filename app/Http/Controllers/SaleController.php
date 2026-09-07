@@ -45,7 +45,11 @@ class SaleController extends Controller
 
         // Filtro por Etapa (Tabs del Dashboard)
         if ($request->has('stage') && $request->stage !== 'todos') {
-            $query->where('stage', $request->stage);
+            if ($request->stage === 'detallado') {
+                $query->whereHas('details.detalladoRecords');
+            } else {
+                $query->where('stage', $request->stage);
+            }
         }
 
         // --- LÓGICA DEL BUSCADOR ---
@@ -121,10 +125,20 @@ class SaleController extends Controller
                     'promised_date' => $request->promised_date,
                 ]);
 
+                $allowNegative = \App\Models\Setting::where('key', 'allow_negative_stock')->value('value') == 1;
+
                 // 2. Guardar Detalles
                 foreach ($request->items as $item) {
-                    $variant = ProductVariant::with('product')->find($item['variant_id']);
-                    
+                    // Seguimos usando lockForUpdate por integridad transaccional si hiciéramos deducciones de inventario,
+                    // aunque en el flujo 'pedido' no descontamos stock, pero es buena práctica para no tener lecturas sucias.
+                    $variant = ProductVariant::with('product')->lockForUpdate()->find($item['variant_id']);
+
+                    if (!$allowNegative && $variant->available_stock < $item['quantity']) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'items' => "Stock insuficiente para {$variant->product->name}. Disponible: {$variant->available_stock}, solicitado: {$item['quantity']}."
+                        ]);
+                    }
+
                     // Calculamos subtotal incluyendo costo adicional
                     $additionalCost = $item['additional_cost'] ?? 0;
                     $lineTotal = ($item['price'] * $item['quantity']) + $additionalCost;
@@ -191,7 +205,8 @@ class SaleController extends Controller
                 $query->with(['variant.product'])
                     ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                         $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
-                    }], 'quantity_delivered');
+                    }], 'quantity_delivered')
+                    ->withSum('detalladoRecords as reserved_quantity', 'quantity');
             }, 
             'history', 
             'payments'
@@ -203,37 +218,99 @@ class SaleController extends Controller
         ]);
     }
 
+    public function sendToDetallado(Request $request, SaleDetail $detail)
+    {
+        $request->validate([
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        try {
+            DB::transaction(function () use ($request, $detail) {
+                $variant = ProductVariant::lockForUpdate()->find($detail->product_variant_id);
+
+                $allowNegative = \App\Models\Setting::where('key', 'allow_negative_stock')->value('value') == 1;
+
+                // 1. Validación de Inventario Físico (available_stock)
+                if (!$allowNegative && $variant->available_stock < $request->quantity) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'quantity' => "Stock insuficiente. Disponible real: {$variant->available_stock}."
+                    ]);
+                }
+
+                // 2. Validación Lógica de Límite Máximo del Pedido
+                $detalladoPrevio = $detail->detalladoRecords()->sum('quantity');
+                $entregado = $detail->deliveries()
+                    ->whereHas('shipment', function($query) { 
+                        $query->where('status', '!=', 'cancelado'); 
+                    })
+                    ->sum('quantity_delivered');
+
+                $maxPermitido = $detail->quantity - $detalladoPrevio - $entregado;
+
+                if ($request->quantity > $maxPermitido) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'quantity' => "Límite excedido. Solo puedes detallar un máximo de {$maxPermitido} piezas para esta partida."
+                    ]);
+                }
+
+                $variant->increment('reserved_stock', $request->quantity);
+
+                \App\Models\DetalladoRecord::create([
+                    'sale_detail_id' => $detail->id,
+                    'quantity' => $request->quantity,
+                    'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                ]);
+
+                \App\Models\SaleHistory::create([
+                    'sale_id' => $detail->sale_id,
+                    'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                    'to_stage' => $detail->sale->stage,
+                    'notes' => "Envió {$request->quantity} piezas de {$variant->product->name} a Detallado."
+                ]);
+            });
+
+            return back()->with('success', 'Piezas enviadas a Detallado exitosamente.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
     /**
-     * MOTOR DE ESTADOS (V2.0)
-     * Maneja el inventario y los cambios de etapa.
-     * Reemplaza a la antigua función 'cancel'.
+     * MOTOR DE ESTADOS (V2.1)
+     * Maneja los cambios de etapa del pedido.
+     * promised_date es requerida por validación de Laravel cuando la etapa destino es 'confirmado'.
      */
     public function updateStage(Request $request, Sale $sale)
     {
-        $request->validate([
-            'stage' => 'required|in:pedido,confirmado,produccion,cancelado'
-        ]);
+        // Construir reglas condicionalmente: promised_date solo es required para 'confirmado'
+        $rules = [
+            'stage'        => 'required|in:pedido,confirmado,produccion,cancelado',
+            'promised_date' => 'nullable|date',
+        ];
 
-        $newStage = $request->stage;
+        if ($request->input('stage') === 'confirmado') {
+            $rules['promised_date'] = 'required|date';
+        }
+
+        $validated = $request->validate($rules);
+
+        $newStage = $validated['stage'];
         $oldStage = $sale->stage;
 
         if ($newStage === $oldStage) return back();
 
-        // VALIDACIÓN: Fecha compromiso obligatoria para Confirmado y Producción
-        if (in_array($newStage, ['confirmado', 'produccion'])) {
-            $promisedDate = $request->input('promised_date', $sale->promised_date);
-            if (empty($promisedDate)) {
-                return back()->withErrors(['error' => 'La fecha compromiso es obligatoria para confirmar o mandar a producción.']);
-            }
-            if ($request->has('promised_date')) {
-                $sale->promised_date = $request->promised_date;
-            }
-        }
-
         try {
-            DB::transaction(function () use ($sale, $newStage, $oldStage) {
-                // Actualizamos el estado (El Observer guardará el historial)
-                $sale->update(['stage' => $newStage]);
+            DB::transaction(function () use ($sale, $newStage, $validated) {
+                // Construir el payload de actualización
+                $updateData = ['stage' => $newStage];
+
+                // Persistir promised_date explícitamente si viene validada en el request
+                if (!empty($validated['promised_date'])) {
+                    $updateData['promised_date'] = $validated['promised_date'];
+                }
+
+                // El SaleObserver registra el historial automáticamente al detectar el cambio de stage
+                $sale->update($updateData);
             });
 
             return back()->with('success', "Estado actualizado a: " . ucfirst($newStage));

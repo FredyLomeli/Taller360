@@ -237,6 +237,7 @@ const totalItemsInTruck = computed(() => {
                                                     <div class="flex items-center gap-4 mt-1 text-xs">
                                                         <span class="text-gray-500 font-medium">Pendientes: <span class="font-bold text-red-500">{{ detail.quantity - (detail.delivered_quantity || 0) }}</span></span>
                                                         <span class="text-gray-500 font-medium">Stock Físico: <span class="font-bold text-green-600">{{ detail.variant?.stock || 0 }}</span></span>
+                                                        <span class="text-gray-500 font-medium">En Detallado: <span class="font-bold text-amber-500">{{ detail.detailed_quantity || 0 }}</span></span>
                                                     </div>
                                                 </div>
 

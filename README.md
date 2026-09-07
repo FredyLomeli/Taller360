@@ -4,9 +4,9 @@
 ![Vue 3](https://img.shields.io/badge/Vue.js-3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
 ![Inertia.js](https://img.shields.io/badge/Inertia.js-7855FA?style=for-the-badge&logo=inertia&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Status](https://img.shields.io/badge/Estado-v2.6_Auditado_contra_c%C3%B3digo_real-brightgreen?style=for-the-badge)
+![Status](https://img.shields.io/badge/Estado-v2.7_Sincronizado_con_código_real-brightgreen?style=for-the-badge)
 
-Sistema de gestión de pedidos y manufactura diseñado específicamente para **mueblerías que fabrican sobre pedido**. Integra control de producción, ciclo financiero completo, gestión de inventario por variantes de material y **módulo de logística y embarques parciales**.
+Sistema de gestión de pedidos y manufactura diseñado específicamente para **mueblerías que fabrican sobre pedido**. Integra control de producción, ciclo financiero completo, gestión de inventario por variantes de material, **órdenes de trabajo para manufactura autónoma**, **catálogo digital público en Blade SSR** y **módulo de logística y embarques parciales**.
 
 ---
 
@@ -14,10 +14,10 @@ Sistema de gestión de pedidos y manufactura diseñado específicamente para **m
 
 | Campo | Detalle |
 |-------|---------|
-| **Versión** | 2.6 — Módulo de Logística Integrado |
-| **Última auditoría** | 25 de julio 2026 — **contra el código fuente real** (no contra reportes previos) |
-| **Backend** | Los 5 bugs críticos de la auditoría de julio quedaron **confirmados como resueltos** en el código. Ver hallazgo nuevo abajo (`UserController` faltante) antes de considerarlo 100% |
-| **Frontend** | Funcional; catálogo público (`/`) es un mockup estático sin datos reales — ver Fase 4 |
+| **Versión** | 2.7 — Manufactura Avanzada & Catálogo Digital |
+| **Última auditoría** | 05 de septiembre 2026 — sincronizado directamente contra el código fuente real |
+| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado) y Catálogo Blade SSR integrados. 16 suites de tests automatizados. |
+| **Frontend** | Funcional en Vue 3 / Inertia.js para gestión interna; Laravel Blade SSR puro para Landing y Catálogo Comercial público. |
 | **Repositorio** | https://github.com/FredyLomeli/Taller360 |
 
 ---
@@ -62,49 +62,63 @@ Switch Modo Oficina (financiero) / Modo Taller (técnico, sin precios) en una so
 ### 💰 Ciclo de Cobranza
 Abonos parciales con validación de deuda y transacción atómica (`SalePaymentController`). Auto-confirmación del pedido si se registra anticipo al crearlo.
 
-### 🏭 Plan Maestro de Producción
-Agrupación por `product_variant_id` con desglose por color, filtro semanal por `promised_date` (incluye atrasados y sin fecha) con botones de navegación de semana confirmados en `Production/Index.vue`. Badge de 4 estados de inventario confirmado. ⚠️ Falta el toggle "Ver todo acumulado" (no existe en el código).
+### 🏭 Plan Maestro de Producción y Órdenes de Trabajo (v2.7)
+Agrupación por `product_variant_id` con desglose por color, filtro semanal navegable y badge de 4 estados de inventario.
+- **Órdenes de Trabajo autónomas (`work_orders`):** Fabricación anticipada para stock de temporada sin requerir pedido de cliente.
+- **Pausa de remanentes (`production_hold`):** Si un envío parcial deja piezas pendientes, no saturan la cola urgente del taller hasta su liberación manual.
+- Formulario de captura rápida con autocompletado para el taller en `Production/Index.vue`.
 
 ### 🚚 Logística y Embarques (v2.6)
-Control de flotilla. Confirmado en código:
-- Registrar piezas terminadas (`production_completions`) sin cambiar el estado del pedido.
+Control de flotilla y recolección:
+- Registrar piezas terminadas (`production_completions`) sin alterar la etapa del pedido.
 - Agrupar piezas de múltiples pedidos en un solo viaje (`shipments`).
-- Envíos parciales por línea de detalle (`sale_deliveries`).
-- Generar remisión PDF para el chofer.
-- Confirmar entrega y cerrar el pedido revisando **todas** las líneas, no solo la que se entrega.
-- Cancelar un embarque y regresar stock, con reglas distintas según `pickup_type`.
-- **Recolección en mostrador vs. flota propia** — implementado completo, backend y frontend (el toggle en `Shipments/Create.vue` ya existe; el Backlog previo lo daba como pendiente).
-- *(Pendiente real, confirmado en código)*: selector multi-cliente en `Shipments/Create.vue` (el backend ya soporta `client_ids[]`, falta la UI). Las notas de entrega individuales por pedido (`shipment_manifest.blade.php`) **no agrupan por cliente/pedido** — es un listado plano de todas las entregas del viaje.
+- Envíos parciales por partida (`sale_deliveries`).
+- Generar remisión PDF para chofer o cliente.
+- Confirmar entrega y cerrar pedidos revisando el 100% de las líneas.
+- Cancelar embarque y restituir stock con reversión automática de etapa a producción si quedan faltantes.
+- **Recolección en mostrador vs. flota propia (`pickup_type`):** Toggle visual en `Shipments/Create.vue` y cierre instantáneo para entregas locales.
 
-### 📦 Gestión de Productos e Inventario
-CRUD completo con variantes dinámicas por material y medida, imagen, marcado de favoritos. ⚠️ `ProductController::index()` carga **todos** los productos con **todas** sus variantes sin paginar — pendiente de optimización para hosting compartido.
+### 📦 Gestión de Productos y Stock Mínimo (v2.7)
+CRUD completo con variantes por material y medida, imagen y favoritos.
+- **Stock mínimo por variante (`min_stock`):** Configurable exclusivamente en productos preferentes (`is_favorite = true`).
+- Alerta dinámica en Dashboard para monitoreo de stock crítico.
 
-### 🛡️ Seguridad y Roles
-6 roles definidos: `admin`, `supervisor`, `vendedor`, `inventario`, `produccion`, `financiero`. Middleware `CheckRole` con parámetros variádicos, confirmado correcto. Matriz completa de permisos por módulo en `CONTEXTO_TECNICO.md`. Solo `admin`, `vendedor`, `produccion` e `inventario` tienen zonas de rutas completas hoy; `supervisor` y `financiero` no tienen módulo asignado en código.
+### 🛡️ Seguridad y Roles (6 Roles)
+- `admin`: Control total del sistema.
+- `supervisor`: Permisos operativos completos en Producción, Almacén/Productos y Embarques.
+- `vendedor`: POS, clientes, abonos y ventas propias.
+- `produccion`: Plan maestro de taller, captura de avances físicos y liberación de remanentes.
+- `inventario`: Armado y despacho de embarques, control de stock.
+- `financiero`: Reservado para módulo de cobranza y estados de cuenta (Fase 3).
 
 ### 🖨️ PDFs y Correo
-Ticket de venta, nota de venta y remisión de embarque. `dompdf` confirmado en `3.1.2` vía `composer.lock`. Compatible con hosting compartido (`FILESYSTEM_PUBLIC_ROOT`). Envío de nota por correo con PDF adjunto en memoria.
+Ticket de venta, nota de venta y remisión de embarque (`dompdf 3.1.2`). Despacho diferido síncrono (`dispatch()->afterResponse()`) para envíos de correo sin congelar la interfaz del usuario.
 
-### 🌐 Catálogo Público (`/`)
-⚠️ Confirmado: es una vista Blade estática (`catalogo.index`) con categorías y un producto de ejemplo **hardcodeados**. No consulta `products`, `categories` ni `product_variants`. La Fase 4 no tiene avance funcional real más allá de este mockup visual.
+### 🌐 Catálogo Público y Showroom Digital (`/` y `/catalogo`)
+Desarrollado en Laravel Blade puro (SSR) y Vanilla JS para máxima velocidad y optimización SEO:
+- Landing corporativa (`/`) y Catálogo completo (`/catalogo`) conectados a base de datos real.
+- Filtro por categoría y ajuste `catalog_only_with_images`.
+- Ficha técnica interactiva en modal con selector de acabados por categoría.
+- Carrusel responsivo con swipe táctil y controles por teclado.
+- Botón directo de cotización vía WhatsApp empresarial (`company_whatsapp`).
+- Precios y stock estrictamente ocultos al público.
 
 ---
 
-## ⚠️ Pendiente (confirmado contra código, 25 jul 2026)
+## ⚠️ Pendiente Real Confirmado en Código (05 sep 2026)
 
-| Prioridad | Tarea |
-|-----------|-------|
-| 🟢 Limpieza | Quitar `@tailwindcss/vite` de `package.json` (no se usa, el proyecto corre en Tailwind v3 vía PostCSS) o completar la migración a v4 si era la intención |
-| 🟢 Medio | Selector multi-cliente (UI) al armar embarques — backend ya listo |
-| 🟢 Medio | Notas de entrega agrupadas por pedido/cliente en `shipment_manifest.blade.php` — hoy es un listado plano |
-| 🟡 Medio | Fecha compromiso (`promised_date`) editable después de creado el pedido |
-| 🟡 Medio | Optimización de consultas: `ProductController::index()` sin paginar, `Client::all()` sin límite en el POS |
-| 🟡 Medio | Forzar Modo Taller por rol en backend (`Sales/Show.vue` / `SaleController::show()`) |
-| 🟡 Medio | Dashboards especializados: Producción, Financiero, selector Admin, rutas Supervisor/Inventarios/Finanzas (Fase 3, sin empezar) |
-| 🟢 Futuro | Catálogo público real conectado a BD (hoy es mockup estático) + link personalizado por cliente |
-| 🔵 Futuro | Precios dinámicos por flete |
-| 🟣 Final | Reportes PDF (financiero, producción, embarques) |
-| 🐛 Bug | Input de moneda en Safari/iOS (no verificado en esta auditoría — pendiente revisar) |
+| Prioridad | Tarea | Detalle |
+|-----------|-------|---------|
+| 🟢 Alta | Selector multi-cliente en Embarques | Backend listo con `client_ids[]`, falta componente UI en `Shipments/Create.vue` |
+| 🟢 Alta | Remisión de embarque agrupada | Modificar `shipment_manifest.blade.php` para separar partidas por cliente/pedido |
+| 🟢 Limpieza | Dependencias Tailwind CSS | Desinstalar `@tailwindcss/vite` (sin uso en v3) o completar migración a v4 |
+| 🟡 Media | Paginación y límite de consultas | Paginar `ProductController::index()` y limitar `Client::all()` en el POS |
+| 🟡 Media | Fecha compromiso editable | Permitir corregir `promised_date` tras la creación del pedido |
+| 🟡 Media | Forzar Modo Taller por rol | Asignar modo taller en backend para `supervisor`, `produccion` e `inventario` |
+| 🟢 Comercial | Link de catálogo por cliente (Fase 4.2) | Generar `catalog_token` para mostrar precios personalizados según `price_tier` |
+| 🟡 Media | Dashboards especializados (Fase 3) | Construir vistas dedicadas para Producción, Finanzas e Inventarios |
+| 🔵 Futuro | Precios dinámicos por flete (Fase 5) | Cálculo kilométrico y zonas de flete |
+| 🟣 Final | Reportes PDF globales (Fase 6) | Balances financieros, cartera vencida y producción histórica |
 
 ---
 

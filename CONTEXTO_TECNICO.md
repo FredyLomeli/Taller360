@@ -1,6 +1,6 @@
 # 🧠 CONTEXTO TÉCNICO — TALLER 360
-**Versión Real:** 2.6 | **Auditado directamente contra el código fuente (zip del proyecto):** 25 de julio 2026
-**Para:** Retomar desarrollo con IA o desarrollador nuevo sin perder contexto.
+**Versión Real:** 2.7 | **Sincronizado directamente contra el código fuente:** 05 de septiembre 2026
+**Para:** Retomar desarrollo con IA o desarrollador nuevo sin perder contexto ni repetir trabajo ya completado.
 **IMPORTANTE:** A diferencia de la versión anterior de este documento (que auditaba solo texto/reportes previos), esta versión se verificó línea por línea contra controladores, modelos, migraciones, rutas y componentes Vue reales. Compartir siempre este archivo al iniciar una nueva sesión.
 
 ---
@@ -22,7 +22,7 @@ Estos 5 puntos salieron de una reunión con el cliente y ya tienen diseño técn
 - **Fix Secundario (Modelo):** Se añadió el campo `pickup_type` al array `$fillable` del modelo `Shipment` para garantizar el guardado del tipo de entrega y evitar choques con validaciones de flota propia al cancelar remisiones de mostrador.
 
 
-### C. Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales
+### C. Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales (COMPLETADO)
 **Necesidad del cliente:** (1) puede producir por anticipado sin que exista un pedido todavía (conoce la demanda de temporada), y (2) cuando un envío parcial deja piezas sin fabricar, no quiere que el sistema las marque automáticamente como urgentes en el taller — quiere decidir él cuándo se fabrica el remanente.
 
 **Diseño acordado — nueva tabla `work_orders`:**
@@ -44,7 +44,7 @@ sale_details.production_hold (boolean, default: false)
 - Mientras está en `true`, `ProductionController::index()` excluye esa cantidad remanente de "pendiente de fabricar" — aparece en una sección aparte ("en espera de decisión"), no mezclada con lo urgente.
 - Cualquier usuario con acceso a Producción (`role:admin,produccion,supervisor` tras el cambio A) puede "liberar a producción" — apaga el flag y/o genera un `work_order` con `origin_sale_detail_id` apuntando a esa línea.
 
-### D. Stock mínimo por variante, solo para productos preferentes
+### D. Stock mínimo por variante, solo para productos preferentes (COMPLETADO)
 **Decisión:** el campo nuevo vive en `product_variants`, no en `products` — el stock siempre se ha manejado por variante (confirmado: la alerta actual de Dashboard ya consulta `ProductVariant`, no `Product`). "Preferente" sigue siendo el `is_favorite` que ya existe; no se crea concepto nuevo, solo se usa como filtro de visibilidad del campo.
 ```
 product_variants.min_stock (int, nullable)
@@ -163,13 +163,16 @@ is_favorite (boolean, default:false), timestamps
 ```
 id, product_id (FK → products, cascade delete),
 measurements (string, obligatorio), material (string, obligatorio),
-stock (int, default:0), sku (nullable), stock_notes (nullable),
+stock (int, default:0), min_stock (int, nullable), sku (nullable), stock_notes (nullable),
 price_1 (decimal, obligatorio), price_2..price_5 (decimal, nullable),
 timestamps
+
 ```
 - Un producto tiene N variantes (material + medida).
+- `min_stock`: umbral configurable solo visible en formulario si el producto padre tiene `is_favorite = true`.
 - El stock sube al registrar producción (`production_completions`, confirmado en `ProductionController::storeCompletion`) y baja al confirmar un embarque (`ShipmentController::store`, confirmado con `lockForUpdate`).
 - ✅ **Confirmado resuelto:** el motor de etapas del Kanban (`SaleController::updateStage`) **ya no toca stock**. Embarques es el único mecanismo de salida. (Antes era un bug crítico documentado; ver sección 5.)
+*   **NUEVA REGLA DE NEGOCIO (Stock Reservado):** Para evitar inventarios negativos y falsos positivos de disponibilidad en Producción, se implementa `reserved_stock`. Al pasar piezas a la etapa operativa de "Detallado" (pre-embarque, ya asignadas a un cliente), se incrementa este valor. El motor de Producción y el POS deben calcular siempre la disponibilidad como `(stock - reserved_stock)`. El módulo de Embarques es el responsable final de deducir ambos valores al subir la mercancía al camión.
 
 ### 💼 `sales`
 ```
@@ -190,8 +193,10 @@ product_name (snapshot, incluye medida y material), quantity (int),
 chosen_color (nullable), custom_notes (text, nullable),
 additional_cost (decimal, default:0),
 discount_percent (int, default:0), unit_price (decimal), subtotal (decimal),
+production_hold (boolean, default:false),
 timestamps
 ```
+- `production_hold`: flag de pausa automática que se enciende en envíos parciales si restan piezas por entregar Y por fabricar. Aísla las piezas de la cola de fabricación activa hasta su liberación manual.
 
 ### 📜 `sale_histories`
 ```
@@ -212,19 +217,34 @@ reference (nullable), paid_at (timestamp), timestamps
 ```
 id, key (unique), value (text, nullable), timestamps
 ```
-Claves usadas: `company_name`, `company_rfc`, `company_address`, `company_phone`, `company_logo`, `notification_emails`, `allow_negative_stock`, `ticket_footer_text`.
-> 🆕 Acordado, pendiente de construir: `auto_email_on_sale` (boolean, default `true`) — interruptor del envío automático de la nota de venta al crear el pedido. Ver punto E en la sección 0.1.
+Claves activas en `$allowedKeys`: `company_name`, `company_rfc`, `company_address`, `company_phone`, `company_whatsapp`, `notification_emails`, `allow_negative_stock`, `ticket_footer_text`, `auto_email_on_sale`, `catalog_only_with_images`.
+> ✅ Confirmado implementado: `auto_email_on_sale` controla el despacho diferido de notas de venta por correo al crear pedidos en el POS.
 
-### 🛠️ `production_completions` (v2.6)
+### 🛠️ `production_completions` (v2.7)
 ```
-id, sale_detail_id (FK → sale_details),
+id, sale_detail_id (FK → sale_details, nullable),
+work_order_id (FK → work_orders, nullable),
 quantity_completed (int),
 user_id (FK → users),
 completed_at (timestamp),
 timestamps
 ```
-- Registra cuando el taller termina una pieza física. NO cambia el `stage` global del pedido — solo acumula piezas listas en bodega y suma al `stock` de `product_variants`.
-- Es la única fuente confiable de "cuánto se ha fabricado en total" para un pedido — no usar `product_variants.stock` para eso, porque el stock también se ve afectado por embarques.
+- Soporta avances originados tanto por pedidos de venta (`sale_detail_id`) como por órdenes de fabricación autónomas (`work_order_id`).
+- Es la única fuente confiable de "cuánto se ha fabricado en total" para un pedido u orden. Al registrarse incrementa el `stock` de `product_variants`.
+
+### 🏭 `work_orders` (v2.7)
+```
+id, product_variant_id (FK → product_variants),
+quantity_requested (int),
+target_date (date, nullable),
+status (string: 'pending'|'in_progress'|'completed', default:'pending'),
+origin_sale_detail_id (FK → sale_details, nullable),
+notes (text, nullable),
+created_by (FK → users),
+timestamps
+```
+- Gestionado vía `WorkOrderController::store`. Permite producir piezas para stock de temporada sin requerir una venta previa.
+- Al registrar avance en el Plan de Producción, suma directamente al stock de la variante correspondiente.
 
 ### 🚚 `shipments` (v2.6)
 ```
@@ -283,13 +303,14 @@ Setting       → getValue(), setValue(), getAll() [métodos estáticos]
 
 | Zona | Middleware real | Rutas incluidas |
 |------|-----------|----------------|
-| Pública | — | `/` (catálogo Blade estático), login, register |
+| Pública | — | `/` (Landing Page Blade), `/catalogo` (Catálogo Blade SSR), login, register |
 | Dashboard | `auth,verified` (todos) | `/dashboard` — el controlador decide qué mostrar según rol |
 | Perfil | `auth,verified` | `/profile` |
 | Ventas | `role:admin,vendedor` | `/pos`, `/sales/*`, `/clients` (crear/editar), pagos |
-| Taller | `role:admin,produccion` | `/production-plan`, `/production-plan/complete`, `/production-plan/print` |
-| Admin | `role:admin` | `/users` (✅ `UserController` confirmado completo), `/products`, `/clients/{id}` (destroy), `/configuracion` |
-| **Embarques** | ✅ `role:admin,inventario` | `/shipments/*` (index, create, store, show, confirm, print, **cancel**) |
+| Taller | `role:admin,produccion,supervisor` | `/production-plan`, `/production-plan/complete`, `/production-plan/print`, `/work-orders` (store), `/sale-details/{id}/release-hold` |
+| Inventario | `role:admin,supervisor` | `/products/*` (CRUD completo y toggle favoritos) |
+| Embarques | `role:admin,inventario,supervisor` | `/shipments/*` (index, create, store, show, confirm, print, cancel) |
+| Admin | `role:admin` | `/users/*` (CRUD completo), `/clients/{id}` (destroy), `/configuracion` |
 
 > ✅ **Confirmado resuelto:** las rutas de `/shipments/*` ya están restringidas a `admin,inventario`. Antes era un bug crítico (cualquier usuario autenticado podía crear/confirmar embarques); ya no es el caso.
 

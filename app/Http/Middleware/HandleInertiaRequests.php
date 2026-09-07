@@ -34,6 +34,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'settings' => [
+                'allow_negative_stock' => \App\Models\Setting::where('key', 'allow_negative_stock')->value('value') == 1,
+            ],
         ];
     }
 }

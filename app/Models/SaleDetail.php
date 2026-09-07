@@ -37,6 +37,11 @@ class SaleDetail extends Model
         return $this->belongsTo(ProductVariant::class, 'product_variant_id');
     }
 
+    public function detalladoRecords()
+    {
+        return $this->hasMany(DetalladoRecord::class);
+    }
+
     public function completions()
     {
         return $this->hasMany(ProductionCompletion::class);

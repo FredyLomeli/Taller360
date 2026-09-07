@@ -61,6 +61,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             // MOTOR DE ESTADOS (Mover pedido: Pedido -> Producción -> Enviado)
             Route::patch('/sales/{sale}/stage', 'updateStage')->name('sales.update-stage');
+            
+            // Estado Detallado
+            Route::post('/sale-details/{detail}/detallado', 'sendToDetallado')->name('sale-details.detallado');
 
             // Impresión y Acciones Legacy
             Route::get('/sales/{id}/ticket', 'printTicket')->name('sales.print');

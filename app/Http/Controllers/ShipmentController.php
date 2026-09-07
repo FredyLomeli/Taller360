@@ -39,7 +39,8 @@ class ShipmentController extends Controller
                     $q->select('id', 'sale_id', 'product_variant_id', 'product_name', 'quantity', 'chosen_color')
                     ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                         $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
-                    }], 'quantity_delivered');
+                    }], 'quantity_delivered')
+                    ->withSum('detalladoRecords as raw_detailed_quantity', 'quantity');
                 },
                 'details.variant:id,product_id,material,measurements,stock',
                 'details.variant.product:id,name,image',
@@ -56,12 +57,17 @@ class ShipmentController extends Controller
             // 2. Tenga stock físico en almacén para poder enviarse HOY
             $hasShippableItems = false;
             foreach($sale->details as $detail) {
+                // Cálculo dinámico del remanente en detallado real (excluyendo lo ya embarcado)
+                $total_detallado = $detail->raw_detailed_quantity ?? 0;
+                $total_entregado = $detail->delivered_quantity ?? 0;
+                
+                $detail->detailed_quantity = max(0, $total_detallado - $total_entregado);
+
                 $pending = $detail->quantity - ($detail->delivered_quantity ?? 0);
                 $stock = $detail->variant->stock ?? 0;
                 
                 if ($pending > 0 && $stock > 0) {
                     $hasShippableItems = true;
-                    break;
                 }
             }
             return $hasShippableItems;
@@ -107,14 +113,22 @@ class ShipmentController extends Controller
                     $detail = SaleDetail::with(['variant', 'sale'])->findOrFail($item['sale_detail_id']);
 
                     if ($detail->variant) {
-
-                        $variant = ProductVariant::lockForUpdate()->find($detail->variant->id);
+                        // Bloqueo de actualización explícito para evitar condiciones de carrera
+                        $variant = ProductVariant::where('id', $detail->variant->id)->lockForUpdate()->first();
 
                         if (!$allowNegative && $variant->stock < $item['quantity']) {
                             throw new \Exception("Stock insuficiente de {$detail->product_name}. Disponible real: {$variant->stock}, solicitado: {$item['quantity']}.");
                         }
 
+                        // Calcular piezas apartadas para descontar directo del límite reservado
+                        $cantidad_a_descontar_reserva = min($item['quantity'], $variant->reserved_stock);
+
+                        // Doble deducción atómica de inventario
                         $variant->decrement('stock', $item['quantity']);
+                        
+                        if ($cantidad_a_descontar_reserva > 0) {
+                            $variant->decrement('reserved_stock', $cantidad_a_descontar_reserva);
+                        }
                     }
 
                     // 3. Registrar la entrega vinculada al viaje
@@ -132,11 +146,11 @@ class ShipmentController extends Controller
                     }
 
                     if ($isCounterPickup) {
-                        $this->closeOrderIfComplete($detail);
+                        $this->closeOrderIfComplete($detail, 'entregado');
                     } elseif (!in_array($detail->sale->stage, ['enviado', 'entregado'])) {
-                        $detail->sale->update(['stage' => 'enviado']);
+                        // Solo cambiaremos a enviado si se completa todo el pedido
+                        $this->closeOrderIfComplete($detail, 'enviado');
                     }
-
                 }
             });
             
@@ -175,7 +189,7 @@ class ShipmentController extends Controller
      * 'entregado' únicamente si el 100% de cada línea ya se entregó. Reutilizado tanto por
      * confirmDelivery() (flota propia) como por store() (recolección en mostrador).
      */
-    private function closeOrderIfComplete(SaleDetail $detail): void
+    private function closeOrderIfComplete(SaleDetail $detail, string $targetStage = 'entregado'): void
     {
         $sale = $detail->sale()->with(['details' => function ($q) {
             $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
@@ -188,7 +202,7 @@ class ShipmentController extends Controller
         });
 
         if ($allDelivered) {
-            $sale->update(['stage' => 'entregado']);
+            $sale->update(['stage' => $targetStage]);
         }
     }
 

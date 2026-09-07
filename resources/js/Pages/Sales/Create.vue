@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ClientAutocomplete from '@/Components/ClientAutocomplete.vue';
 import { VueSignaturePad } from 'vue-signature-pad';
@@ -14,6 +14,9 @@ const props = defineProps({
     products: Array,
     clients: Array,
 });
+
+const page = usePage();
+const allowNegativeStock = computed(() => page.props.settings?.allow_negative_stock ?? false);
 
 // --- CONFIGURACIÓN DE COLORES (CATÁLOGO VISUAL) ---
 const materialColors = {
@@ -72,8 +75,14 @@ const categories = computed(() => {
 // --- VALIDACIONES DE INPUT ---
 const validateQuantity = (item) => {
     let val = parseInt(item.quantity);
-    if (isNaN(val) || val < 1) item.quantity = 1;
-    else item.quantity = val;
+    if (isNaN(val) || val < 1) val = 1;
+    
+    if (!allowNegativeStock.value && val > item.available_stock) {
+        val = item.available_stock;
+        Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, icon: 'warning', title: `Stock máximo: ${item.available_stock}` });
+    }
+    
+    item.quantity = val;
 };
 
 const validateDiscount = (item) => {
@@ -132,6 +141,26 @@ const handleAddToCart = (product, variant) => {
         Swal.fire({ title: 'Atención', text: 'Selecciona un cliente para ver precios.', icon: 'info', confirmButtonColor: '#16a34a' });
         return;
     }
+
+    if ((variant.available_stock || 0) < 1) {
+        if (!allowNegativeStock.value) {
+            Swal.fire({ title: 'Stock Insuficiente', text: 'No hay stock disponible para esta pieza.', icon: 'warning' });
+            return;
+        } else {
+            Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: 'info', title: 'Stock insuficiente, pasará a producción' });
+        }
+    }
+
+    const existingItem = cart.value.find(i => i.variant_id === variant.id);
+    if (existingItem) {
+        if (!allowNegativeStock.value && existingItem.quantity >= (variant.available_stock || 0)) {
+            Swal.fire({ title: 'Límite Alcanzado', text: 'No puedes agregar más piezas de las disponibles.', icon: 'warning' });
+            return;
+        }
+        existingItem.quantity++;
+        return;
+    }
+
     const price = getPriceForClient(variant);
     
     cart.value.push({
@@ -144,6 +173,7 @@ const handleAddToCart = (product, variant) => {
         image: product.image,
         price: price, 
         quantity: 1, 
+        available_stock: variant.available_stock || 0,
         discount_percent: 0,
         chosen_color: '', 
         notes: '', 
