@@ -1,12 +1,58 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, useForm, router } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    shippableSales: Array
+    shippableSales: Array,
+    availableClients: Array,
+    filters: Object
 });
+
+const selectedClients = ref(props.filters?.client_ids || []);
+
+const isDropdownOpen = ref(false);
+const clientSearchQuery = ref('');
+
+const filteredAvailableClients = computed(() => {
+    const query = clientSearchQuery.value.toLowerCase();
+    return props.availableClients.filter(client => {
+        return client.name.toLowerCase().includes(query) || 
+               (client.business_name && client.business_name.toLowerCase().includes(query));
+    });
+});
+
+const toggleClient = (clientId) => {
+    const index = selectedClients.value.indexOf(clientId);
+    if (index >= 0) {
+        selectedClients.value.splice(index, 1);
+    } else {
+        selectedClients.value.push(clientId);
+    }
+    applyFilter();
+};
+
+const removeClient = (clientId) => {
+    const index = selectedClients.value.indexOf(clientId);
+    if (index >= 0) {
+        selectedClients.value.splice(index, 1);
+        applyFilter();
+    }
+};
+
+const getClientName = (clientId) => {
+    const client = props.availableClients.find(c => c.id === clientId);
+    if (!client) return '';
+    return client.name + (client.business_name ? ` (${client.business_name})` : '');
+};
+const applyFilter = () => {
+    router.get(
+        route('shipments.create'),
+        { client_ids: selectedClients.value },
+        { preserveState: true, preserveScroll: true, only: ['shippableSales'] }
+    );
+};
 
 // El formulario del viaje (Carta Porte Interna)
 const form = useForm({
@@ -34,6 +80,12 @@ const getAvailableToSend = (detail) => {
 
     const remainingSharedStock = Math.max(0, stock - takenByOtherLines);
     return Math.min(pending, remainingSharedStock);
+};
+
+const isShippable = (detail) => {
+    const pending = detail.quantity - (detail.delivered_quantity || 0);
+    const stock = detail.variant?.stock || 0;
+    return pending > 0 && stock > 0;
 };
 
 const updateItem = (detail, event) => {
@@ -187,10 +239,48 @@ const totalItemsInTruck = computed(() => {
                     </div>
 
                     <!-- Columna Derecha: Selección de Mercancía -->
+                    <div class="lg:col-span-2 space-y-4">
+                        
+                        <!-- FILTRO DE CLIENTES -->
+                        <div class="bg-white p-4 shadow-sm sm:rounded-xl border border-gray-200 relative">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Filtrar por Cliente</label>
+                            
+                            <div class="relative">
+                                <!-- Chips container / Input toggle -->
+                                <div @click="isDropdownOpen = !isDropdownOpen" class="min-h-[42px] border border-gray-300 rounded-lg p-2 flex flex-wrap gap-2 items-center cursor-text focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors bg-white relative z-20">
+                                    <span v-for="id in selectedClients" :key="id" class="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-md">
+                                        {{ getClientName(id) }}
+                                        <button type="button" @click.stop="removeClient(id)" class="text-blue-500 hover:text-blue-700 hover:bg-blue-200 rounded-full p-0.5 transition-colors">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                        </button>
+                                    </span>
+                                    <input v-model="clientSearchQuery" @focus="isDropdownOpen = true" @click.stop type="text" class="flex-1 min-w-[120px] outline-none border-none p-0 text-sm focus:ring-0 bg-transparent" placeholder="Buscar cliente..." />
+                                    
+                                    <div class="ml-auto text-gray-400 cursor-pointer">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
+                                </div>
 
-                    
+                                <!-- Dropdown list -->
+                                <div v-if="isDropdownOpen" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                    <div v-if="filteredAvailableClients.length === 0" class="p-3 text-sm text-gray-500 text-center">
+                                        No se encontraron clientes.
+                                    </div>
+                                    <div v-for="client in filteredAvailableClients" :key="client.id" @click="toggleClient(client.id)" class="px-4 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-3 border-b border-gray-50 last:border-0 transition-colors">
+                                        <input type="checkbox" :checked="selectedClients.includes(client.id)" class="rounded text-blue-600 focus:ring-blue-500 pointer-events-none" />
+                                        <span class="text-sm font-medium text-gray-700">
+                                            {{ client.name }} <span v-if="client.business_name" class="text-gray-400 font-normal">({{ client.business_name }})</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Backdrop invisible para cerrar el dropdown al hacer click fuera -->
+                            <div v-if="isDropdownOpen" @click="isDropdownOpen = false" class="fixed inset-0 z-10"></div>
+                            
+                            <p class="text-[10px] text-gray-400 mt-2">Las piezas que ya hayas cargado al camión no se borrarán al filtrar.</p>
+                        </div>
 
-                    <div class="lg:col-span-2">
                         <div class="bg-white overflow-hidden shadow-sm sm:rounded-xl border border-gray-200">
                             
                             <div class="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
@@ -225,7 +315,7 @@ const totalItemsInTruck = computed(() => {
                                     <!-- Lista de Artículos (Estilo Detalle de Venta) -->
                                     <div class="space-y-3 pl-2 sm:pl-4">
                                         <template v-for="detail in sale.details" :key="detail.id">
-                                            <div v-if="getAvailableToSend(detail) > 0" class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 p-3 rounded-lg shadow-sm gap-4">
+                                            <div v-if="isShippable(detail)" class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 p-3 rounded-lg shadow-sm gap-4" :class="{'opacity-75': getAvailableToSend(detail) === 0 && !(form.items.find(i => i.sale_detail_id === detail.id)?.quantity > 0)}">
                                                 
                                                 <div class="flex-1">
                                                     <p class="font-bold text-sm text-gray-800">{{ detail.product_name }}</p>
@@ -241,12 +331,22 @@ const totalItemsInTruck = computed(() => {
                                                     </div>
                                                 </div>
 
-                                                <div class="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
+                                                <div v-if="getAvailableToSend(detail) === 0 && !(form.items.find(i => i.sale_detail_id === detail.id)?.quantity > 0)" class="flex items-center gap-2 bg-red-50 p-1.5 rounded-lg border border-red-200">
+                                                    <span class="text-[10px] font-bold text-red-600 uppercase tracking-wider ml-1">Stock asignado en viaje</span>
+                                                    <input 
+                                                        type="number" 
+                                                        disabled
+                                                        class="w-16 h-8 text-center font-bold text-sm border-red-200 rounded bg-red-100 text-red-400 cursor-not-allowed"
+                                                        value="0"
+                                                    >
+                                                </div>
+                                                <div v-else class="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
                                                     <label class="text-xs font-bold text-gray-500 ml-1">Cargar:</label>
                                                     <input 
                                                         type="number" 
                                                         min="0" 
                                                         :max="getAvailableToSend(detail)"
+                                                        :value="form.items.find(i => i.sale_detail_id === detail.id)?.quantity || ''"
                                                         @input="updateItem(detail, $event)"
                                                         class="w-16 h-8 text-center font-bold text-sm border-gray-300 rounded focus:ring-green-500 shadow-inner"
                                                         placeholder="0"

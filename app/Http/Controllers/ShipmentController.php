@@ -30,6 +30,16 @@ class ShipmentController extends Controller
     public function create(Request $request)
     {
         $clientIds = $request->input('client_ids', []);
+        
+        // Extraemos clientes disponibles ANTES del filtro
+        $availableClients = Sale::whereIn('stage', ['confirmado', 'produccion', 'enviado'])
+            ->with('client:id,name,business_name')
+            ->get()
+            ->pluck('client')
+            ->unique('id')
+            ->filter()
+            ->values();
+
         // Buscamos ventas activas y calculamos cuánto se ha entregado de cada partida
         $salesQuery = Sale::select('id', 'user_id', 'client_id', 'stage', 'promised_date', 'created_at')
             ->with([
@@ -74,7 +84,9 @@ class ShipmentController extends Controller
         })->values(); // Resetear índices para Vue
 
         return Inertia::render('Shipments/Create', [
-            'shippableSales' => $sales
+            'shippableSales' => $sales,
+            'availableClients' => $availableClients,
+            'filters' => ['client_ids' => $clientIds]
         ]);
     }
 
@@ -179,8 +191,17 @@ class ShipmentController extends Controller
 
     public function printManifest($id)
     {
-        $shipment = Shipment::with(['deliveries.saleDetail.sale.client'])->findOrFail($id);
-        $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment'));
+        $shipment = Shipment::with(['deliveries.saleDetail.sale.client', 'user'])->findOrFail($id);
+        
+        $groupedDeliveries = $shipment->deliveries->groupBy(function ($delivery) {
+            return $delivery->saleDetail?->sale?->client_id ?? 'mostrador';
+        })->map(function ($clientGroup) {
+            return $clientGroup->groupBy(function ($delivery) {
+                return $delivery->saleDetail?->sale_id ?? 0;
+            });
+        });
+
+        $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment', 'groupedDeliveries'));
         return $pdf->stream('remision-viaje-'.$shipment->id.'.pdf');
     }
     
