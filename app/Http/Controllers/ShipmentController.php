@@ -191,17 +191,43 @@ class ShipmentController extends Controller
 
     public function printManifest($id)
     {
-        $shipment = Shipment::with(['deliveries.saleDetail.sale.client', 'user'])->findOrFail($id);
-        
+        $shipment = Shipment::with([
+            'user',
+            'deliveries.saleDetail.sale.client'
+        ])->findOrFail($id);
+
         $groupedDeliveries = $shipment->deliveries->groupBy(function ($delivery) {
-            return $delivery->saleDetail?->sale?->client_id ?? 'mostrador';
-        })->map(function ($clientGroup) {
-            return $clientGroup->groupBy(function ($delivery) {
-                return $delivery->saleDetail?->sale_id ?? 0;
-            });
+            return $delivery->saleDetail?->sale_id ?? 0;
         });
 
-        $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment', 'groupedDeliveries'));
+        $settings = Setting::all()->pluck('value', 'key');
+        
+        $company = [
+            'name' => $settings['company_name'] ?? 'Mi Empresa',
+            'address' => $settings['company_address'] ?? '',
+            'rfc' => $settings['company_rfc'] ?? '',
+            'phone' => $settings['company_phone'] ?? '',
+            'footer_text' => $settings['ticket_footer_text'] ?? ''
+        ];
+
+        $logoBase64 = null;
+        
+        if (isset($settings['company_logo']) && $settings['company_logo']) {
+            $rootPath = env('FILESYSTEM_PUBLIC_ROOT', public_path('storage'));
+            $fullPath = $rootPath . '/' . $settings['company_logo'];
+
+            if (!file_exists($fullPath)) {
+                $fullPath = public_path('storage/' . $settings['company_logo']);
+            }
+
+            if (file_exists($fullPath)) {
+                $type = pathinfo($fullPath, PATHINFO_EXTENSION);
+                $data = file_get_contents($fullPath);
+                $logoBase64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
+            }
+        }
+
+        $pdf = Pdf::loadView('pdf.shipment_manifest', compact('shipment', 'groupedDeliveries', 'company', 'logoBase64'));
         return $pdf->stream('remision-viaje-'.$shipment->id.'.pdf');
     }
     

@@ -104,7 +104,8 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ### Embarques
 - [ ] **Selector multi-cliente en `Shipments/Create.vue`.** El backend ya soporta `client_ids[]` (confirmado en `ShipmentController::create()`), pero no existe ningún input/select en el `.vue` que lo use.
-- [ ] **Notas de entrega agrupadas por pedido/cliente.** Corrección importante: la versión anterior de este documento decía que `printManifest()` "ya agrupa las entregas por pedido/cliente" con una plantilla parcial. **Confirmado falso** — tanto el controlador como `shipment_manifest.blade.php` hacen un `@foreach` plano sobre todas las entregas del viaje, sin ninguna agrupación. Si un viaje mezcla pedidos de distintos clientes, la remisión los mezcla todos en una sola lista. Hay que construir la agrupación desde cero, no "fusionar con una versión de referencia" como decía el plan anterior (no se encontró tal archivo de referencia en el código).
+- [x] **Notas de entrega agrupadas por pedido (Venta).** Se ha refactorizado `ShipmentController::printManifest` para utilizar `$deliveries->groupBy('saleDetail.sale_id')`, evitando la agrupación por cliente y tratando el formato como una "Nota de Pedido" exacta.
+- [x] **Vista PDF (Diseño Corporativo en Remisiones).** Se construyó desde cero `shipment_manifest.blade.php` fusionando el formato CSS y HTML institucional de la "Nota de Venta" (incluyendo la inyección de la configuración de empresa y `$logoBase64`). Se calculan los importes/descuentos estrictamente basados en `$delivery->quantity_delivered`.
 
 ### Producción
 - [ ] Toggle "Ver todo acumulado" en `Production/Index.vue` — no existe en el código (los filtros actuales son "todos/embarque/fabricar" dentro de la semana seleccionada, no un acumulado histórico).
@@ -170,7 +171,7 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 - [ ] Reporte de cartera vencida.
 - [ ] Reporte de producción semanal en PDF (ya existe `printReport()`, ya corregido — ver Bug #1).
 - [ ] Reporte de embarques histórico.
-- [ ] Notas de entrega individuales por pedido (comparte plantilla con la agrupación pendiente de Embarques, arriba).
+- [x] Notas de entrega individuales por pedido (Remisiones de embarque refactorizadas con diseño corporativo, inyectando variables `$logoBase64` y `$company` desde el controlador `ShipmentController::printManifest`).
 
 ---
 
@@ -199,8 +200,7 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 ```
 Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
                                      ↓
-                    Fase 2.5 — Selector multi-cliente + notas de entrega agrupadas
-                    (ambos confirmados pendientes en UI/plantilla)
+                    Fase 2.5 — Selector multi-cliente (pendiente UI) + notas de entrega agrupadas por pedido y CSS (COMPLETADO)
                                      ↓
                     Optimización de consultas (ProductController, SaleController::create)
                     + Limpieza dependencias Tailwind (v3 vs v4)
