@@ -212,9 +212,20 @@ class SaleController extends Controller
             'payments'
         ])->findOrFail($id);
 
+        $userRole = auth()->user()->role;
+        $forceProductionMode = in_array($userRole, ['produccion', 'inventario', 'supervisor']);
+        $isProductionMode = $forceProductionMode || request()->boolean('production');
+
+        if ($isProductionMode) {
+            $sale->makeHidden(['total', 'paid_amount', 'change_amount']);
+            $sale->details->each->makeHidden(['unit_price', 'subtotal', 'additional_cost', 'discount_percent']);
+            // Ocultar pagos por completo
+            $sale->setRelation('payments', collect([]));
+        }
+
         return Inertia::render('Sales/Show', [
             'sale' => $sale,
-            'is_production_mode' => request()->boolean('production')
+            'is_production_mode' => $isProductionMode
         ]);
     }
 

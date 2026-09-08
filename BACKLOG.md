@@ -45,13 +45,8 @@ Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño té
 
 Confirmado con el archivo real: CRUD completo, `VALID_ROLES` coincide exactamente con los 6 roles del sistema, protección contra auto-eliminación de la propia cuenta. Sin pendientes.
 
-## 🆘 NUEVO — Conflicto de versiones de Tailwind CSS
-
-`package.json` tiene `tailwindcss ^3.2.1` (activo, confirmado por la sintaxis `@tailwind base/components/utilities` en `app.css`) **y** `@tailwindcss/vite ^4.0.0` instalado pero sin registrar en `vite.config.js`. No rompe el build hoy, pero es una dependencia muerta que puede confundir a quien retome el proyecto.
-
-- [ ] Decidir: ¿se intentó migrar a Tailwind v4 y se abandonó, o fue un `npm install` accidental?
-- [ ] Si se queda en v3: quitar `@tailwindcss/vite` de `package.json`.
-- [ ] Si se quiere migrar a v4: reemplazar `@tailwind base/components/utilities` en `app.css` por `@import "tailwindcss";`, registrar el plugin en `vite.config.js`, y revisar si `@tailwindcss/forms` (v3) tiene equivalente compatible en v4.
+## ✅ Tailwind CSS v4 Migración Completada
+El proyecto ahora funciona 100% sobre Tailwind CSS v4. Se eliminaron las dependencias legacy de PostCSS y Autoprefixer, y se reestructuró `app.css` usando `@import "tailwindcss"` y `@theme`.
 
 ---
 
@@ -103,17 +98,16 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 ## ⚠️ CONFIRMADO PENDIENTE (verificado contra código, no solo contra reportes previos)
 
 ### Embarques
-- [ ] **Selector multi-cliente en `Shipments/Create.vue`.** El backend ya soporta `client_ids[]` (confirmado en `ShipmentController::create()`), pero no existe ningún input/select en el `.vue` que lo use.
+- [x] **Selector multi-cliente en `Shipments/Create.vue`.** Implementado y funcionando correctamente permitiendo enviar múltiples clientes al backend mediante el filtro `client_ids[]`.
 - [x] **Notas de entrega agrupadas por pedido (Venta).** Se ha refactorizado `ShipmentController::printManifest` para utilizar `$deliveries->groupBy('saleDetail.sale_id')`, evitando la agrupación por cliente y tratando el formato como una "Nota de Pedido" exacta.
 - [x] **Vista PDF (Diseño Corporativo en Remisiones).** Se construyó desde cero `shipment_manifest.blade.php` fusionando el formato CSS y HTML institucional de la "Nota de Venta" (incluyendo la inyección de la configuración de empresa y `$logoBase64`). Se calculan los importes/descuentos estrictamente basados en `$delivery->quantity_delivered`.
 
 ### Producción
-- [ ] Toggle "Ver todo acumulado" en `Production/Index.vue` — no existe en el código (los filtros actuales son "todos/embarque/fabricar" dentro de la semana seleccionada, no un acumulado histórico).
+- [x] Toggle "Ver todo acumulado" en `Production/Index.vue` — DESCARTADO. Operativamente, el control del equipo mediante la pausa de remanentes (`production_hold`) y los filtros semanales es suficiente.
 
 ### Ventas
-- [ ] **Fecha compromiso (`promised_date`) editable después de creado el pedido.** Confirmado: solo se captura en `SaleController::store()`. Ni `updateStage()` ni ningún otro método permite corregirla después.
-- [ ] Verificar y auditar en entorno real si la captura obligatoria de Fecha Compromiso (`promised_date`) en el POS previene errores y si requiere edición posterior.
-- [ ] Forzar Modo Taller (sin precios) automáticamente por rol en el backend. Confirmado: `Sales/Show.vue` sigue dependiendo 100% del query param `?production=` — no hay lógica en `SaleController::show()` que lo fuerce para `supervisor`, `inventario` o `produccion`.
+- [x] **Fecha compromiso (`promised_date`) editable después de creado el pedido.** Completado y verificado. Al avanzar la etapa en el Kanban (ej: hacia `confirmado`), SweetAlert2 solicita/permite corregir la fecha compromiso.
+- [x] Forzar Modo Taller (sin precios) automáticamente por rol en el backend. Completado. En `SaleController::show()`, los roles `produccion`, `inventario` y `supervisor` ahora asumen `is_production_mode = true` desde el servidor, y el sistema borra (`makeHidden`) toda la información financiera y precios unitarios del objeto de la base de datos antes de enviarlo al Vue.
 
 ### Rendimiento (hosting compartido)
 - [ ] `ProductController::index()` — `Product::with(['category','variants'])->get()` sin `select()` ni paginación. Carga todos los productos, todas sus variantes y los 5 precios de cada una en cada visita al catálogo interno.
@@ -183,7 +177,7 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 | 2 | `formatDate` sin usar en `Production/Index.vue` | ✅ Ya no existe en el código — resuelto |
 
 ### 🐛 BUGS NUEVOS (Alta Prioridad)
-- [ ] **Fallo de Reactividad en Kanban:** Al intentar cambiar de estado a `confirmado`, Vue arroja `Uncaught TypeError: can't access property "promised_date", s.value is null` en `Index.vue`. Pérdida de referencia reactiva del objeto venta al arrastrar la tarjeta.
+- [x] **Fallo de Reactividad en Kanban:** Resuelto. Se implementó una captura local inmutable (`const sale = selectedSale.value;`) antes de lanzar promesas asíncronas de SweetAlert, y el backend ahora procesa el guardado en `updateStage`.
 
 ### 🏭 NUEVA FUNCIONALIDAD: Estado "Detallado" y Stock Reservado
 - [x] **Esquema:** Añadir columna `reserved_stock` (int, default 0) a `product_variants`.

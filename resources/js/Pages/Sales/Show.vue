@@ -6,7 +6,8 @@ import Swal from 'sweetalert2';
 import Modal from '@/Components/Modal.vue';
 
 const props = defineProps({
-    sale: Object
+    sale: Object,
+    is_production_mode: Boolean
 });
 
 const showPaymentModal = ref(false);
@@ -89,7 +90,7 @@ const productionMode = ref(props.is_production_mode || false);
 
 // --- CALCULOS ---
 const saldoPendiente = computed(() => {
-    return parseFloat(props.sale.total) - parseFloat(props.sale.paid_amount);
+    return parseFloat(props.sale.total || 0) - parseFloat(props.sale.paid_amount || 0);
 });
 
 const formatMoney = (amount) => {

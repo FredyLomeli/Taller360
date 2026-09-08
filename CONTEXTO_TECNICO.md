@@ -72,23 +72,13 @@ product_variants.min_stock (int, nullable)
 ### ✅ Cerrado — `UserController.php` sí existe
 La ronda 1 marcó como crítico que `UserController.php` no viniera en el zip pese a estar referenciado en `routes/web.php`. Confirmado con el archivo real: existe, CRUD completo (`index`, `create`, `store`, `edit`, `update`, `destroy`), con protección contra auto-eliminación (`if (auth()->id() == $user->id)`) y `VALID_ROLES = 'admin,vendedor,produccion,inventario,supervisor,financiero'` — coincide exactamente con los 6 roles usados en el resto del sistema. `User::$fillable` incluye `role`. Sin pendientes aquí.
 
-### 🆘 Conflicto de versiones de Tailwind CSS — confirmado con `tailwind.config.js` real
+### ✅ Tailwind CSS v4 — Migración Completada
 
-`package.json` confirma **dos setups de Tailwind instalados a la vez**:
-```json
-"tailwindcss": "^3.2.1",        // v3 clásico
-"@tailwindcss/vite": "^4.0.0",  // plugin exclusivo de v4
-"postcss": "^8.4.31",
-"autoprefixer": "^10.4.12"
-```
-`vite.config.js` confirma que **no** se usa el plugin `@tailwindcss/vite` (solo `laravel()` y `vue()` están registrados). `resources/css/app.css` confirma sintaxis v3. El proyecto corre en Tailwind v3 real; `@tailwindcss/vite ^4.0.0` es peso muerto.
-
-`tailwind.config.js` confirmado — configuración **mínima**:
-```js
-theme: { extend: { fontFamily: { sans: ['Figtree', ...defaultTheme.fontFamily.sans] } } },
-plugins: [forms], // @tailwindcss/forms ^0.5.3
-```
-Sin colores, espaciados, breakpoints ni `@apply` custom. La fuente Figtree se carga vía `<link>` externo a fonts.bunny.net en `resources/views/app.blade.php`, no como `@font-face` local — no requiere migración especial. **Esto significa que una migración completa a Tailwind v4 sería de bajo riesgo** si se decide hacer, y no solo quedarse en v3. Ruta exacta de migración en `GUIA_RUTA.md`.
+El conflicto de versiones se resolvió satisfactoriamente migrando por completo a la v4. 
+- Se eliminaron `postcss.config.js` y `tailwind.config.js`.
+- Se desinstalaron las dependencias de `postcss` y `autoprefixer`.
+- `app.css` ahora utiliza la nueva sintaxis nativa (`@import "tailwindcss"`, `@plugin "@tailwindcss/forms"` y `@theme` para la fuente Figtree).
+- `vite.config.js` ahora registra e invoca directamente el plugin de Tailwind oficial.
 
 ---
 
@@ -100,7 +90,7 @@ Sin colores, espaciados, breakpoints ni `@apply` custom. La fuente Figtree se ca
 | Frontend | Vue `^3.4.0` (`<script setup>`) | `package.json` |
 | Puente | Inertia.js `@inertiajs/vue3 ^2.0.0` | `package.json`, sin rutas `/api/` en `routes/web.php` |
 | Build | Vite `^7.0.7` + `laravel-vite-plugin ^2.0.0` + `@vitejs/plugin-vue ^6.0.7` | `package.json`, `vite.config.js` |
-| Estilos | Tailwind CSS `^3.2.1` (activo) — ⚠️ `@tailwindcss/vite ^4.0.0` instalado sin usar, ver sección 0 | `package.json`, `resources/css/app.css` |
+| Estilos | Tailwind CSS `^4.0.0` | `package.json`, `resources/css/app.css`, `vite.config.js` |
 | BD | MySQL / MariaDB InnoDB | migraciones |
 | PDFs | barryvdh/laravel-dompdf 3.1.2 (dompdf/dompdf 3.1.5) | `composer.lock`, confirmado exacto |
 | Firma Digital | vue-signature-pad `^3.0.2` | `package.json`, `Sales/Create.vue` |
@@ -369,9 +359,9 @@ A diferencia de lo que indicaba el Backlog anterior (marcado como "backend listo
 
 `ShipmentController::printManifest()` y la plantilla `resources/views/pdf/shipment_manifest.blade.php` fueron revisados: **no hay agrupación por cliente/pedido**, es un `@foreach($shipment->deliveries as $del)` plano. Si un viaje agrupa piezas de varios clientes, la remisión los mezcla en una sola lista. Sigue pendiente construir la agrupación real.
 
-### ⚠️ PENDIENTE (confirmado) — Filtro multi-cliente en Embarques
+### ✅ IMPLEMENTADO COMPLETO — Filtro multi-cliente en Embarques
 
-`ShipmentController::create()` sí soporta `client_ids[]` vía query param y filtra el `Sale::whereIn('client_id', $clientIds)`. **Pero no existe ningún selector en `Shipments/Create.vue`** que mande ese parámetro — el backend está listo, la UI no.
+`ShipmentController::create()` recibe `client_ids[]` vía query param y `Shipments/Create.vue` cuenta con el selector múltiple integrado en la UI, filtrando correctamente las ventas disponibles por los clientes seleccionados.
 
 ### ⚠️ Patrón de rendimiento — modelos completos viajando sin usarse
 
@@ -387,7 +377,7 @@ Confirmado ya corregido en `ShipmentController::create()`, `index()` y `show()`:
 - `inventario`, `supervisor`, `financiero` → `/dashboard` (pantalla de bienvenida temporal — sin módulo propio todavía, confirmado en `DashboardController`)
 
 ### Modo Oficina / Modo Taller (`Sales/Show.vue`)
-Confirmado: `is_production_mode` sigue siendo un prop controlado solo por el query param `?production=` en el frontend (`const productionMode = ref(props.is_production_mode || false)`). **No hay lógica de backend que lo fuerce por rol** — sigue pendiente forzarlo para `supervisor`, `inventario` y `produccion` independientemente del query param.
+✅ Confirmado resuelto: `is_production_mode` se fuerza automáticamente a `true` desde el backend (`SaleController::show()`) para los roles `produccion`, `inventario` y `supervisor`. Adicionalmente, se emplea `$sale->makeHidden()` para garantizar que los importes financieros y precios unitarios no viajen en el JSON hacia el cliente en estos roles.
 
 ---
 
@@ -399,12 +389,12 @@ Confirmado: `is_production_mode` sigue siendo un prop controlado solo por el que
 | `Sales/Create.vue` | ✅ | POS completo |
 | `Sales/Index.vue` | ✅ | Kanban — ya no permite mover a mano a `enviado`/`entregado` |
 | `Sales/Show.vue` | ✅ | Modo Oficina/Taller (por query param, no forzado por rol aún), abonos |
-| `Production/Index.vue` | ✅ | Navegación de semana y badge de 4 estados confirmados. Falta toggle "ver acumulado". `formatDate` sin usar ya **no existe** (código limpio, bug previamente documentado ya no aplica) |
+| `Production/Index.vue` | ✅ | Navegación de semana y badge de 4 estados confirmados. |
 | `Products/Create.vue` / `Edit.vue` | ✅ | Variantes, materiales, medidas, imagen, favorito |
 | `Products/Index.vue` | ⚠️ | Funcional, pero `ProductController::index()` no pagina server-side |
 | `Clients/*`, `Users/*`, `Settings/Index.vue` | ✅ | `Users/*` confirmado funcional contra `UserController.php` real (CRUD completo, `VALID_ROLES` coincide con los 6 roles del sistema) |
 | `Shipments/Index.vue` | ✅ | Lista de viajes, imprimir, confirmar, **cancelar** (badge de 3 estados: en tránsito/entregado/cancelado) |
-| `Shipments/Create.vue` | ✅ | Armar embarque, validación de stock compartido entre líneas del mismo formulario, **toggle flota propia / recolección en mostrador**. Falta: selector multi-cliente |
+| `Shipments/Create.vue` | ✅ | Armar embarque, validación de stock compartido entre líneas, toggle flota propia / mostrador y **selector multi-cliente**. |
 | `Shipments/Show.vue` | ✅ | Detalle con `chosen_color`, fechas y piezas a bordo |
 
 ---
