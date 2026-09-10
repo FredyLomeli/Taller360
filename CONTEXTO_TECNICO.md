@@ -165,7 +165,7 @@ timestamps
 *   **NUEVA REGLA DE NEGOCIO (Stock Reservado / Detallado v2.8):** Para evitar inventarios negativos y disonancias numéricas al enviar remanentes a detallado, se implementó `reserved_stock`. 
     - Al enviar piezas a "Detallado", se incrementa este valor. 
     - El stock real disponible en todo el sistema se calcula como `(stock - reserved_stock)`. 
-    - **Remanente de Producción (Matemática Estricta):** El cálculo de `pending_to_fabricate` (lo que falta por producir) en `ProductionController` se estabilizó usando la fórmula de "Avance Máximo": `MAX(completados, detallados, enviados)`. Esto previene que una misma pieza descuente múltiples veces del total necesitado mientras transita por las diferentes fases del taller.
+    - **Remanente de Producción (Matemática Estricta):** El cálculo de `pending_to_fabricate` (lo que falta por producir) en `ProductionController` se estabilizó usando la fórmula: `max(0, Requerimientos - StockFisico - EnDetallado - Enviados)`. Esto garantiza que los pedidos consideren el stock global de la empresa antes de mandar a fabricar. La UI muestra "X pendientes de Y totales" explícitamente.
 
 ### 💼 `sales`
 ```
@@ -329,11 +329,9 @@ Setting       → getValue(), setValue(), getAll() [métodos estáticos]
 
 ### ✅ RESUELTO — Plan de Producción no descontaba lo ya fabricado
 
-`ProductionController::index()` y `printReport()` confirmados con:
+`ProductionController::index()` y `printReport()` confirmados con la fórmula unificada de faltantes:
 ```php
-->withSum('completions as completed_quantity', 'quantity_completed')
-...
-'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted), // ya no resta stock
+'pending_to_fabricate' => max(0, $totalNeeded - $stockFisico - $wipDetailed - $totalDelivered),
 ```
 Badge de 4 estados confirmado en `Production/Index.vue` (sin fabricar / parcial / listo para embarcar / fabricado y ya embarcado). Navegación de semana (`« Ant.` / `Sig. »`) confirmada implementada. ⚠️ El toggle "Ver todo acumulado" **no existe** en el código — sigue pendiente.
 

@@ -527,7 +527,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
                     <h3 class="text-lg font-medium opacity-90 mb-1">Total a Pagar</h3>
                     <p class="text-4xl font-bold tracking-tight">{{ formatMoney(cartTotal) }}</p>
                     
-                    <div class="mt-3 inline-block bg-green-700 bg-opacity-50 px-3 py-1 rounded-full text-sm font-medium border border-green-500">
+                    <div class="mt-3 inline-block bg-green-700/50 px-3 py-1 rounded-full text-sm font-medium border border-green-500">
                         Cliente: {{ selectedClient?.name || 'Público General' }}
                     </div>
                 </div>

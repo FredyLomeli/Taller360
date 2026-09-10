@@ -125,7 +125,7 @@
                         
                         <div class="relative w-full aspect-square bg-slate-50/80 rounded-2xl overflow-hidden flex items-center justify-center p-3 mb-4 shadow-sm group-hover:shadow-xl transition-all duration-500">
                             @if($safeImageUrl)
-                                <img src="{{ $safeImageUrl }}" alt="{{ $product->name }}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500">
+                                <img src="{{ $safeImageUrl }}" alt="{{ $product->name }}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" loading="lazy" decoding="async">
                             @else
                                 <div class="w-full h-full bg-slate-100 flex flex-col items-center justify-center p-6 text-slate-400 group-hover:bg-slate-200/60 transition-colors">
                                     <!-- Ícono SVG elegante de Mueble / Catálogo -->

@@ -77,11 +77,14 @@ class SaleController extends Controller
     public function create()
     {
         return Inertia::render('Sales/Create', [
-            // CORRECCIÓN: Agregamos 'category' al with()
-            'products' => \App\Models\Product::with(['variants', 'category']) 
+            'products' => \App\Models\Product::select('id', 'name', 'category_id', 'image', 'is_favorite')
+                ->with([
+                    'category:id,name',
+                    'variants:id,product_id,material,measurements,price_1,price_2,price_3,price_4,price_5,stock,reserved_stock'
+                ])
                 ->orderBy('is_favorite', 'desc')
                 ->get(),
-            'clients' => Client::all(),
+            'clients' => Client::select('id', 'name', 'business_name', 'price_tier', 'phones', 'email')->get(),
         ]);
     }
 
@@ -198,7 +201,11 @@ class SaleController extends Controller
 
     public function show($id)
     {
-        $sale = Sale::with([
+        $sale = Sale::select([
+            'id', 'user_id', 'client_id', 'total', 'paid_amount', 'change_amount', 
+            'payment_method', 'stage', 'promised_date', 'is_partial_shipping', 
+            'created_at', 'updated_at'
+        ])->with([
             'client', 
             // Agregamos la suma de las entregas a los detalles
             'details' => function($query) {
@@ -335,7 +342,11 @@ class SaleController extends Controller
 
     public function printTicket($id)
     {
-        $sale = Sale::with(['details', 'client', 'user'])->findOrFail($id);
+        $sale = Sale::select([
+            'id', 'user_id', 'client_id', 'total', 'paid_amount', 'change_amount', 
+            'payment_method', 'stage', 'promised_date', 'is_partial_shipping', 
+            'created_at', 'updated_at'
+        ])->with(['details', 'client', 'user'])->findOrFail($id);
         $settings = Setting::all()->pluck('value', 'key');
         
         $company = [

@@ -6,6 +6,7 @@ use App\Models\ProductVariant;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Models\Shipment;
+use App\Models\Client;
 use App\Models\SaleDelivery;
 use App\Models\SaleHistory;
 use App\Models\Setting;
@@ -31,14 +32,13 @@ class ShipmentController extends Controller
     {
         $clientIds = $request->input('client_ids', []);
         
-        // Extraemos clientes disponibles ANTES del filtro
-        $availableClients = Sale::whereIn('stage', ['confirmado', 'produccion', 'enviado'])
-            ->with('client:id,name,business_name')
-            ->get()
-            ->pluck('client')
-            ->unique('id')
-            ->filter()
-            ->values();
+        // Optimizamos usando whereHas para que el motor de BD haga el trabajo,
+        // en lugar de traer todas las ventas a la memoria PHP.
+        $availableClients = Client::whereHas('sales', function ($q) {
+                $q->whereIn('stage', ['confirmado', 'produccion', 'enviado']);
+            })
+            ->select('id', 'name', 'business_name')
+            ->get();
 
         // Buscamos ventas activas y calculamos cuánto se ha entregado de cada partida
         $salesQuery = Sale::select('id', 'user_id', 'client_id', 'stage', 'promised_date', 'created_at')

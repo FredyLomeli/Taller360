@@ -78,6 +78,24 @@ test('al actualizar un producto se eliminan las variantes que no se enviaron', f
     $this->assertDatabaseMissing('product_variants', ['id' => $variant2->id]); // Se eliminó
 });
 
+test('el endpoint de productos retorna solo los campos seleccionados y relaciones necesarias', function () {
+    $user = User::factory()->create(['role' => 'admin']);
+    $category = Category::factory()->create();
+    $product = Product::factory()->create(['category_id' => $category->id]);
+    $variant = ProductVariant::factory()->create(['product_id' => $product->id]);
+
+    $response = $this->actingAs($user)->get(route('products.index'));
+
+    $response->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('Products/Index')
+        ->has('products.0.id')
+        ->has('products.0.name')
+        ->has('products.0.category.name')
+        ->has('products.0.variants.0.price_1')
+        ->missing('products.0.description') // Validamos que el select() haya descartado columnas pesadas
+    );
+});
+
 test('un administrador puede registrar un producto con sus variantes y precios', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $category = Category::factory()->create();

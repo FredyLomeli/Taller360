@@ -45,19 +45,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     // ==========================================
-    //    💰 ZONA DE VENTAS (ADMIN + VENDEDOR)
+    //    💰 ZONA DE VENTAS (Múltiples Roles)
     // ==========================================
+    Route::controller(SaleController::class)->group(function () {
+        Route::get('/sales', 'index')->name('sales.index');      // Historial
+        Route::get('/sales/{sale}', 'show')->name('sales.show'); // Ver Detalle
+    });
+
     Route::middleware('role:admin,vendedor')->group(function () {
 
         // 3. PUNTO DE VENTA (POS / Nuevo Pedido)
         // Usamos SaleController@create para el POS
         Route::get('/pos', [SaleController::class, 'create'])->name('sales.create');
 
-        // 4. VENTAS Y PEDIDOS
+        // 4. VENTAS Y PEDIDOS (Creación)
         Route::controller(SaleController::class)->group(function () {
-            Route::get('/sales', 'index')->name('sales.index');      // Historial
             Route::post('/sales', 'store')->name('sales.store');     // Guardar Pedido
-            Route::get('/sales/{sale}', 'show')->name('sales.show'); // Ver Detalle
 
             // MOTOR DE ESTADOS (Mover pedido: Pedido -> Producción -> Enviado)
             Route::patch('/sales/{sale}/stage', 'updateStage')->name('sales.update-stage');

@@ -60,10 +60,11 @@ class DashboardController extends Controller
                 ->get();
             
             // D. ALERTA DE STOCK (Exclusivo Favoritos / Destacados)
-            $lowStockProducts = ProductVariant::whereHas('product', function ($q) {
+            $lowStockProducts = ProductVariant::select('id', 'product_id', 'material', 'measurements', 'stock', 'min_stock')
+                ->whereHas('product', function ($q) {
                     $q->where('is_favorite', true);
                 })
-                ->with('product')
+                ->with('product:id,name,image')
                 ->orderBy('stock', 'asc')
                 ->get();
 

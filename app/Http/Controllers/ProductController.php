@@ -16,7 +16,11 @@ class ProductController extends Controller
     {
         // Cargamos productos con sus variantes y categoría
         return Inertia::render('Products/Index', [
-            'products' => Product::with(['category', 'variants'])
+            'products' => Product::select('id', 'name', 'category_id', 'image', 'is_favorite', 'created_at')
+                ->with([
+                    'category:id,name',
+                    'variants:id,product_id,sku,material,measurements,price_1,stock,min_stock'
+                ])
                 ->orderBy('is_favorite', 'desc') 
                 ->orderBy('created_at', 'desc')
                 ->get()

@@ -52,7 +52,7 @@ test('un vendedor no puede ver el inventario administrativo', function () {
     
     // La ruta 'products.inventory' es la tabla de edición
     $this->actingAs($vendedor)
-         ->get(route('products.inventory'))
+         ->get(route('products.index'))
          ->assertStatus(403);
 });
 

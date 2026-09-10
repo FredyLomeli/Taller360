@@ -45,8 +45,12 @@ Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño té
 
 Confirmado con el archivo real: CRUD completo, `VALID_ROLES` coincide exactamente con los 6 roles del sistema, protección contra auto-eliminación de la propia cuenta. Sin pendientes.
 
-## ✅ Tailwind CSS v4 Migración Completada
-El proyecto ahora funciona 100% sobre Tailwind CSS v4. Se eliminaron las dependencias legacy de PostCSS y Autoprefixer, y se reestructuró `app.css` usando `@import "tailwindcss"` y `@theme`.
+## ✅ Tailwind CSS v4 Migración Completada (QA Aprobado - Sep 2026)
+El proyecto ahora funciona 100% sobre Tailwind CSS v4. Se eliminaron las dependencias legacy de PostCSS y Autoprefixer, y se reestructuró `app.css` usando `@import "tailwindcss"` y `@theme`. Adicionalmente, se resolvieron las regresiones visuales:
+- **Modales (Z-Index):** Ajuste de apilamiento en `Modal.vue` para que el contenido no quede oculto detrás del overlay.
+- **Bordes (currentColor):** Restaurados los bordes grises (`border-color: var(--color-gray-200)`) globalmente para corregir las líneas negras severas en tablas CRUD.
+- **Opacidades Legacy:** Limpieza de clases obsoletas (`bg-opacity-*` reemplazadas por sintaxis moderna `bg-color/opacity`).
+- **Rendimiento de Imágenes:** Implementado `loading="lazy" decoding="async"` y ocultamiento del texto ALT `color: transparent` para evitar parpadeos visuales al abrir el catálogo público.
 
 ---
 
@@ -54,7 +58,7 @@ El proyecto ahora funciona 100% sobre Tailwind CSS v4. Se eliminaron las depende
 
 | # | Bug | Verificación |
 |---|---|---|
-| 1 | Plan de Producción no descontaba lo ya fabricado tras envío parcial | `ProductionController::index()` y `printReport()` usan `withSum('completions as completed_quantity', ...)`, fórmula ya no resta stock. ✅ |
+| 1 | Plan de Producción no descontaba lo ya fabricado tras envío parcial | `ProductionController::index()` utiliza la fórmula unificada: `max(0, Requerimientos - StockFisico - EnDetallado - Enviados)`. Se reparó la lógica de agrupación e interfaz UI mostrando "X (de Y totales)" para evitar sobreproducción. ✅ |
 | 2 | Doble mecanismo de descuento de stock (Kanban vs. Embarques) | `SaleController::updateStage()` solo acepta `pedido,confirmado,produccion,cancelado`, no toca stock. `ShipmentController::store()` es el único que descuenta, con `lockForUpdate()`. ✅ |
 | 3 | `sales.deliveries.store` roto (columnas inexistentes) | Método, ruta y botón eliminados del código. ✅ |
 | 4 | Rutas de Embarques sin restricción de rol | `role:admin,inventario` confirmado en `routes/web.php`. ✅ |

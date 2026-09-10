@@ -106,6 +106,7 @@ class ProductionController extends Controller
             $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
             $totalDelivered = $group->sum(fn($i) => $i->delivered_quantity ?? 0);
             $wipDetailed = max(0, $totalDetailed - $totalDelivered);
+            $stockFisico = $variant->available_stock ?? 0;
 
             return [
                 'name' => $group->first()->product_name,
@@ -113,27 +114,19 @@ class ProductionController extends Controller
                 'measurements' => $variant->measurements ?? null,
                 'total_quantity' => $totalNeeded,
                 'breakdown' => $group->groupBy('chosen_color'),
-                'orders' => $group->map(function($detail) {
-                    if ($detail->source_type === 'work_order') {
-                        return [
-                            'id' => 'WO-' . $detail->source_id,
-                            'has_date' => false,
-                            'is_overdue' => false,
-                            'promised_date' => null,
-                            'type' => 'work_order',
-                            'source_id' => $detail->source_id,
-                        ];
+                'orders' => $group->map(function ($detail) {
+                    $isOverdue = false;
+                    $promised = null;
+                    if ($detail->source_type === 'sale_detail' && $detail->sale) {
+                        $promised = $detail->sale->promised_date;
+                        $isOverdue = $promised && \Carbon\Carbon::parse($promised)->isPast();
                     }
-
-                    $promised = $detail->sale->promised_date;
-                    $isOverdue = $promised && Carbon::parse($promised)->startOfDay()->lt(Carbon::now()->startOfDay());
-
                     return [
-                        'id' => 'Pedido-' . $detail->sale->id,
+                        'id' => ($detail->source_type === 'work_order') ? 'WO-' . $detail->source_id : 'Pedido-' . $detail->sale->id,
                         'has_date' => !is_null($promised),
                         'is_overdue' => $isOverdue,
                         'promised_date' => $promised,
-                        'type' => 'sale',
+                        'type' => ($detail->source_type === 'work_order') ? 'work_order' : 'sale',
                         'source_id' => $detail->source_id,
                     ];
                 })->unique('id')->values(),
@@ -157,8 +150,8 @@ class ProductionController extends Controller
                 'total_completed' => $totalCompleted,
                 'total_detailed' => $wipDetailed,
                 'total_delivered' => $totalDelivered,
-                'in_stock' => $variant->available_stock ?? 0,
-                'pending_to_fabricate' => max(0, $totalNeeded - max($totalCompleted, $totalDetailed, $totalDelivered)),
+                'in_stock' => $stockFisico,
+                'pending_to_fabricate' => max(0, $totalNeeded - $stockFisico - $wipDetailed - $totalDelivered),
             ];
         })
         ->sortBy(function ($group) {
@@ -172,10 +165,18 @@ class ProductionController extends Controller
                 $query->whereIn('stage', ['produccion', 'confirmado', 'enviado']);
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
+            ->withSum('detalladoRecords as detailed_quantity', 'quantity')
+            ->withSum(['deliveries as delivered_quantity' => function ($q) {
+                $q->whereHas('shipment', function ($sq) {
+                    $sq->where('status', '!=', 'cancelado');
+                });
+            }], 'quantity_delivered')
             ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get();
 
-        $allVariants = \App\Models\ProductVariant::with('product:id,name')->get();
+        $allVariants = \App\Models\ProductVariant::select('id', 'product_id', 'material', 'measurements')
+            ->with('product:id,name')
+            ->get();
 
         return Inertia::render('Production/Index', [
             'productionQueue' => $grouped,
@@ -308,18 +309,21 @@ class ProductionController extends Controller
 
         $grouped = $items->groupBy('product_variant_id')->map(function ($group) {
             $variant = $group->first()->variant;
-            $totalNeeded = $group->sum('quantity');
-            $totalCompleted = $group->sum('completed_quantity') ?? 0;
-            $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
+              $totalNeeded = $group->sum('quantity');
+              $totalCompleted = $group->sum('completed_quantity') ?? 0;
+              $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
+              $totalDelivered = $group->sum(fn($i) => $i->delivered_quantity ?? 0);
+              $wipDetailed = max(0, $totalDetailed - $totalDelivered);
+              $stockFisico = $variant->available_stock ?? 0;
 
-            return [
-                'name' => $group->first()->product_name,
-                'material' => $variant->material ?? 'Estándar',
-                'measurements' => $variant->measurements ?? null,
-                'total_needed' => $totalNeeded,
-                'in_stock' => $variant->available_stock ?? 0,
-                'total_detailed' => $totalDetailed,
-                'pending_to_fabricate' => max(0, $totalNeeded - $totalCompleted - $totalDetailed),
+              return [
+                  'name' => $group->first()->product_name,
+                  'material' => $variant->material ?? 'Estándar',
+                  'measurements' => $variant->measurements ?? null,
+                  'total_needed' => $totalNeeded,
+                  'in_stock' => $stockFisico,
+                  'total_detailed' => $wipDetailed,
+                  'pending_to_fabricate' => max(0, $totalNeeded - $stockFisico - $wipDetailed - $totalDelivered),
                 'details' => $group->map(function ($item) {
                     return (object)[
                         'source_type' => $item->source_type,

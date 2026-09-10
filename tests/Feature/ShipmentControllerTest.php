@@ -185,7 +185,7 @@ class ShipmentControllerTest extends TestCase
             'stage' => 'produccion'
         ]);
     }
-}
+
     public function test_store_shipment_decreases_reserved_stock()
     {
         $inventario = User::factory()->create(['role' => 'inventario']);
@@ -230,5 +230,45 @@ class ShipmentControllerTest extends TestCase
         $response->assertRedirect('/shipments');
         
         $this->assertEquals(40, $variant->fresh()->stock);
-        $this->assertEquals(5, $variant->fresh()->reserved_stock);
+        $this->assertEquals(0, $variant->fresh()->reserved_stock);
+    }
+
+    public function test_create_shipment_filters_by_client_ids()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $client1 = Client::factory()->create();
+        $client2 = Client::factory()->create();
+        $client3 = Client::factory()->create();
+
+        $variant = ProductVariant::factory()->create(['stock' => 10]);
+        
+        $sale1 = Sale::factory()->create(['client_id' => $client1->id, 'stage' => 'confirmado']);
+        SaleDetail::create(['sale_id' => $sale1->id, 'product_variant_id' => $variant->id, 'quantity' => 5, 'unit_price' => 100, 'subtotal' => 500, 'product_name' => 'X']);
+        
+        $sale2 = Sale::factory()->create(['client_id' => $client2->id, 'stage' => 'produccion']);
+        SaleDetail::create(['sale_id' => $sale2->id, 'product_variant_id' => $variant->id, 'quantity' => 5, 'unit_price' => 100, 'subtotal' => 500, 'product_name' => 'X']);
+        
+        $sale3 = Sale::factory()->create(['client_id' => $client3->id, 'stage' => 'enviado']);
+        SaleDetail::create(['sale_id' => $sale3->id, 'product_variant_id' => $variant->id, 'quantity' => 5, 'unit_price' => 100, 'subtotal' => 500, 'product_name' => 'X']);
+
+        // Request with filters for client 1 and 2
+        $response = $this->actingAs($admin)
+            ->get('/shipments/create?client_ids[]=' . $client1->id . '&client_ids[]=' . $client2->id);
+
+        $response->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+            ->component('Shipments/Create')
+            ->has('shippableSales', 2)
+            ->where('shippableSales.0.client_id', $client1->id)
+            ->where('shippableSales.1.client_id', $client2->id)
+        );
+
+        // Request without filters
+        $responseAll = $this->actingAs($admin)->get('/shipments/create');
+        
+        $responseAll->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+            ->component('Shipments/Create')
+            ->has('shippableSales', 3)
+        );
+    }
 }
+

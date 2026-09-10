@@ -7,13 +7,13 @@ use App\Models\Sale;
 use Inertia\Testing\AssertableInertia;
 
 test('se puede crear un cliente nuevo', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'vendedor']);
     
     $this->actingAs($user)->post(route('clients.store'), [
         'name' => 'Juan Perez',
         'email' => 'juan@test.com',
-        'phone' => '1234567890',
-        'address' => 'Calle Falsa 123',
+        'phones' => '1234567890',
+        'street_address' => 'Calle Falsa 123',
         'price_tier' => 1
     ])->assertRedirect();
 
@@ -21,7 +21,7 @@ test('se puede crear un cliente nuevo', function () {
 });
 
 test('no se puede crear cliente con email repetido', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'vendedor']);
     Client::factory()->create(['email' => 'juan@test.com']); // Ya existe
 
     $response = $this->actingAs($user)->post(route('clients.store'), [
@@ -55,7 +55,7 @@ test('NO se puede eliminar un cliente CON ventas históricas', function () {
 });
 
 test('se cargan todos los clientes para el buscador rapido del POS', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'vendedor']);
     
     // Creamos 10 clientes
     Client::factory()->count(10)->create();

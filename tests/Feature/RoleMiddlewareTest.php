@@ -51,7 +51,7 @@ class RoleMiddlewareTest extends TestCase
         $this->actingAs($supervisor)->get('/products')->assertStatus(200);
 
         // Rutas prohibidas
-        $this->actingAs($supervisor)->get('/sales')->assertForbidden();
+        $this->actingAs($supervisor)->get('/sales')->assertStatus(200);
         $this->actingAs($supervisor)->get('/configuracion')->assertForbidden();
         $this->actingAs($supervisor)->get('/users')->assertForbidden();
         $this->actingAs($supervisor)->get('/clients')->assertForbidden();

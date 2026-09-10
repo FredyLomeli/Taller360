@@ -8,7 +8,7 @@ test('el administrador ve los KPIs globales y la tabla de vendedores', function 
     $admin = User::factory()->create(['role' => 'admin']);
     
     // Venta pagada de $1000
-    Sale::factory()->create(['total' => 1000, 'paid_amount' => 1000, 'created_at' => now()]);
+    Sale::factory()->create(['total' => 1000, 'paid_amount' => 1000, 'created_at' => now(), 'stage' => 'confirmado']);
 
     $this->actingAs($admin)
          ->get(route('dashboard'))
@@ -28,10 +28,10 @@ test('el vendedor ve SOLO sus propios numeros y NO ve estadisticas globales', fu
     $otroVendedor = User::factory()->create(['role' => 'vendedor']);
 
     // Venta del vendedor ($200)
-    Sale::factory()->create(['user_id' => $vendedor->id, 'paid_amount' => 200, 'created_at' => now()]);
+    Sale::factory()->create(['user_id' => $vendedor->id, 'paid_amount' => 200, 'created_at' => now(), 'stage' => 'confirmado']);
     
     // Venta de OTRO ($5000)
-    Sale::factory()->create(['user_id' => $otroVendedor->id, 'paid_amount' => 5000, 'created_at' => now()]);
+    Sale::factory()->create(['user_id' => $otroVendedor->id, 'paid_amount' => 5000, 'created_at' => now(), 'stage' => 'confirmado']);
 
     $this->actingAs($vendedor)
          ->get(route('dashboard'))
@@ -49,8 +49,8 @@ test('el administrador puede filtrar por rango de fechas', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     
     $ayer = now()->subDay();
-    Sale::factory()->create(['created_at' => $ayer, 'paid_amount' => 500]);
-    Sale::factory()->create(['created_at' => now(), 'paid_amount' => 100]);
+    Sale::factory()->create(['created_at' => $ayer, 'paid_amount' => 500, 'stage' => 'confirmado']);
+    Sale::factory()->create(['created_at' => now(), 'paid_amount' => 100, 'stage' => 'confirmado']);
 
     $this->actingAs($admin)
          ->get(route('dashboard', [

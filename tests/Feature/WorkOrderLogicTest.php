@@ -55,7 +55,9 @@ class WorkOrderLogicTest extends TestCase
             'production_hold' => true,
         ]);
 
-        $response = $this->actingAs($user)->patch(route('sale-details.release-hold', $detail->id));
+        $response = $this->actingAs($user)->patch(route('sale-details.release-hold', $detail->id), [
+            'new_date' => '2026-12-01'
+        ]);
         $response->assertSessionHasNoErrors();
         $response->assertRedirect();
 

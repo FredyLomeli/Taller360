@@ -245,8 +245,9 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                             <Link :href="route('sales.show', group.sale_id)" class="text-blue-600 font-bold hover:underline">Pedido #{{ group.sale_id }}</Link>
                                             <span class="text-gray-500 block text-xs mt-0.5">{{ group.client_name }}</span>
                                         </td>
-                                        <td class="px-4 py-3 text-center font-bold text-amber-600 text-sm">
-                                            {{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}
+                                        <td class="px-4 py-3 text-center">
+                                            <span class="font-bold text-amber-600 text-sm">{{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
+                                            <span v-if="Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0) > 0" class="block text-[10px] text-gray-500 font-normal mt-0.5">de {{ item.quantity }} totales</span>
                                         </td>
                                         <td class="px-4 py-3 text-right">
                                             <button @click="releaseHold(item.id)" class="bg-amber-100 text-amber-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-200 border border-amber-300 transition whitespace-nowrap">
@@ -431,7 +432,7 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
         </div>
         
         <!-- Modal Orden de Trabajo -->
-        <div v-if="showWorkOrderModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div v-if="showWorkOrderModal" class="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
                 <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                     <h3 class="text-lg font-extrabold text-gray-800 flex items-center gap-2">

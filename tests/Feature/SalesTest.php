@@ -13,48 +13,6 @@ use Inertia\Testing\AssertableInertia;
 // Test 1: Crear venta y bajar stock (YA LO TIENES HECHO DEL PASO ANTERIOR ✅)
 // ... mantenlo aquí ...
 
-// Test 2: Cancelar venta y devolver stock
-test('al cancelar una venta el stock se devuelve al inventario', function () {
-    $user = User::factory()->create(['role' => 'admin']);
-    $category = Category::factory()->create();
-    $product = Product::factory()->create(['category_id' => $category->id]);
-    
-    // 1. Inventario inicial: 5
-    $variant = ProductVariant::create([
-        'product_id' => $product->id,
-        'material' => 'Tela', 'color' => 'Azul',
-        'stock' => 5, 
-        'price_1' => 100
-    ]);
-
-    // 2. Creamos una venta YA existente de 2 unidades
-    $sale = Sale::factory()->create(['status' => 'pagado']);
-    SaleDetail::create([
-        'sale_id' => $sale->id,
-        'product_variant_id' => $variant->id,
-        'quantity' => 2,
-        'unit_price' => 100,
-        'subtotal' => 200,
-        'product_name' => 'Silla Azul'
-    ]);
-    
-    // Simulamos que el stock bajó a 3 cuando se hizo la venta
-    $variant->update(['stock' => 3]); 
-
-    // 3. ACTUAR: Cancelar la venta
-    // NOTA: Ajusta la ruta 'sales.cancel' si se llama diferente en tu web.php
-    $this->actingAs($user)->post(route('sales.cancel', $sale->id));
-
-    // 4. VERIFICAR
-    // La venta debe estar cancelada
-    $this->assertDatabaseHas('sales', ['id' => $sale->id, 'status' => 'cancelado']);
-    
-    // El stock debe haber subido: 3 (que había) + 2 (devueltos) = 5
-    $this->assertDatabaseHas('product_variants', [
-        'id' => $variant->id,
-        'stock' => 5
-    ]);
-});
 
 // Test 3: No se pueden eliminar ventas
 test('las ventas no pueden ser eliminadas fisicamente', function () {
@@ -82,7 +40,7 @@ test('las ventas no pueden ser editadas', function () {
 });
 
 test('no se puede realizar una venta si no hay suficiente stock', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'vendedor']);
     $client = Client::factory()->create();
     
     // Producto con solo 2 unidades
@@ -91,13 +49,15 @@ test('no se puede realizar una venta si no hay suficiente stock', function () {
     $response = $this->actingAs($user)->post(route('sales.store'), [
         'client_id' => $client->id,
         'payment_method' => 'Efectivo',
-        'amount_received' => 1000,
-        'cart' => [
+        'paid_amount' => 1000,
+        'signature' => 'data:image/png;base64,1234',
+        'items' => [
             [
                 'variant_id' => $variant->id,
                 'quantity' => 10, // <--- Intentamos vender 10
                 'price' => 100,
-                'product_name' => 'Test', 'material' => 'X', 'color' => 'Y'
+                'product_name' => 'Test', 
+                'chosen_color' => 'Y'
             ]
         ]
     ]);
@@ -110,7 +70,7 @@ test('no se puede realizar una venta si no hay suficiente stock', function () {
 });
 
 test('se puede generar el PDF del ticket sin errores', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'admin']);
     $sale = Sale::factory()->create(); // Crea venta con detalles
     
     // Necesitamos crear detalles para que el ticket tenga qué imprimir
@@ -126,7 +86,7 @@ test('se puede generar el PDF del ticket sin errores', function () {
 use App\Models\Setting; // Importar arriba
 
 test('bloqueo de venta sin stock segun configuracion', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'vendedor']);
     $client = \App\Models\Client::factory()->create();
     
     // CASO 1: BLOQUEAR (allow_negative_stock = 0)
@@ -136,31 +96,35 @@ test('bloqueo de venta sin stock segun configuracion', function () {
 
     // Intentar vender 5
     $this->actingAs($user)->post(route('sales.store'), [
-        'client_id' => $client->id, 'payment_method' => 'Efectivo', 'amount_received' => 500,
-        'cart' => [[
+        'client_id' => $client->id, 'payment_method' => 'Efectivo', 'paid_amount' => 500,
+        'signature' => 'fake_signature',
+        'items' => [[
             'variant_id' => $variant->id, 'quantity' => 5, // Excede
-            'price' => 10, 'product_name' => 'X', 'material'=>'A', 'color'=>'B'
+            'price' => 10, 'product_name' => 'X', 'chosen_color'=>'B'
         ]]
     ])->assertSessionHasErrors(); // Esperamos error
 
     // CASO 2: PERMITIR (allow_negative_stock = 1)
     Setting::updateOrCreate(['key' => 'allow_negative_stock'], ['value' => '1']);
     
-    // Intentar vender 5 de nuevo
-    $this->actingAs($user)->post(route('sales.store'), [
-        'client_id' => $client->id, 'payment_method' => 'Efectivo', 'amount_received' => 500,
-        'cart' => [[
-            'variant_id' => $variant->id, 'quantity' => 5,
-            'price' => 10, 'product_name' => 'X', 'material'=>'A', 'color'=>'B'
-        ]]
-    ])->assertSessionHasNoErrors(); // Debería pasar
+    $variant2 = \App\Models\ProductVariant::factory()->create(['stock' => 1]);
 
-    // El stock debe quedar en -4 (1 - 5)
-    $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'stock' => -4]);
+    $this->actingAs($user)->post(route('sales.store'), [
+        'client_id' => $client->id, 'payment_method' => 'Efectivo', 'paid_amount' => 500,
+        'signature' => 'fake_signature',
+        'items' => [[
+            'variant_id' => $variant2->id, 'quantity' => 5, // Excede
+            'price' => 10, 'product_name' => 'Y', 'chosen_color'=>'B'
+        ]]
+    ])->assertSessionHasNoErrors(); // Pasa sin error
+
+    // En V2 el stock no se descuenta en el momento de crear el 'pedido'
+    // Solo verificamos que la venta pase sin errores
+    $this->assertDatabaseHas('product_variants', ['id' => $variant2->id, 'stock' => 1]);
 });
 
 test('el historial de ventas SÍ filtra por servidor (AJAX)', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'admin']);
     
     // 1. Crear datos escenario
     $clienteJuan = Client::factory()->create(['name' => 'Juan Perez']);

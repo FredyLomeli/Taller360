@@ -9,3 +9,13 @@
 @theme {
   --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
+
+@layer base {
+  *, ::before, ::after {
+    border-color: var(--color-gray-200);
+  }
+  img {
+    color: transparent; /* Oculta el texto alt mientras carga */
+  }
+}
+

@@ -40,9 +40,8 @@ class DashboardControllerTest extends TestCase
         
         $response->assertInertia(fn ($page) => $page
             ->component('Dashboard')
-            ->has('lowStockProducts', 2) // Solo favVariant1 y favVariant2
-            ->where('lowStockProducts.0.id', fn ($id) => in_array($id, [$favVariant1->id, $favVariant2->id]))
-            ->where('lowStockProducts.1.id', fn ($id) => in_array($id, [$favVariant1->id, $favVariant2->id]))
+            ->has('lowStockProducts', 3) // Todas las favoritas se envían al front, la alerta la dibuja Vue
+            ->where('lowStockProducts.0.id', fn ($id) => in_array($id, [$favVariant1->id, $favVariant2->id, $favVariant3->id]))
         );
     }
 }

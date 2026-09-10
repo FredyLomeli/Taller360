@@ -326,7 +326,7 @@ const sanitizeNumber = (variant, field) => {
             </div>
         </div>
 
-        <div v-if="showImageModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-90 backdrop-blur-sm transition-opacity" @click.self="showImageModal = false">
+        <div v-if="showImageModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm transition-opacity" @click.self="showImageModal = false">
             <div class="relative animate-fade-in-up max-w-5xl w-full">
                 <button @click="showImageModal = false" class="absolute -top-12 right-0 text-white hover:text-gray-300 focus:outline-none">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
