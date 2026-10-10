@@ -4,6 +4,32 @@
 
 ---
 
+## 🔥 SPRINT ACTIVO — OCTUBRE 2026 (MÁXIMA PRIORIDAD EN PRODUCCIÓN - COMPLETADO ✅)
+
+### 1. 🛠️ Órdenes de Trabajo en Plan de Producción: Fabricación Autónoma sin Validación de Stock
+- [x] Backend: Refactorizar `ProductionController::index` para desacoplar el cálculo de piezas faltantes entre pedidos de venta (`sale_details`) y órdenes de trabajo (`work_orders`).
+- [x] Backend: Faltantes de pedidos $\max(0, \text{pedidos} - \text{stock\_disponible} - \text{detallado} - \text{enviados})$; Faltantes de OT $\max(0, \text{solicitado\_OT} - \text{completado\_OT})$.
+- [x] Backend: `pending_to_fabricate` resultante = suma de faltantes de pedidos + faltantes de OT.
+- [x] Frontend: En `Production/Index.vue`, habilitar de forma permanente la celda de captura numérica y botón `[✓]` para órdenes de trabajo mientras tengan piezas pendientes, sin importar si los pedidos del modelo ya están cubiertos por stock.
+- [x] Frontend: Añadir estado visual informativo ("Cubierto por stock / OT en curso") cuando los pedidos no requieran fabricación pero la OT sí.
+- [x] Pruebas: Feature test `WorkOrderLogicTest::test_work_order_pending_calculation_is_independent_from_existing_stock` que verifique que una OT puede registrar entradas al stock físico aún existiendo inventario previo.
+
+### 2. 📦 Control Formal de Piezas Dañadas e Historial de Auditoría en Inventario
+- [x] Base de Datos: Migración para añadir columna `product_variants.damaged_stock` (`unsignedInteger`, default 0).
+- [x] Base de Datos: Migración para crear tabla de auditoría `damaged_stock_logs` (`id`, `product_variant_id`, `user_id`, `type`, `quantity`, `notes`, `timestamps`).
+- [x] Backend: Modelo `DamagedStockLog` con relaciones a `ProductVariant` y `User`.
+- [x] Backend: Actualizar accesor `ProductVariant::getAvailableStockAttribute` restando `damaged_stock` (`stock - reserved_stock - damaged_stock`).
+- [x] Backend: Controlador `DamagedStockController@store` con transacciones atómicas y `lockForUpdate` soportando:
+  - `marcar_danada` (Disponible $\to$ Dañada).
+  - `reparada` (Dañada $\to$ Disponible).
+  - `baja_definitiva` (Merma total: descuenta de `damaged_stock` y `stock` físico).
+- [x] Backend: Registrar ruta segura `POST /damaged-stock` con middleware de roles (`admin`, `supervisor`).
+- [x] Frontend: En `Products/Index.vue`, mostrar desglose claro por variante: Físico | Dañadas | Disponible.
+- [x] Frontend: Modal de "Control de Daños" en `Products/Index.vue` con formulario para registrar movimientos validados y tabla con historial cronológico de auditoría (quién, cuándo, tipo, cantidad, notas).
+- [x] Pruebas: Feature test `DamagedStockTest` validando transiciones, restricciones de inventario e integridad del historial.
+
+---
+
 ## 🎯 SPRINT ACORDADO CON CLIENTE — 04 de agosto 2026
 
 Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño técnico ya acordado (ver `CONTEXTO_TECNICO.md` sección 0.1 para el detalle completo de schema/lógica). Van en orden de prioridad sugerido.
@@ -113,16 +139,16 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 - [x] **Fecha compromiso (`promised_date`) editable después de creado el pedido.** Completado y verificado. Al avanzar la etapa en el Kanban (ej: hacia `confirmado`), SweetAlert2 solicita/permite corregir la fecha compromiso.
 - [x] Forzar Modo Taller (sin precios) automáticamente por rol en el backend. Completado. En `SaleController::show()`, los roles `produccion`, `inventario` y `supervisor` ahora asumen `is_production_mode = true` desde el servidor, y el sistema borra (`makeHidden`) toda la información financiera y precios unitarios del objeto de la base de datos antes de enviarlo al Vue.
 
-### Rendimiento (hosting compartido)
-- [ ] `ProductController::index()` — `Product::with(['category','variants'])->get()` sin `select()` ni paginación. Carga todos los productos, todas sus variantes y los 5 precios de cada una en cada visita al catálogo interno.
-- [ ] `SaleController::create()` (POS) — `Client::all()` sin límite ni `select()` explícito, se ejecuta en cada apertura del POS.
-- [ ] Revisar índices en BD: `sale_details.sale_id`, `sale_details.product_variant_id`, `sale_deliveries.shipment_id`, `sale_deliveries.sale_detail_id`, `sales.stage` + `sales.promised_date` — no se pudo confirmar sin acceso al schema real de la BD (las migraciones no muestran índices explícitos más allá de las FKs).
-- [ ] `composer.lock`/`package-lock.json` — no se auditaron dependencias de desarrollo innecesarias en producción en esta ronda.
+### Rendimiento (hosting compartido) - MOVIDO AL FINAL (FASE 7)
+- [ ] `ProductController::index()` — `Product::with(['category','variants'])->get()` sin `select()` ni paginación. Carga todos los productos, todas sus variantes y los 5 precios de cada una en cada visita al catálogo interno. *(Pospuesto por decisión del cliente)*.
+- [ ] `SaleController::create()` (POS) — Carga todos los clientes. Ya tiene `select()` explícito pero falta límite. *(Pospuesto por decisión del cliente)*.
+- [ ] Revisar índices en BD: `sale_details.sale_id`, `sale_details.product_variant_id`, `sale_deliveries.shipment_id`, `sale_deliveries.sale_detail_id`, `sales.stage` + `sales.promised_date` — no se pudo confirmar sin acceso al schema real de la BD.
+- [ ] `composer.lock`/`package-lock.json` — auditar dependencias de desarrollo innecesarias en producción en esta ronda final.
 
-### Roles y Fase 3 (confirmado: sin empezar en código)
+### Roles y Fase 3 (Alta Prioridad - Siguiente tras Fase 4.2)
 - [ ] `supervisor` y `financiero` no tienen ninguna ruta asignada — caen directo a pantalla de bienvenida.
+- [ ] Dashboard/Módulo Financiero y estado de cuenta por cliente (Fase 3.2) — (PRÓXIMO OBJETIVO PRINCIPAL TRAS CATÁLOGO).
 - [ ] Dashboard de Producción (Fase 3.1).
-- [ ] Dashboard/Módulo Financiero y estado de cuenta por cliente (Fase 3.2) — sigue siendo solo diseño, sin controlador ni ruta.
 - [ ] Selector de vista para Admin (Fase 3.3).
 - [ ] Sidebar y rutas condicionales completas por rol (Fase 3.4).
 
@@ -193,21 +219,20 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 📌 Orden de Dependencias (actualizado 05 sep 2026)
-
-```
-Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
-                                     ↓
-                    Fase 2.5 — Selector multi-cliente (pendiente UI) + notas de entrega agrupadas por pedido y CSS (COMPLETADO)
-                                     ↓
-                    Optimización de consultas (ProductController, SaleController::create)
-                    + Limpieza dependencias Tailwind (v3 vs v4)
-                                     ↓
-                    Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token)
-                                     ↓
-                               Fase 3 (Dashboards) — confirmado sin empezar en código
-                                     ↓
-                    Fase 5 (Flete dinámico) — depende de 4.2 (link personalizado)
-                                     ↓
-                    Fase 6 (Reportes PDF) — depende de Fase 3
-```
+## 📌 Orden de Dependencias (actualizado 10 sep 2026)
+ 
+ ```
+ Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
+                                      ↓
+                     Fase 2.5 — Embarques y CSS (COMPLETADO)
+                                      ↓
+                     Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token) (¡Siguiente paso!)
+                                      ↓
+                               Fase 3 (Dashboards) — Finanzas y Producción
+                                      ↓
+                     Fase 5 (Flete dinámico) — depende de 4.2 (link personalizado)
+                                      ↓
+                     Fase 6 (Reportes PDF) — depende de Fase 3
+                                      ↓
+                     Fase 7 (Rendimiento en Hosting) — Paginación y Optimizaciones
+ ```

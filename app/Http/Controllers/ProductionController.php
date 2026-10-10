@@ -101,12 +101,28 @@ class ProductionController extends Controller
         // 3. Agrupación unificada
         $grouped = $items->groupBy('product_variant_id')->map(function ($group) {
             $variant = $group->first()->variant;
-            $totalNeeded = $group->sum('quantity');
-            $totalCompleted = $group->sum('completed_quantity') ?? 0;
-            $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
-            $totalDelivered = $group->sum(fn($i) => $i->delivered_quantity ?? 0);
-            $wipDetailed = max(0, $totalDetailed - $totalDelivered);
+            $salesGroup = $group->where('source_type', 'sale_detail');
+            $woGroup = $group->where('source_type', 'work_order');
+
+            $salesNeeded = $salesGroup->sum('quantity');
+            $salesCompleted = $salesGroup->sum('completed_quantity') ?? 0;
+            $salesDetailed = $salesGroup->sum(fn($i) => $i->detailed_quantity ?? 0);
+            $salesDelivered = $salesGroup->sum(fn($i) => $i->delivered_quantity ?? 0);
+            $wipDetailed = max(0, $salesDetailed - $salesDelivered);
             $stockFisico = $variant->available_stock ?? 0;
+
+            // Faltantes de Pedidos considerando inventario disponible
+            $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
+
+            // Faltantes de Órdenes de Trabajo (autónomas: se fabrican para almacén sí o sí)
+            $woNeeded = $woGroup->sum('quantity');
+            $woCompleted = $woGroup->sum('completed_quantity') ?? 0;
+            $pendingWO = max(0, $woNeeded - $woCompleted);
+
+            $pendingToFabricate = $pendingSales + $pendingWO;
+            $totalNeeded = $salesNeeded + $woNeeded;
+            $totalCompleted = $salesCompleted + $woCompleted;
+            $totalDelivered = $salesDelivered;
 
             return [
                 'name' => $group->first()->product_name,
@@ -131,6 +147,10 @@ class ProductionController extends Controller
                     ];
                 })->unique('id')->values(),
                 'details' => $group->map(function ($item) {
+                    $rem = ($item->source_type === 'work_order')
+                        ? max(0, $item->quantity - ($item->completed_quantity ?? 0))
+                        : max(0, $item->quantity - max($item->completed_quantity ?? 0, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0));
+
                     return (object)[
                         'source_type' => $item->source_type,
                         'source_id' => $item->source_id,
@@ -141,6 +161,7 @@ class ProductionController extends Controller
                         'completed_quantity' => $item->completed_quantity ?? 0,
                         'detailed_quantity' => $item->detailed_quantity ?? 0,
                         'delivered_quantity' => $item->delivered_quantity ?? 0,
+                        'pending_quantity' => $rem,
                         'chosen_color' => $item->chosen_color,
                         'variant' => $item->variant,
                         'sale' => $item->sale ?? null,
@@ -151,7 +172,9 @@ class ProductionController extends Controller
                 'total_detailed' => $wipDetailed,
                 'total_delivered' => $totalDelivered,
                 'in_stock' => $stockFisico,
-                'pending_to_fabricate' => max(0, $totalNeeded - $stockFisico - $wipDetailed - $totalDelivered),
+                'pending_sales' => $pendingSales,
+                'pending_wo' => $pendingWO,
+                'pending_to_fabricate' => $pendingToFabricate,
             ];
         })
         ->sortBy(function ($group) {
@@ -301,6 +324,9 @@ class ProductionController extends Controller
 
         $items = collect($saleItems)->concat($workOrders)
             ->filter(function ($item) {
+                if ($item->source_type === 'work_order') {
+                    return ($item->quantity - ($item->completed_quantity ?? 0)) > 0;
+                }
                 return ($item->quantity - ($item->completed_quantity ?? 0) - ($item->detailed_quantity ?? 0)) > 0;
             })
             ->sortBy(function ($item) {
@@ -309,22 +335,35 @@ class ProductionController extends Controller
 
         $grouped = $items->groupBy('product_variant_id')->map(function ($group) {
             $variant = $group->first()->variant;
-              $totalNeeded = $group->sum('quantity');
-              $totalCompleted = $group->sum('completed_quantity') ?? 0;
-              $totalDetailed = $group->sum(fn($i) => $i->detailed_quantity ?? 0);
-              $totalDelivered = $group->sum(fn($i) => $i->delivered_quantity ?? 0);
-              $wipDetailed = max(0, $totalDetailed - $totalDelivered);
-              $stockFisico = $variant->available_stock ?? 0;
+            $salesGroup = $group->where('source_type', 'sale_detail');
+            $woGroup = $group->where('source_type', 'work_order');
 
-              return [
-                  'name' => $group->first()->product_name,
-                  'material' => $variant->material ?? 'Estándar',
-                  'measurements' => $variant->measurements ?? null,
-                  'total_needed' => $totalNeeded,
-                  'in_stock' => $stockFisico,
-                  'total_detailed' => $wipDetailed,
-                  'pending_to_fabricate' => max(0, $totalNeeded - $stockFisico - $wipDetailed - $totalDelivered),
+            $salesNeeded = $salesGroup->sum('quantity');
+            $salesCompleted = $salesGroup->sum('completed_quantity') ?? 0;
+            $salesDetailed = $salesGroup->sum(fn($i) => $i->detailed_quantity ?? 0);
+            $salesDelivered = $salesGroup->sum(fn($i) => $i->delivered_quantity ?? 0);
+            $wipDetailed = max(0, $salesDetailed - $salesDelivered);
+            $stockFisico = $variant->available_stock ?? 0;
+
+            $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
+            $pendingWO = max(0, $woGroup->sum('quantity') - ($woGroup->sum('completed_quantity') ?? 0));
+            $pendingToFabricate = $pendingSales + $pendingWO;
+
+            return [
+                'name' => $group->first()->product_name,
+                'material' => $variant->material ?? 'Estándar',
+                'measurements' => $variant->measurements ?? null,
+                'total_needed' => $group->sum('quantity'),
+                'in_stock' => $stockFisico,
+                'total_detailed' => $wipDetailed,
+                'pending_sales' => $pendingSales,
+                'pending_wo' => $pendingWO,
+                'pending_to_fabricate' => $pendingToFabricate,
                 'details' => $group->map(function ($item) {
+                    $rem = ($item->source_type === 'work_order')
+                        ? max(0, $item->quantity - ($item->completed_quantity ?? 0))
+                        : max(0, $item->quantity - max($item->completed_quantity ?? 0, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0));
+
                     return (object)[
                         'source_type' => $item->source_type,
                         'source_id' => $item->source_id,
@@ -334,6 +373,7 @@ class ProductionController extends Controller
                         'quantity' => $item->quantity,
                         'completed_quantity' => $item->completed_quantity ?? 0,
                         'detailed_quantity' => $item->detailed_quantity ?? 0,
+                        'pending_quantity' => $rem,
                         'chosen_color' => $item->chosen_color,
                         'variant' => $item->variant,
                         'sale' => $item->sale ?? null,

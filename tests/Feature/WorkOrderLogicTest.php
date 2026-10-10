@@ -123,4 +123,34 @@ class WorkOrderLogicTest extends TestCase
         $response->assertSessionHasNoErrors();
         $this->assertEquals('completed', $workOrder->fresh()->status);
     }
+
+    public function test_work_order_pending_calculation_is_independent_from_existing_stock()
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $product = Product::factory()->create();
+        $variant = ProductVariant::factory()->create([
+            'product_id' => $product->id,
+            'stock' => 50, // Mucho stock en bodega
+        ]);
+
+        $workOrder = WorkOrder::create([
+            'product_variant_id' => $variant->id,
+            'quantity_requested' => 10,
+            'status' => 'pending',
+            'created_by' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('production.plan'));
+        $response->assertOk();
+
+        $productionQueue = $response->viewData('page')['props']['productionQueue'];
+        $this->assertArrayHasKey($variant->id, $productionQueue);
+
+        $variantQueue = $productionQueue[$variant->id];
+        // Debe pedir fabricar las 10 piezas de la OT sin anularse por los 50 en stock
+        $this->assertEquals(10, $variantQueue['pending_to_fabricate']);
+        $this->assertEquals(10, $variantQueue['pending_wo']);
+        $this->assertEquals(0, $variantQueue['pending_sales']);
+        $this->assertEquals(50, $variantQueue['in_stock']);
+    }
 }

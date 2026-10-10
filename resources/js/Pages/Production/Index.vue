@@ -343,6 +343,9 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                     <span v-else-if="group.pending_to_fabricate === 0" class="bg-green-100 text-green-700 border border-green-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
                                         ✅ Listo para Embarque
                                     </span>
+                                    <span v-else-if="group.pending_sales === 0 && group.pending_wo > 0" class="bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
+                                        🛠️ Fabricar Stock (OT activa)
+                                    </span>
                                     <span v-else-if="group.in_stock > 0" class="bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
                                         ⚠️ Producción Parcial
                                     </span>
@@ -375,16 +378,16 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
 
                                 <td class="p-3 align-top min-w-[280px] no-print">
                                     <template v-for="item in group.details" :key="'action-'+item.source_type+'-'+item.source_id">
-                                        <div v-if="group.pending_to_fabricate > 0" class="flex items-center justify-between gap-2 mb-1 bg-gray-50/50 p-2 rounded border border-gray-200 shadow-sm last:mb-0">
+                                        <div v-if="(item.source_type === 'work_order' && ((item.pending_quantity ?? (item.quantity - (item.completed_quantity || 0))) > 0)) || (item.source_type === 'sale_detail' && (group.pending_sales > 0 || (item.pending_quantity ?? 0) > 0 || group.pending_to_fabricate > 0))" class="flex items-center justify-between gap-2 mb-1 bg-gray-50/50 p-2 rounded border border-gray-200 shadow-sm last:mb-0">
                                             
                                             <div class="flex flex-col">
                                                 <span v-if="item.source_type === 'sale_detail'" class="text-[10px] text-gray-700 font-bold flex items-center flex-wrap gap-1">
                                                     <Link :href="route('sales.show', item.sale_id)" class="text-blue-600 hover:underline">Ped. #{{ item.sale_id }}</Link>
-                                                    <span class="text-gray-400 font-normal">| Restan: {{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
+                                                    <span class="text-gray-400 font-normal">| Restan: {{ item.pending_quantity ?? Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
                                                     <span v-if="item.detailed_quantity > 0" class="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1 rounded font-bold">En Detallado: {{ item.detailed_quantity }}</span>
                                                 </span>
                                                 <span v-else class="text-[10px] text-purple-700 font-bold">
-                                                    WO #{{ item.source_id }} <span class="text-gray-400 ml-1 font-normal">| Restan: {{ Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
+                                                    WO #{{ item.source_id }} <span class="text-gray-400 ml-1 font-normal">| Restan: {{ item.pending_quantity ?? Math.max(0, item.quantity - (item.completed_quantity || 0)) }}</span>
                                                 </span>
                                                 
                                                 <span v-if="item.source_type === 'sale_detail'" class="text-[9px] text-gray-500 flex items-center gap-1">
@@ -396,8 +399,14 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                             </div>
 
                                             <div class="flex items-center gap-1">
-                                                <template v-if="Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) <= 0">
+                                                <template v-if="item.source_type === 'sale_detail' && group.pending_sales === 0">
+                                                    <span class="bg-green-100 text-green-700 text-[10px] px-2 py-1 rounded font-bold border border-green-200">Cubierto por Stock</span>
+                                                </template>
+                                                <template v-else-if="item.source_type === 'sale_detail' && (item.pending_quantity <= 0 || Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) <= 0)">
                                                     <span class="bg-gray-100 text-gray-500 text-[10px] px-2 py-1 rounded font-bold border border-gray-200">Cubierto por Detallado</span>
+                                                </template>
+                                                <template v-else-if="item.source_type === 'work_order' && ((item.pending_quantity ?? (item.quantity - (item.completed_quantity || 0))) <= 0)">
+                                                    <span class="bg-green-100 text-green-700 text-[10px] px-2 py-1 rounded font-bold border border-green-200">OT Completada</span>
                                                 </template>
                                                 <template v-else>
                                                     <input 
@@ -408,7 +417,7 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                                         placeholder="Cant."
                                                     >
                                                     <button 
-                                                        @click="submitCompletion(item.source_type, item.source_id, Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)))" 
+                                                        @click="submitCompletion(item.source_type, item.source_id, item.source_type === 'work_order' ? (item.pending_quantity ?? Math.max(0, item.quantity - (item.completed_quantity || 0))) : Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)))" 
                                                         class="bg-blue-600 text-white w-7 h-7 flex items-center justify-center rounded text-xs font-bold hover:bg-blue-700 transition shadow-sm"
                                                         title="Registrar"
                                                     >

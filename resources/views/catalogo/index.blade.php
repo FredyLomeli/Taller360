@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $settings['company_name'] ?? 'Mueblería' }} | Catálogo</title>
+    <title>{{ $settings['company_name'] ?? 'Industria Santa Cecilia' }} | Catálogo</title>
     
     <!-- Meta SEO -->
     <meta name="description" content="Catálogo exclusivo de muebles. Descubre nuestros diseños de alta gama y solicita una asesoría personalizada.">
     <meta name="keywords" content="Muebles, Catálogo Digital, Alta Gama, Catálogo">
+    
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ asset('site.webmanifest') }}">
     
     <!-- Tailwind CSS (Cargado por Vite en Laravel) -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -43,7 +49,7 @@
                             </div>
                         @endif
                         <span class="text-xl font-bold tracking-tight text-gray-900 group-hover:text-red-600 transition-colors">
-                            {{ $settings['company_name'] ?? 'Taller 360' }}
+                            {{ $settings['company_name'] ?? 'Industria Santa Cecilia' }}
                         </span>
                     </a>
                 </div>
@@ -298,7 +304,7 @@
     <!-- FOOTER -->
     <footer class="bg-gray-950 text-gray-500 py-12 text-center border-t border-gray-800 mt-auto">
         <div class="max-w-7xl mx-auto px-4">
-            <p>&copy; {{ date('Y') }} {{ $settings['company_name'] ?? 'Taller 360' }}. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} {{ $settings['company_name'] ?? 'Industria Santa Cecilia' }}. Todos los derechos reservados.</p>
             <p class="text-sm mt-2">Fabricado en Tepatitlán de Morelos, Jal.</p>
         </div>
     </footer>

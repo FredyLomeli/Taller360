@@ -19,7 +19,10 @@ class ProductController extends Controller
             'products' => Product::select('id', 'name', 'category_id', 'image', 'is_favorite', 'created_at')
                 ->with([
                     'category:id,name',
-                    'variants:id,product_id,sku,material,measurements,price_1,stock,min_stock'
+                    'variants:id,product_id,sku,material,measurements,price_1,stock,reserved_stock,damaged_stock,min_stock',
+                    'variants.damagedLogs' => function ($q) {
+                        $q->with('user:id,name')->latest()->take(20);
+                    }
                 ])
                 ->orderBy('is_favorite', 'desc') 
                 ->orderBy('created_at', 'desc')

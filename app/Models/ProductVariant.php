@@ -16,6 +16,7 @@ protected $fillable = [
         'sku',
         'stock',
         'reserved_stock',
+        'damaged_stock',
         'min_stock',
         'price_1',
         'price_2',
@@ -28,7 +29,7 @@ protected $fillable = [
 
     public function getAvailableStockAttribute()
     {
-        return max(0, $this->stock - $this->reserved_stock);
+        return max(0, $this->stock - $this->reserved_stock - ($this->damaged_stock ?? 0));
     }
 
     public function product()
@@ -39,5 +40,10 @@ protected $fillable = [
     public function workOrders()
     {
         return $this->hasMany(WorkOrder::class);
+    }
+
+    public function damagedLogs()
+    {
+        return $this->hasMany(DamagedStockLog::class)->latest();
     }
 }

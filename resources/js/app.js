@@ -6,9 +6,19 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const defaultAppName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 const el = document.getElementById('app');
+
+let appName = defaultAppName;
+if (el && el.dataset.page) {
+    try {
+        const pageData = JSON.parse(el.dataset.page);
+        if (pageData.props?.settings?.company_name) {
+            appName = pageData.props.settings.company_name;
+        }
+    } catch(e) {}
+}
 
 if (el && el.dataset.page) {
     createInertiaApp({

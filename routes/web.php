@@ -14,6 +14,7 @@ use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\SalePaymentController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\WorkOrderController;
+use App\Http\Controllers\DamagedStockController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -109,6 +110,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::put('products/{product}/favorite', [ProductController::class, 'toggleFavorite'])
         ->name('products.toggle-favorite');
+
+        Route::post('/damaged-stock', [DamagedStockController::class, 'store'])
+        ->name('damaged-stock.store');
     });
 
     // ==========================================

@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $settings['company_name'] ?? 'Taller 360' }} | Fabricantes Directos en Tepatitlán</title>
+    <title>{{ $settings['company_name'] ?? 'Industria Santa Cecilia' }} | Fabricantes Directos en Tepatitlán</title>
     
     <!-- Meta SEO -->
     <meta name="description" content="Muebles de alta calidad fabricados en Tepatitlán. Venta de mayoreo y menudeo. Catálogo digital de roperos, cómodas, bases y más.">
     <meta name="keywords" content="Muebles, Tepatitlán, Fabricantes, Roperos, Cómodas, Mayoreo, Menudeo">
+    
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ asset('site.webmanifest') }}">
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -52,7 +58,7 @@
                             </div>
                         @endif
                         <span class="text-xl font-bold tracking-tight text-gray-900 group-hover:text-red-600 transition-colors">
-                            {{ $settings['company_name'] ?? 'Taller 360' }}
+                            {{ $settings['company_name'] ?? 'Industria Santa Cecilia' }}
                         </span>
                     </a>
                 </div>
@@ -125,7 +131,7 @@
                         <div class="absolute -bottom-2 left-0 w-1/3 h-1.5 bg-red-600 rounded-full"></div>
                     </h2>
                     <p class="text-lg text-gray-600 mb-6 leading-relaxed">
-                        En <span class="font-semibold text-gray-900">{{ $settings['company_name'] ?? 'Taller 360' }}</span>, no solo vendemos muebles, los fabricamos con orgullo desde Tepatitlán de Morelos. Nuestra pasión es transformar materiales de primera calidad en piezas que dan vida a tu hogar.
+                        En <span class="font-semibold text-gray-900">{{ $settings['company_name'] ?? 'Industria Santa Cecilia' }}</span>, no solo vendemos muebles, los fabricamos con orgullo desde Tepatitlán de Morelos. Nuestra pasión es transformar materiales de primera calidad en piezas que dan vida a tu hogar.
                     </p>
                     <ul class="space-y-4">
                         <li class="flex items-start">
@@ -270,7 +276,7 @@
     <!-- FOOTER -->
     <footer class="bg-gray-950 text-gray-500 py-12 text-center border-t border-gray-800 mt-auto">
         <div class="max-w-7xl mx-auto px-4">
-            <p>&copy; {{ date('Y') }} {{ $settings['company_name'] ?? 'Taller 360' }}. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} {{ $settings['company_name'] ?? 'Industria Santa Cecilia' }}. Todos los derechos reservados.</p>
             <p class="text-sm mt-2">Fabricado en Tepatitlán de Morelos, Jal.</p>
         </div>
     </footer>

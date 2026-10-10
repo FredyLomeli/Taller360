@@ -36,6 +36,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'settings' => [
                 'allow_negative_stock' => \App\Models\Setting::where('key', 'allow_negative_stock')->value('value') == 1,
+                'company_name' => \App\Models\Setting::where('key', 'company_name')->value('value') ?: 'Taller 360',
             ],
         ];
     }

@@ -18,14 +18,15 @@
 ✅ FASE 4.1 — Catálogo Público y Landing     (COMPLETADA: Blade SSR, SEO, modal y WhatsApp)
 ✅ ESTADO DETALLADO Y RESERVA                (COMPLETADA: WIP aislado y deductivas MAX en backend)
                                      ↓
-🟢 TAREA 1 — FASE 2.5 Embarques              (selector multi-cliente UI + remisión agrupada)
-🟢 TAREA 2 — Limpieza dependencias Tailwind  (remover @tailwindcss/vite muerto o migrar a v4)
-🟡 TAREA 3 — FASE 2.6 Rendimiento Hosting    (paginación en ProductController + límite en POS)
-🟡 TAREA 4 — Ajustes al Ciclo de Venta       (fecha compromiso editable + forzar modo taller por backend)
-🟢 TAREA 5 — FASE 4.2 Catálogo por Cliente   (catalog_token + vista con precios por tier)
-🟡 TAREA 6 — FASE 3 Dashboards por Rol       (Producción, Financiero, Inventarios)
+🟢 TAREA 1 — FASE 2.5 Embarques              (COMPLETADA)
+🟢 TAREA 2 — Limpieza dependencias Tailwind  (COMPLETADA - v4)
+🟢 TAREA 4 — Ajustes al Ciclo de Venta       (COMPLETADA)
+                                     ↓
+🔴 TAREA 5 — FASE 4.2 Catálogo por Cliente   (catalog_token + vista con precios por tier) [Siguiente!]
+🟡 TAREA 6 — FASE 3 Dashboards por Rol       (Finanzas, Producción, Inventarios)
 🔵 FASE 5   — Precios dinámicos por flete     (diseño cerrado, sin construir)
 🟣 FASE 6   — Reportes PDF globales          (actividad final)
+⚪ TAREA 3 — FASE 2.6 Rendimiento Hosting    (paginación en ProductController + límite en POS) [Pospuesto al final]
 ```
 
 ---
@@ -94,16 +95,16 @@ El archivo `package.json` tiene instalados `@tailwindcss/vite ^4.0.0` y `tailwin
 ---
 
 ## PRÓXIMA TAREA #3: Optimización de Consultas para Hosting Compartido (Fase 2.6)
-**Tiempo estimado:** 1-2 horas | **Prioridad:** Media (rendimiento)
-
-1. **`ProductController::index()`:**
-   - Carga todos los productos con variantes y precios sin paginar.
-   - Paginar en servidor (`Product::with(['category:id,name', 'variants'])->paginate(20)`) y adaptar `Products/Index.vue`.
-2. **`SaleController::create()` (POS):**
-   - Acotar `Client::all()` a:
-     ```php
-     Client::select('id', 'name', 'business_name', 'price_tier')->orderBy('name')->get()
-     ```
+**Estado:** Pospuesto al final del proyecto por decisión de negocio. | **Prioridad:** Baja
+ 
+ 1. **`ProductController::index()`:**
+    - Carga todos los productos con variantes y precios sin paginar.
+    - Paginar en servidor (`Product::with(['category:id,name', 'variants'])->paginate(20)`) y adaptar `Products/Index.vue`.
+ 2. **`SaleController::create()` (POS):**
+    - Acotar `Client::all()` a:
+      ```php
+      Client::select('id', 'name', 'business_name', 'price_tier')->orderBy('name')->get()
+      ```
 
 ---
 
