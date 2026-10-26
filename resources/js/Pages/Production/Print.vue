@@ -51,7 +51,15 @@ onMounted(() => {
                 <tr v-for="(group, key) in productionQueue" :key="key">
                     <td class="border border-black px-2 py-1.5">
                         <span class="font-bold uppercase text-[11px] leading-none block">{{ group.name }}</span>
-                        <span class="text-[9px] text-gray-600 block mt-0.5">Mat: {{ group.material }}</span>
+                        <span class="text-[9px] text-gray-600 block mt-0.5">Mat: {{ group.material }} <span v-if="group.measurements">| {{ group.measurements }}</span></span>
+                        
+                        <!-- Desglose por color si es Melamina -->
+                        <div v-if="group.material === 'Melamina' && group.color_breakdown && group.color_breakdown.length > 0" class="mt-1 pt-1 border-t border-gray-300 text-[9px]">
+                            <div v-for="cb in group.color_breakdown" :key="cb.color" class="flex justify-between items-center py-0.5" :class="{'font-bold text-black': cb.pending_to_fabricate > 0}">
+                                <span>{{ cb.color }}:</span>
+                                <span>Bodega: {{ cb.in_stock }} | Req: {{ cb.needed }} | <strong>Fab: {{ cb.pending_to_fabricate }}</strong></span>
+                            </div>
+                        </div>
                     </td>
                     <td class="border border-black px-1 py-1.5 text-center font-bold">{{ group.total_needed }}</td>
                     <td class="border border-black px-1 py-1.5 text-center">{{ group.in_stock }}</td>
@@ -60,7 +68,13 @@ onMounted(() => {
                         <div class="w-4 h-4 border border-black rounded mx-auto"></div>
                     </td>
                     <td class="border border-black px-1 py-1.5 text-center"></td>
-                    <td class="border border-black px-1 py-1.5"></td>
+                    <td class="border border-black px-1 py-1.5 text-[9px]">
+                        <div v-if="group.material === 'Melamina' && group.color_breakdown">
+                            <span v-for="cb in group.color_breakdown.filter(c => c.pending_to_fabricate > 0)" :key="cb.color" class="inline-block mr-1 font-bold">
+                                [Fab: {{ cb.pending_to_fabricate }} {{ cb.color }}]
+                            </span>
+                        </div>
+                    </td>
                 </tr>
             </tbody>
         </table>

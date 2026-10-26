@@ -73,7 +73,10 @@ const consumedByVariant = computed(() => {
 
 const getAvailableToSend = (detail) => {
     const pending = detail.quantity - (detail.delivered_quantity || 0);
-    const stock = detail.variant?.stock || 0;
+    let stock = detail.variant?.stock || 0;
+    if (detail.available_color_stock !== null && detail.available_color_stock !== undefined) {
+        stock = detail.available_color_stock;
+    }
 
     const currentLineQty = form.items.find(i => i.sale_detail_id === detail.id)?.quantity || 0;
     const takenByOtherLines = (consumedByVariant.value[detail.product_variant_id] || 0) - currentLineQty;
@@ -84,7 +87,10 @@ const getAvailableToSend = (detail) => {
 
 const isShippable = (detail) => {
     const pending = detail.quantity - (detail.delivered_quantity || 0);
-    const stock = detail.variant?.stock || 0;
+    let stock = detail.variant?.stock || 0;
+    if (detail.available_color_stock !== null && detail.available_color_stock !== undefined) {
+        stock = detail.available_color_stock;
+    }
     return pending > 0 && stock > 0;
 };
 
@@ -324,9 +330,12 @@ const totalItemsInTruck = computed(() => {
                                                         <span v-if="detail.variant?.measurements" class="text-gray-300 mx-1">|</span>
                                                         <span v-if="detail.variant?.measurements">Medida: {{ detail.variant.measurements }}</span>
                                                     </p>
-                                                    <div class="flex items-center gap-4 mt-1 text-xs">
+                                                    <div class="flex items-center gap-4 mt-1 text-xs flex-wrap">
                                                         <span class="text-gray-500 font-medium">Pendientes: <span class="font-bold text-red-500">{{ detail.quantity - (detail.delivered_quantity || 0) }}</span></span>
                                                         <span class="text-gray-500 font-medium">Stock Físico: <span class="font-bold text-green-600">{{ detail.variant?.stock || 0 }}</span></span>
+                                                        <span v-if="detail.available_color_stock !== null && detail.available_color_stock !== undefined" class="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                            🎨 En Color {{ detail.chosen_color }}: {{ detail.available_color_stock }}
+                                                        </span>
                                                         <span class="text-gray-500 font-medium">En Detallado: <span class="font-bold text-amber-500">{{ detail.detailed_quantity || 0 }}</span></span>
                                                     </div>
                                                 </div>

@@ -46,4 +46,9 @@ protected $fillable = [
     {
         return $this->hasMany(DamagedStockLog::class)->latest();
     }
+
+    public function colorStocks()
+    {
+        return $this->hasMany(VariantColorStock::class);
+    }
 }

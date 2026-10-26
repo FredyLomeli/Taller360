@@ -37,7 +37,7 @@ class ProductionController extends Controller
                     $sq->where('status', '!=', 'cancelado');
                 });
             }], 'quantity_delivered')
-            ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
+            ->with(['variant.product', 'variant.colorStocks', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
                 return (object)[
@@ -79,7 +79,7 @@ class ProductionController extends Controller
         // 2. ORDENES DE TRABAJO (Pendientes o en proceso)
         $workOrders = WorkOrder::whereIn('status', ['pending', 'in_progress'])
             ->withSum('productionCompletions as completed_quantity', 'quantity_completed')
-            ->with(['productVariant.product'])
+            ->with(['productVariant.product', 'productVariant.colorStocks'])
             ->get()
             ->map(function ($wo) {
                 return (object)[
@@ -90,7 +90,7 @@ class ProductionController extends Controller
                     'quantity' => $wo->quantity_requested,
                     'completed_quantity' => $wo->completed_quantity ?? 0,
                     'detailed_quantity' => 0, // No aplica para WorkOrders
-                    'chosen_color' => null,
+                    'chosen_color' => $wo->color,
                     'variant' => $wo->productVariant,
                     'sale' => null,
                 ];
@@ -111,17 +111,84 @@ class ProductionController extends Controller
             $wipDetailed = max(0, $salesDetailed - $salesDelivered);
             $stockFisico = $variant->available_stock ?? 0;
 
-            // Faltantes de Pedidos considerando inventario disponible
-            $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
+            $isMelamina = ($variant->material === 'Melamina');
+            $colorBreakdown = [];
 
-            // Faltantes de Órdenes de Trabajo (autónomas: se fabrican para almacén sí o sí)
-            $woNeeded = $woGroup->sum('quantity');
-            $woCompleted = $woGroup->sum('completed_quantity') ?? 0;
-            $pendingWO = max(0, $woNeeded - $woCompleted);
+            if ($isMelamina) {
+                $colorStocksMap = $variant->colorStocks ? $variant->colorStocks->keyBy('color') : collect();
+                $defaultColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel'];
+                $usedColors = $group->pluck('chosen_color')->filter()->unique();
+                $allColors = collect($defaultColors)->concat($usedColors)->unique()->values();
 
-            $pendingToFabricate = $pendingSales + $pendingWO;
-            $totalNeeded = $salesNeeded + $woNeeded;
-            $totalCompleted = $salesCompleted + $woCompleted;
+                $pendingSales = 0;
+                $pendingWO = 0;
+
+                foreach ($allColors as $c) {
+                    $salesForColor = $salesGroup->where('chosen_color', $c);
+                    $salesNeededColor = $salesForColor->sum('quantity');
+                    $salesDetailedColor = $salesForColor->sum(fn($i) => $i->detailed_quantity ?? 0);
+                    $salesDeliveredColor = $salesForColor->sum(fn($i) => $i->delivered_quantity ?? 0);
+                    $wipDetailedColor = max(0, $salesDetailedColor - $salesDeliveredColor);
+
+                    $stockColorObj = $colorStocksMap->get($c);
+                    $stockFisicoColor = $stockColorObj ? $stockColorObj->available_stock : 0;
+
+                    $pendingSalesColor = max(0, $salesNeededColor - $stockFisicoColor - $wipDetailedColor - $salesDeliveredColor);
+
+                    $woForColor = $woGroup->where('chosen_color', $c);
+                    $woNeededColor = $woForColor->sum('quantity');
+                    $woCompletedColor = $woForColor->sum('completed_quantity') ?? 0;
+                    $pendingWOColor = max(0, $woNeededColor - $woCompletedColor);
+
+                    $pendingToFabricateColor = $pendingSalesColor + $pendingWOColor;
+
+                    $colorBreakdown[] = [
+                        'color' => $c,
+                        'needed' => $salesNeededColor + $woNeededColor,
+                        'in_stock' => $stockFisicoColor,
+                        'in_detailed' => $wipDetailedColor,
+                        'delivered' => $salesDeliveredColor,
+                        'pending_sales' => $pendingSalesColor,
+                        'pending_wo' => $pendingWOColor,
+                        'pending_to_fabricate' => $pendingToFabricateColor,
+                    ];
+
+                    $pendingSales += $pendingSalesColor;
+                    $pendingWO += $pendingWOColor;
+                }
+
+                $salesNoColor = $salesGroup->filter(fn($i) => empty($i->chosen_color));
+                if ($salesNoColor->isNotEmpty()) {
+                    $noColorNeeded = $salesNoColor->sum('quantity');
+                    $noColorDetailed = max(0, $salesNoColor->sum(fn($i) => $i->detailed_quantity ?? 0) - $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0));
+                    $noColorDelivered = $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0);
+                    $pendingNoColor = max(0, $noColorNeeded - $noColorDetailed - $noColorDelivered);
+                    $pendingSales += $pendingNoColor;
+                    if ($pendingNoColor > 0) {
+                        $colorBreakdown[] = [
+                            'color' => 'Sin Color',
+                            'needed' => $noColorNeeded,
+                            'in_stock' => 0,
+                            'in_detailed' => $noColorDetailed,
+                            'delivered' => $noColorDelivered,
+                            'pending_sales' => $pendingNoColor,
+                            'pending_wo' => 0,
+                            'pending_to_fabricate' => $pendingNoColor,
+                        ];
+                    }
+                }
+
+                $pendingToFabricate = $pendingSales + $pendingWO;
+            } else {
+                $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
+                $woNeeded = $woGroup->sum('quantity');
+                $woCompleted = $woGroup->sum('completed_quantity') ?? 0;
+                $pendingWO = max(0, $woNeeded - $woCompleted);
+                $pendingToFabricate = $pendingSales + $pendingWO;
+            }
+
+            $totalNeeded = $salesNeeded + ($woGroup->sum('quantity') ?? 0);
+            $totalCompleted = $salesCompleted + ($woGroup->sum('completed_quantity') ?? 0);
             $totalDelivered = $salesDelivered;
 
             return [
@@ -130,6 +197,7 @@ class ProductionController extends Controller
                 'measurements' => $variant->measurements ?? null,
                 'total_quantity' => $totalNeeded,
                 'breakdown' => $group->groupBy('chosen_color'),
+                'color_breakdown' => $colorBreakdown,
                 'orders' => $group->map(function ($detail) {
                     $isOverdue = false;
                     $promised = null;
@@ -144,12 +212,23 @@ class ProductionController extends Controller
                         'promised_date' => $promised,
                         'type' => ($detail->source_type === 'work_order') ? 'work_order' : 'sale',
                         'source_id' => $detail->source_id,
+                        'chosen_color' => $detail->chosen_color,
                     ];
-                })->unique('id')->values(),
-                'details' => $group->map(function ($item) {
+                })->unique(fn($o) => $o['id'] . '-' . ($o['chosen_color'] ?? ''))->values(),
+                'details' => $group->map(function ($item) use ($isMelamina, $colorBreakdown, $pendingSales) {
                     $rem = ($item->source_type === 'work_order')
                         ? max(0, $item->quantity - ($item->completed_quantity ?? 0))
                         : max(0, $item->quantity - max($item->completed_quantity ?? 0, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0));
+
+                    $isCovered = false;
+                    if ($item->source_type === 'sale_detail') {
+                        if ($isMelamina && !empty($item->chosen_color)) {
+                            $cb = collect($colorBreakdown)->firstWhere('color', $item->chosen_color);
+                            $isCovered = ($cb && $cb['pending_sales'] === 0);
+                        } else {
+                            $isCovered = ($pendingSales === 0);
+                        }
+                    }
 
                     return (object)[
                         'source_type' => $item->source_type,
@@ -163,6 +242,7 @@ class ProductionController extends Controller
                         'delivered_quantity' => $item->delivered_quantity ?? 0,
                         'pending_quantity' => $rem,
                         'chosen_color' => $item->chosen_color,
+                        'is_covered_by_stock' => $isCovered,
                         'variant' => $item->variant,
                         'sale' => $item->sale ?? null,
                     ];
@@ -194,7 +274,7 @@ class ProductionController extends Controller
                     $sq->where('status', '!=', 'cancelado');
                 });
             }], 'quantity_delivered')
-            ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
+            ->with(['variant.product', 'variant.colorStocks', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get();
 
         $allVariants = \App\Models\ProductVariant::select('id', 'product_id', 'material', 'measurements')
@@ -237,6 +317,19 @@ class ProductionController extends Controller
 
                 $saleDetail->variant->increment('stock', $request->quantity);
 
+                $color = $saleDetail->chosen_color;
+                if ($color) {
+                    $hasColorTracking = ($saleDetail->variant->material === 'Melamina') 
+                        || \App\Models\VariantColorStock::where('product_variant_id', $saleDetail->variant->id)->exists();
+                    if ($hasColorTracking) {
+                        $colorStock = \App\Models\VariantColorStock::firstOrCreate(
+                            ['product_variant_id' => $saleDetail->variant->id, 'color' => $color],
+                            ['stock' => 0, 'damaged_stock' => 0, 'reserved_stock' => 0]
+                        );
+                        $colorStock->increment('stock', $request->quantity);
+                    }
+                }
+
                 SaleHistory::create([
                     'sale_id' => $saleDetail->sale_id,
                     'user_id' => auth()->id(),
@@ -254,6 +347,19 @@ class ProductionController extends Controller
                 ]);
 
                 $workOrder->productVariant->increment('stock', $request->quantity);
+
+                $color = $workOrder->color;
+                if ($color) {
+                    $hasColorTracking = ($workOrder->productVariant->material === 'Melamina') 
+                        || \App\Models\VariantColorStock::where('product_variant_id', $workOrder->productVariant->id)->exists();
+                    if ($hasColorTracking) {
+                        $colorStock = \App\Models\VariantColorStock::firstOrCreate(
+                            ['product_variant_id' => $workOrder->productVariant->id, 'color' => $color],
+                            ['stock' => 0, 'damaged_stock' => 0, 'reserved_stock' => 0]
+                        );
+                        $colorStock->increment('stock', $request->quantity);
+                    }
+                }
                 
                 $totalCompleted = $workOrder->productionCompletions()->sum('quantity_completed');
                 if ($totalCompleted >= $workOrder->quantity_requested) {
@@ -285,7 +391,7 @@ class ProductionController extends Controller
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
             ->withSum('detalladoRecords as detailed_quantity', 'quantity')
-            ->with(['variant.product', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
+            ->with(['variant.product', 'variant.colorStocks', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
                 return (object)[
@@ -305,7 +411,7 @@ class ProductionController extends Controller
 
         $workOrders = WorkOrder::whereIn('status', ['pending', 'in_progress'])
             ->withSum('productionCompletions as completed_quantity', 'quantity_completed')
-            ->with(['productVariant.product'])
+            ->with(['productVariant.product', 'productVariant.colorStocks'])
             ->get()
             ->map(function ($wo) {
                 return (object)[
@@ -316,7 +422,7 @@ class ProductionController extends Controller
                     'quantity' => $wo->quantity_requested,
                     'completed_quantity' => $wo->completed_quantity ?? 0,
                     'detailed_quantity' => 0,
-                    'chosen_color' => null,
+                    'chosen_color' => $wo->color,
                     'variant' => $wo->productVariant,
                     'sale' => null,
                 ];
@@ -345,9 +451,80 @@ class ProductionController extends Controller
             $wipDetailed = max(0, $salesDetailed - $salesDelivered);
             $stockFisico = $variant->available_stock ?? 0;
 
-            $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
-            $pendingWO = max(0, $woGroup->sum('quantity') - ($woGroup->sum('completed_quantity') ?? 0));
-            $pendingToFabricate = $pendingSales + $pendingWO;
+            $isMelamina = ($variant->material === 'Melamina');
+            $colorBreakdown = [];
+
+            if ($isMelamina) {
+                $colorStocksMap = $variant->colorStocks ? $variant->colorStocks->keyBy('color') : collect();
+                $defaultColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel'];
+                $usedColors = $group->pluck('chosen_color')->filter()->unique();
+                $allColors = collect($defaultColors)->concat($usedColors)->unique()->values();
+
+                $pendingSales = 0;
+                $pendingWO = 0;
+
+                foreach ($allColors as $c) {
+                    $salesForColor = $salesGroup->where('chosen_color', $c);
+                    $salesNeededColor = $salesForColor->sum('quantity');
+                    $salesCompletedColor = $salesForColor->sum('completed_quantity') ?? 0;
+                    $salesDetailedColor = $salesForColor->sum(fn($i) => $i->detailed_quantity ?? 0);
+                    $salesDeliveredColor = $salesForColor->sum(fn($i) => $i->delivered_quantity ?? 0);
+                    $wipDetailedColor = max(0, $salesDetailedColor - $salesDeliveredColor);
+
+                    $stockColorObj = $colorStocksMap->get($c);
+                    $stockFisicoColor = $stockColorObj ? $stockColorObj->available_stock : 0;
+
+                    $pendingSalesColor = max(0, $salesNeededColor - $stockFisicoColor - $wipDetailedColor - $salesDeliveredColor);
+
+                    $woForColor = $woGroup->where('chosen_color', $c);
+                    $woNeededColor = $woForColor->sum('quantity');
+                    $woCompletedColor = $woForColor->sum('completed_quantity') ?? 0;
+                    $pendingWOColor = max(0, $woNeededColor - $woCompletedColor);
+
+                    $pendingToFabricateColor = $pendingSalesColor + $pendingWOColor;
+
+                    $colorBreakdown[] = [
+                        'color' => $c,
+                        'needed' => $salesNeededColor + $woNeededColor,
+                        'in_stock' => $stockFisicoColor,
+                        'in_detailed' => $wipDetailedColor,
+                        'delivered' => $salesDeliveredColor,
+                        'pending_sales' => $pendingSalesColor,
+                        'pending_wo' => $pendingWOColor,
+                        'pending_to_fabricate' => $pendingToFabricateColor,
+                    ];
+
+                    $pendingSales += $pendingSalesColor;
+                    $pendingWO += $pendingWOColor;
+                }
+
+                $salesNoColor = $salesGroup->filter(fn($i) => empty($i->chosen_color));
+                if ($salesNoColor->isNotEmpty()) {
+                    $noColorNeeded = $salesNoColor->sum('quantity');
+                    $noColorDetailed = max(0, $salesNoColor->sum(fn($i) => $i->detailed_quantity ?? 0) - $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0));
+                    $noColorDelivered = $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0);
+                    $pendingNoColor = max(0, $noColorNeeded - $noColorDetailed - $noColorDelivered);
+                    $pendingSales += $pendingNoColor;
+                    if ($pendingNoColor > 0) {
+                        $colorBreakdown[] = [
+                            'color' => 'Sin Color',
+                            'needed' => $noColorNeeded,
+                            'in_stock' => 0,
+                            'in_detailed' => $noColorDetailed,
+                            'delivered' => $noColorDelivered,
+                            'pending_sales' => $pendingNoColor,
+                            'pending_wo' => 0,
+                            'pending_to_fabricate' => $pendingNoColor,
+                        ];
+                    }
+                }
+
+                $pendingToFabricate = $pendingSales + $pendingWO;
+            } else {
+                $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
+                $pendingWO = max(0, $woGroup->sum('quantity') - ($woGroup->sum('completed_quantity') ?? 0));
+                $pendingToFabricate = $pendingSales + $pendingWO;
+            }
 
             return [
                 'name' => $group->first()->product_name,
@@ -359,6 +536,7 @@ class ProductionController extends Controller
                 'pending_sales' => $pendingSales,
                 'pending_wo' => $pendingWO,
                 'pending_to_fabricate' => $pendingToFabricate,
+                'color_breakdown' => $colorBreakdown,
                 'details' => $group->map(function ($item) {
                     $rem = ($item->source_type === 'work_order')
                         ? max(0, $item->quantity - ($item->completed_quantity ?? 0))

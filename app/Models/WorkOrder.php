@@ -12,6 +12,7 @@ class WorkOrder extends Model
     protected $fillable = [
         'product_variant_id',
         'quantity_requested',
+        'color',
         'target_date',
         'status',
         'origin_sale_detail_id',

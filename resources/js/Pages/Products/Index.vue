@@ -241,10 +241,20 @@ const deleteProduct = (product) => {
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col gap-1.5 py-1">
                                             <div v-for="variant in product.variants" :key="variant.id" class="text-xs flex flex-col md:flex-row md:items-center justify-between bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 shadow-2xs gap-2">
-                                                <div class="flex items-center gap-2 flex-wrap">
-                                                    <span class="font-bold text-gray-800">{{ variant.material }}</span>
-                                                    <span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-blue-100">{{ variant.measurements }}</span>
-                                                    <span v-if="variant.sku" class="text-gray-400 text-[10px]">({{ variant.sku }})</span>
+                                                <div class="flex flex-col gap-1">
+                                                    <div class="flex items-center gap-2 flex-wrap">
+                                                        <span class="font-bold text-gray-800">{{ variant.material }}</span>
+                                                        <span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-blue-100">{{ variant.measurements }}</span>
+                                                        <span v-if="variant.sku" class="text-gray-400 text-[10px]">({{ variant.sku }})</span>
+                                                    </div>
+                                                    
+                                                    <!-- Desglose por color si tiene existencias registradas -->
+                                                    <div v-if="variant.color_stocks && variant.color_stocks.length > 0" class="flex items-center gap-1 flex-wrap">
+                                                        <span v-for="cs in variant.color_stocks" :key="cs.id || cs.color" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px]" :class="cs.stock > 0 ? 'bg-blue-50 text-blue-800 border border-blue-200 font-bold' : 'bg-gray-100 text-gray-400 border border-gray-200'">
+                                                            <span class="w-1.5 h-1.5 rounded-full mr-1" :class="cs.stock > 0 ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                                                            {{ cs.color }}: {{ cs.stock }}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 <div class="flex items-center gap-2 flex-wrap justify-end">
                                                     <span class="font-bold text-green-700 mr-1">{{ formatMoney(variant.price_1) }}</span>

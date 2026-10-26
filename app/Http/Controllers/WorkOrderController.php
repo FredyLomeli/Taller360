@@ -13,12 +13,14 @@ class WorkOrderController extends Controller
         $request->validate([
             'product_variant_id' => 'required|exists:product_variants,id',
             'quantity_requested' => 'required|integer|min:1',
+            'color' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);
 
         WorkOrder::create([
             'product_variant_id' => $request->product_variant_id,
             'quantity_requested' => $request->quantity_requested,
+            'color' => $request->color,
             'notes' => $request->notes,
             'status' => 'pending',
             'created_by' => auth()->id(),

@@ -53,6 +53,7 @@ const availableVariants = computed(() => {
     return props.allVariants.map(variant => {
         return {
             id: variant.id,
+            material: variant.material,
             name: variant.product.name + ' - ' + variant.material + (variant.measurements ? ' (' + variant.measurements + ')' : '')
         };
     });
@@ -60,6 +61,7 @@ const availableVariants = computed(() => {
 
 const searchQuery = ref('');
 const showDropdown = ref(false);
+const selectedVariantObj = ref(null);
 
 const filteredVariants = computed(() => {
     if (!searchQuery.value) return availableVariants.value;
@@ -68,15 +70,20 @@ const filteredVariants = computed(() => {
 });
 
 const selectVariant = (variant) => {
+    selectedVariantObj.value = variant;
     workOrderForm.product_variant_id = variant.id;
     searchQuery.value = variant.name;
     showDropdown.value = false;
+    if (variant.material === 'Melamina' && !workOrderForm.color) {
+        workOrderForm.color = 'Blanco';
+    }
 };
 
 const showWorkOrderModal = ref(false);
 const workOrderForm = useForm({
     product_variant_id: '',
     quantity_requested: 1,
+    color: '',
     target_date: '',
     notes: ''
 });
@@ -93,6 +100,7 @@ const submitWorkOrder = () => {
             showWorkOrderModal.value = false;
             workOrderForm.reset();
             searchQuery.value = '';
+            selectedVariantObj.value = null;
             Swal.fire({ icon: 'success', title: 'Orden Creada', text: 'Se ha añadido a la cola de producción.', timer: 2000, showConfirmButton: false });
         }
     });
@@ -316,6 +324,17 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                     <div class="text-[10px] text-gray-400 uppercase font-bold mt-0.5">
                                         Mat: {{ group.material }} <span v-if="group.measurements" class="text-gray-300">|</span> {{ group.measurements }}
                                     </div>
+
+                                    <!-- Desglose por color si es Melamina -->
+                                    <div v-if="group.material === 'Melamina' && group.color_breakdown && group.color_breakdown.length > 0" class="flex flex-wrap gap-1 mt-2">
+                                        <span v-for="cb in group.color_breakdown" :key="cb.color" 
+                                              class="text-[9px] px-1.5 py-0.5 rounded font-semibold border flex items-center gap-1"
+                                              :class="cb.pending_to_fabricate > 0 ? 'bg-red-50 text-red-700 border-red-200 font-bold' : (cb.in_stock > 0 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-400 border-gray-200')">
+                                            <span class="w-1.5 h-1.5 rounded-full" :class="cb.pending_to_fabricate > 0 ? 'bg-red-500' : (cb.in_stock > 0 ? 'bg-blue-500' : 'bg-gray-300')"></span>
+                                            {{ cb.color }}: Bodega {{ cb.in_stock }}
+                                            <span v-if="cb.pending_to_fabricate > 0" class="text-red-700 font-black ml-0.5">| Fab: {{ cb.pending_to_fabricate }}</span>
+                                        </span>
+                                    </div>
                                 </td>
 
                                 <td class="p-3 align-top text-center">
@@ -352,6 +371,11 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                     <span v-else class="bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm">
                                         🛠️ Fabricar Todo
                                     </span>
+
+                                    <!-- Detalle de faltantes por color para Melamina -->
+                                    <div v-if="group.material === 'Melamina' && group.pending_to_fabricate > 0 && group.color_breakdown" class="text-[10px] text-red-600 font-bold mt-1 text-center bg-red-50/80 px-2 py-0.5 rounded border border-red-200">
+                                        Por fabricar: {{ group.color_breakdown.filter(c => c.pending_to_fabricate > 0).map(c => `${c.pending_to_fabricate} ${c.color}`).join(', ') }}
+                                    </div>
                                 </td>
 
                                 <td class="p-3 align-top w-[250px] whitespace-normal">
@@ -363,6 +387,9 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                                       order.is_overdue ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
                                                   ]">
                                                 <span>{{ order.id }}</span>
+                                                <span v-if="order.chosen_color" class="bg-blue-100 text-blue-800 text-[9px] px-1 rounded font-black">
+                                                    {{ order.chosen_color }}
+                                                </span>
                                                 <span class="text-[9px] font-normal border-l pl-1 border-current opacity-80 flex items-center gap-0.5">
                                                     📅 {{ formatPromisedDate(order.promised_date) }}
                                                 </span>
@@ -370,6 +397,9 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                             
                                             <span v-else class="px-2 py-1 rounded text-[10px] font-bold border border-purple-200 bg-purple-50 text-purple-700 shadow-sm inline-flex items-center gap-1">
                                                 <span>🛠️ {{ order.id }}</span>
+                                                <span v-if="order.chosen_color" class="bg-purple-200 text-purple-900 text-[9px] px-1 rounded font-black">
+                                                    {{ order.chosen_color }}
+                                                </span>
                                                 <span class="text-[9px] font-normal border-l pl-1 border-current opacity-80">Manual</span>
                                             </span>
                                         </template>
@@ -383,11 +413,18 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                             <div class="flex flex-col">
                                                 <span v-if="item.source_type === 'sale_detail'" class="text-[10px] text-gray-700 font-bold flex items-center flex-wrap gap-1">
                                                     <Link :href="route('sales.show', item.sale_id)" class="text-blue-600 hover:underline">Ped. #{{ item.sale_id }}</Link>
+                                                    <span v-if="item.chosen_color" class="bg-blue-100 text-blue-800 text-[9px] px-1.5 py-0.2 rounded font-black">
+                                                        🎨 {{ item.chosen_color }}
+                                                    </span>
                                                     <span class="text-gray-400 font-normal">| Restan: {{ item.pending_quantity ?? Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) }}</span>
                                                     <span v-if="item.detailed_quantity > 0" class="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1 rounded font-bold">En Detallado: {{ item.detailed_quantity }}</span>
                                                 </span>
-                                                <span v-else class="text-[10px] text-purple-700 font-bold">
-                                                    WO #{{ item.source_id }} <span class="text-gray-400 ml-1 font-normal">| Restan: {{ item.pending_quantity ?? Math.max(0, item.quantity - (item.completed_quantity || 0)) }}</span>
+                                                <span v-else class="text-[10px] text-purple-700 font-bold flex items-center flex-wrap gap-1">
+                                                    WO #{{ item.source_id }}
+                                                    <span v-if="item.chosen_color" class="bg-purple-200 text-purple-900 text-[9px] px-1.5 py-0.2 rounded font-black">
+                                                        🎨 {{ item.chosen_color }}
+                                                    </span>
+                                                    <span class="text-gray-400 ml-1 font-normal">| Restan: {{ item.pending_quantity ?? Math.max(0, item.quantity - (item.completed_quantity || 0)) }}</span>
                                                 </span>
                                                 
                                                 <span v-if="item.source_type === 'sale_detail'" class="text-[9px] text-gray-500 flex items-center gap-1">
@@ -399,7 +436,7 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                                             </div>
 
                                             <div class="flex items-center gap-1">
-                                                <template v-if="item.source_type === 'sale_detail' && group.pending_sales === 0">
+                                                <template v-if="item.source_type === 'sale_detail' && item.is_covered_by_stock">
                                                     <span class="bg-green-100 text-green-700 text-[10px] px-2 py-1 rounded font-bold border border-green-200">Cubierto por Stock</span>
                                                 </template>
                                                 <template v-else-if="item.source_type === 'sale_detail' && (item.pending_quantity <= 0 || Math.max(0, item.quantity - Math.max(item.completed_quantity || 0, item.detailed_quantity || 0, item.delivered_quantity || 0)) <= 0)">
@@ -478,6 +515,21 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                         </div>
                         <p class="text-[10px] text-gray-500 mt-1">Selecciona cualquier variante del catálogo.</p>
                     </div>
+
+                    <div v-if="selectedVariantObj?.material === 'Melamina' || (selectedVariantObj?.name && selectedVariantObj.name.includes('Melamina'))">
+                        <label class="block text-xs font-bold text-purple-900 mb-1.5 uppercase tracking-wide">Color de Fabricación (Melamina) <span class="text-red-500">*</span></label>
+                        <select v-model="workOrderForm.color" required class="w-full border-purple-200 bg-purple-50/50 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm p-2.5 font-bold text-purple-900">
+                            <option value="Blanco">Blanco</option>
+                            <option value="Gris">Gris</option>
+                            <option value="Texturizado">Texturizado</option>
+                            <option value="Oyamel">Oyamel</option>
+                        </select>
+                    </div>
+                    <div v-else-if="selectedVariantObj">
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Color / Acabado (Opcional)</label>
+                        <input type="text" v-model="workOrderForm.color" placeholder="Ej. Natural, Caoba, etc." class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm p-2.5">
+                    </div>
+
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Cantidad</label>

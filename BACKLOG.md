@@ -28,6 +28,23 @@
 - [x] Frontend: Modal de "Control de Daños" en `Products/Index.vue` con formulario para registrar movimientos validados y tabla con historial cronológico de auditoría (quién, cuándo, tipo, cantidad, notas).
 - [x] Pruebas: Feature test `DamagedStockTest` validando transiciones, restricciones de inventario e integridad del historial.
 
+### 3. 🎨 Control de Existencias Físicas por Color (Melamina - Colores de Fábrica) [COMPLETADO ✅ - Octubre 2026]
+- [x] Base de Datos: Migración `2026_10_13_160000_create_variant_color_stocks_table.php` para crear tabla `variant_color_stocks` (`id`, `product_variant_id`, `color`, `stock`, `damaged_stock`, `reserved_stock`, `timestamps`, índice único `['product_variant_id', 'color']`).
+- [x] Base de Datos: Migración `2026_10_13_160500_add_color_to_work_orders_table.php` para añadir columna `color` (nullable) a `work_orders`.
+- [x] Backend: Modelo `VariantColorStock` con relación `belongsTo(ProductVariant::class)` y accesor `available_stock`.
+- [x] Backend: Relación `hasMany(VariantColorStock::class, 'colorStocks')` en `ProductVariant`.
+- [x] Backend: Sincronización y persistencia de existencias por color en `ProductController@store` y `update`, sincronizando automáticamente `product_variants.stock` como la suma de colores.
+- [x] Backend: En `ProductionController@storeCompletion`, registrar incremento al color específico (del pedido o de la OT).
+- [x] Backend: En `ProductionController@index` y `@printReport`, cálculo inteligente de faltantes evaluado color por color para Melamina (`color_breakdown`), impidiendo que el stock de un color cubra la demanda de otro color faltante.
+- [x] Backend: En `ShipmentController@store`, validar disponibilidad atómica por color (`lockForUpdate`) y descontar del color exacto solicitado.
+- [x] Backend: En `ShipmentController@cancel`, restituir el stock al color exacto en `variant_color_stocks`.
+- [x] Frontend: `Products/Create.vue` y `Edit.vue` exclusivos para Melamina con los 4 colores oficiales de fábrica (`Blanco`, `Gris`, `Texturizado`, `Oyamel`), cálculo automático de Stock Total y sin opciones de crear o borrar colores arbitrarios.
+- [x] Frontend: `Products/Index.vue` con desglose visual de existencias por color (badges contrastados de piezas disponibles).
+- [x] Frontend: `Production/Index.vue` con selector de color en la modal de Orden de Trabajo, desglose visual de existencias por color, chips de color en pedidos y órdenes (`🎨 [Color]`) y alerta de faltantes por color.
+- [x] Frontend: `Production/Print.vue` con reporte para carpinteros desglosando existencias y necesidades por color, con instrucción directa de corte en notas (`[Fab: X Color]`).
+- [x] Frontend: `Shipments/Create.vue` con indicador visual de existencias en el color solicitado y restricción del máximo despachable.
+- [x] Pruebas: Feature test `VariantColorStockTest` validando inventario por color, producción, bloqueo en embarques, reversión en cancelaciones y cálculo inteligente en la cola de producción.
+
 ---
 
 ## 🎯 SPRINT ACORDADO CON CLIENTE — 04 de agosto 2026

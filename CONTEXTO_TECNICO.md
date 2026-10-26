@@ -30,6 +30,22 @@
     $$\text{available\_stock} = \max(0, \text{stock} - \text{reserved\_stock} - \text{damaged\_stock})$$
   - Frontend (`Products/Index.vue`): Desglose de stock (Físico | Dañadas | Disponible) y modal interactivo para registrar movimientos con su historial cronológico de auditoría.
 
+### C. Control de Existencias Físicas por Color (Melamina - Colores de Fábrica) (COMPLETADO)
+- **Problema en producción:** Artículos de Melamina se fabrican a partir de tableros que ya vienen con color de fábrica (Blanco, Gris, Texturizado, Oyamel). No existe la melamina "natural". Si se crearan variantes separadas por color, el catálogo público y el POS se saturarían multiplicando artículos y precios innecesariamente. Sin embargo, almacén, producción y embarques necesitan saber con precisión cuántas piezas hay físicamente en bodega de cada color para no despachar un color equivocado ni dar por cubiertos pedidos de un color cuando solo hay stock de otro.
+- **Regla de Negocio:**
+  - El producto y la variante (`ProductVariant`) permanecen como entidad comercial única (Medidas, Material, Precios).
+  - Exclusivo para `Melamina`: se gestionan de forma fija e inmutable los 4 colores oficiales del cliente (`Blanco`, `Gris`, `Texturizado`, `Oyamel`). Otros materiales (MDF, Madera, etc.) no manejan colores en inventario para mantener la agilidad de captura y evitar bloqueos por muebles fabricados en crudo.
+  - La suma de los stocks por color se mantiene sincronizada con `product_variants.stock` (retrocompatibilidad total con el resto del sistema).
+  - **Plan de Producción inteligente:** En `ProductionController@index` y `@printReport`, el cálculo de faltantes para Melamina se evalúa color por color (`color_breakdown`). Si un pedido solicita *Oyamel* y hay 0 en bodega, el sistema marca que falta fabricar 1 *Oyamel*, incluso si existen 6 piezas de *Blanco* en stock.
+  - **Cola de Producción y Reporte de Taller:** En `Production/Index.vue` se visualiza el inventario físico por color, las piezas pendientes por fabricar de cada color y chips distintivos (`🎨 [Color]`). En `Production/Print.vue` se imprime el desglose de existencias y la instrucción explícita de corte para los carpinteros en la columna de notas (`[Fab: X Color]`).
+  - **Taller (Completado de Producción):** En `ProductionController@storeCompletion`, al finalizar un lote se incrementa el stock del `chosen_color` del pedido o del `color` indicado en la orden de trabajo (`WorkOrder`).
+  - **Embarques:** En `ShipmentController@store`, se valida disponibilidad atómica con `lockForUpdate` del color solicitado (`chosen_color`). Si no hay existencias del color requerido, se impide el despacho.
+  - **Cancelación de Embarque:** En `ShipmentController@cancel`, el stock se restituye al color exacto en `variant_color_stocks`.
+- **Estructura de Base de Datos:**
+  - Tabla `variant_color_stocks`: `id`, `product_variant_id` (FK), `color` (string), `stock` (integer, default 0), `damaged_stock` (integer, default 0), `reserved_stock` (integer, default 0), `timestamps`, índice único `['product_variant_id', 'color']`.
+  - Columna en `work_orders`: `color` (`string`, nullable).
+- **Cobertura de Pruebas:** Suite completa en `tests/Feature/VariantColorStockTest.php` validando relaciones de modelo, incremento por avance de venta y de OT, bloqueo en embarques por discrepancia de color, deducción y reversión en cancelaciones, sincronización en CRUD de productos y cálculo inteligente en la cola de producción.
+
 ---
 
 ## 0.1 Acuerdos de la reuniÃ³n con cliente (04 ago 2026) â€” pendientes de construir

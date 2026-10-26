@@ -21,6 +21,9 @@ const categoryRules = {
     'Bases':                 ['MDF', 'Madera']
 };
 
+// --- GESTIÓN DE COLORES PARA MATERIALES (MELAMINA) ---
+const defaultMelaminaColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel'];
+
 // --- 2. FORMULARIO ---
 const form = useForm({
     _method: 'PUT',
@@ -29,20 +32,57 @@ const form = useForm({
     description: props.product.description,
     is_favorite: Boolean(props.product.is_favorite),
     image: null,
-    variants: props.product.variants.map(v => ({
-        id: v.id,
-        material: v.material,
-        measurements: v.measurements,
-        sku: v.sku,
-        stock: v.stock,
-        price_1: v.price_1,
-        price_2: v.price_2,
-        price_3: v.price_3,
-        price_4: v.price_4,
-        price_5: v.price_5,
-        min_stock: v.min_stock
-    }))
+    variants: props.product.variants.map(v => {
+        let colorStocks = [];
+        if (v.material === 'Melamina') {
+            const existingMap = {};
+            if (v.color_stocks && v.color_stocks.length > 0) {
+                v.color_stocks.forEach(cs => { existingMap[cs.color] = cs.stock; });
+            }
+            colorStocks = defaultMelaminaColors.map(colorName => ({
+                color: colorName,
+                stock: existingMap[colorName] !== undefined ? existingMap[colorName] : 0
+            }));
+        }
+        return {
+            id: v.id,
+            material: v.material,
+            measurements: v.measurements,
+            sku: v.sku,
+            stock: v.stock,
+            price_1: v.price_1,
+            price_2: v.price_2,
+            price_3: v.price_3,
+            price_4: v.price_4,
+            price_5: v.price_5,
+            min_stock: v.min_stock,
+            color_stocks: colorStocks,
+        };
+    })
 });
+
+const onMaterialChange = (variant) => {
+    if (variant.material === 'Melamina') {
+        const existingMap = {};
+        if (variant.color_stocks && variant.color_stocks.length > 0) {
+            variant.color_stocks.forEach(cs => { existingMap[cs.color] = cs.stock; });
+        }
+        variant.color_stocks = defaultMelaminaColors.map(c => ({
+            color: c,
+            stock: existingMap[c] !== undefined ? existingMap[c] : 0
+        }));
+        variant.stock = variant.color_stocks.reduce((sum, cs) => sum + (parseInt(cs.stock) || 0), 0);
+    } else {
+        variant.color_stocks = [];
+    }
+};
+
+const updateColorStock = (variant, index, event) => {
+    let val = parseInt(event.target.value) || 0;
+    if (val < 0) val = 0;
+    variant.color_stocks[index].stock = val;
+    variant.stock = variant.color_stocks.reduce((sum, cs) => sum + (parseInt(cs.stock) || 0), 0);
+};
 
 // --- 3. COMPUTADAS ---
 const selectedCategoryName = computed(() => {
@@ -103,7 +143,8 @@ const addVariant = () => {
         price_3: null, 
         price_4: null, 
         price_5: null,
-        min_stock: null
+        min_stock: null,
+        color_stocks: []
     });
 };
 
@@ -245,7 +286,7 @@ const sanitizeNumber = (variant, field) => {
                                         <div class="md:col-span-3">
                                             <label class="block text-xs font-bold text-gray-600 mb-1">Material <span class="text-red-500">*</span></label>
                                             <div v-if="!form.category_id" class="text-xs text-orange-500 p-2 bg-orange-50 rounded border border-orange-100">⚠ Categoría requerida.</div>
-                                            <select v-else v-model="variant.material" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 cursor-pointer">
+                                            <select v-else v-model="variant.material" @change="onMaterialChange(variant)" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 cursor-pointer">
                                                 <option v-if="variant.material && !availableMaterials.includes(variant.material)" :value="variant.material">{{ variant.material }} (Archivado)</option>
                                                 <option value="" disabled>Seleccionar Material...</option>
                                                 <option v-for="mat in availableMaterials" :key="mat" :value="mat">{{ mat }}</option>
@@ -263,8 +304,19 @@ const sanitizeNumber = (variant, field) => {
                                         </div>
                                         
                                         <div class="md:col-span-2">
-                                            <label class="block text-xs font-bold text-gray-500 mb-1">Stock</label>
-                                            <input v-model="variant.stock" type="number" min="0" @blur="sanitizeNumber(variant, 'stock')" class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600">
+                                            <label class="block text-xs font-bold text-gray-500 mb-1">
+                                                Stock Total
+                                                <span v-if="variant.material === 'Melamina'" class="text-[9px] text-blue-600 font-bold block">(Calculado por color)</span>
+                                            </label>
+                                            <input 
+                                                v-model="variant.stock" 
+                                                type="number" 
+                                                min="0" 
+                                                :disabled="variant.material === 'Melamina'"
+                                                :class="{'bg-gray-100 cursor-not-allowed font-bold text-blue-700': variant.material === 'Melamina'}"
+                                                @blur="sanitizeNumber(variant, 'stock')" 
+                                                class="w-full text-sm border-gray-300 rounded-lg focus:ring-green-500 text-gray-600"
+                                            >
                                         </div>
 
                                         <div class="md:col-span-2" v-if="form.is_favorite">
@@ -285,6 +337,38 @@ const sanitizeNumber = (variant, field) => {
                                                     class="w-full pl-7 text-sm border-green-300 bg-green-50 rounded-lg focus:ring-green-500 font-bold text-gray-900 shadow-sm"
                                                     placeholder="0.00"
                                                 >
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- DESGLOSE DE STOCK POR COLOR (EXCLUSIVO MELAMINA) -->
+                                    <div v-if="variant.material === 'Melamina'" class="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200 mt-3">
+                                        <div class="flex items-center gap-2 mb-2.5">
+                                            <span class="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                                                <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                                                Existencias por Color en Bodega
+                                            </span>
+                                            <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">
+                                                Melamina (4 Colores de Fábrica)
+                                            </span>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                            <div v-for="(cs, cIdx) in variant.color_stocks" :key="cIdx" class="bg-white p-2.5 rounded-lg border border-blue-200 shadow-2xs flex flex-col justify-between">
+                                                <div class="flex justify-between items-center mb-1.5">
+                                                    <span class="text-xs font-bold text-gray-800">{{ cs.color }}</span>
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-[10px] font-bold text-gray-400 uppercase">Pzas:</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        :value="cs.stock" 
+                                                        @input="updateColorStock(variant, cIdx, $event)" 
+                                                        class="w-full text-xs font-bold text-center border-gray-200 rounded p-1 focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="0"
+                                                    >
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

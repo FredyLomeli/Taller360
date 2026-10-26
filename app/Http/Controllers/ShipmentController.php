@@ -53,6 +53,7 @@ class ShipmentController extends Controller
                     ->withSum('detalladoRecords as raw_detailed_quantity', 'quantity');
                 },
                 'details.variant:id,product_id,material,measurements,stock',
+                'details.variant.colorStocks',
                 'details.variant.product:id,name,image',
             ])
             ->whereIn('stage', ['confirmado', 'produccion', 'enviado']);
@@ -64,7 +65,7 @@ class ShipmentController extends Controller
         $sales = $salesQuery->get()->filter(function($sale) {
             // Filtro Inteligente: Solo mostramos la venta si tiene al menos 1 artículo que:
             // 1. Falte por entregar
-            // 2. Tenga stock físico en almacén para poder enviarse HOY
+            // 2. Tenga stock físico en almacén para poder enviarse HOY (validando color si aplica)
             $hasShippableItems = false;
             foreach($sale->details as $detail) {
                 // Cálculo dinámico del remanente en detallado real (excluyendo lo ya embarcado)
@@ -75,9 +76,22 @@ class ShipmentController extends Controller
 
                 $pending = $detail->quantity - ($detail->delivered_quantity ?? 0);
                 $stock = $detail->variant->stock ?? 0;
-                
-                if ($pending > 0 && $stock > 0) {
-                    $hasShippableItems = true;
+
+                // Validación de stock por color si la variante tiene desglose o es Melamina
+                $hasColorTracking = ($detail->variant?->material === 'Melamina') || ($detail->variant?->colorStocks && $detail->variant->colorStocks->isNotEmpty());
+                if ($detail->chosen_color && $hasColorTracking) {
+                    $colorRecord = $detail->variant?->colorStocks?->firstWhere('color', $detail->chosen_color);
+                    $colorStock = $colorRecord ? $colorRecord->stock : 0;
+                    $detail->available_color_stock = $colorStock;
+
+                    if ($pending > 0 && $colorStock > 0) {
+                        $hasShippableItems = true;
+                    }
+                } else {
+                    $detail->available_color_stock = null;
+                    if ($pending > 0 && $stock > 0) {
+                        $hasShippableItems = true;
+                    }
                 }
             }
             return $hasShippableItems;
@@ -132,14 +146,35 @@ class ShipmentController extends Controller
                             throw new \Exception("Stock insuficiente de {$detail->product_name}. Disponible real: {$variant->stock}, solicitado: {$item['quantity']}.");
                         }
 
+                        // Validación y deducción por color
+                        $chosenColor = $detail->chosen_color;
+                        $hasColorTracking = ($variant->material === 'Melamina') || \App\Models\VariantColorStock::where('product_variant_id', $variant->id)->exists();
+                        $colorStockRecord = null;
+
+                        if ($chosenColor && $hasColorTracking) {
+                            $colorStockRecord = \App\Models\VariantColorStock::where('product_variant_id', $variant->id)
+                                ->where('color', $chosenColor)
+                                ->lockForUpdate()
+                                ->first();
+
+                            $availableInColor = $colorStockRecord ? $colorStockRecord->stock : 0;
+                            if (!$allowNegative && $availableInColor < $item['quantity']) {
+                                throw new \Exception("Stock insuficiente para el color '{$chosenColor}' en {$detail->product_name}. Disponible en este color: {$availableInColor}, solicitado: {$item['quantity']}.");
+                            }
+                        }
+
                         // Calcular piezas apartadas para descontar directo del límite reservado
                         $cantidad_a_descontar_reserva = min($item['quantity'], $variant->reserved_stock);
 
-                        // Doble deducción atómica de inventario
+                        // Deducción atómica de inventario
                         $variant->decrement('stock', $item['quantity']);
                         
                         if ($cantidad_a_descontar_reserva > 0) {
                             $variant->decrement('reserved_stock', $cantidad_a_descontar_reserva);
+                        }
+
+                        if ($colorStockRecord) {
+                            $colorStockRecord->decrement('stock', $item['quantity']);
                         }
                     }
 
@@ -292,6 +327,18 @@ class ShipmentController extends Controller
 
                 if ($detail->variant) {
                     $detail->variant->increment('stock', $delivery->quantity_delivered);
+
+                    $chosenColor = $detail->chosen_color;
+                    if ($chosenColor) {
+                        $hasColorTracking = ($detail->variant->material === 'Melamina') || \App\Models\VariantColorStock::where('product_variant_id', $detail->variant->id)->exists();
+                        if ($hasColorTracking) {
+                            $colorStockRecord = \App\Models\VariantColorStock::firstOrCreate(
+                                ['product_variant_id' => $detail->variant->id, 'color' => $chosenColor],
+                                ['stock' => 0, 'damaged_stock' => 0, 'reserved_stock' => 0]
+                            );
+                            $colorStockRecord->increment('stock', $delivery->quantity_delivered);
+                        }
+                    }
                 }
 
                 $salesToRecalculate[$detail->sale_id] = $detail->sale;
