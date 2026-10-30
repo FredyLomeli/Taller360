@@ -4,7 +4,7 @@
 ---
 
 ## Estado actual en una línea
-> El sistema se encuentra en **versión 2.8 estable** con los módulos de **Sprint Cliente (Agosto)**, **Fase 4.1 Catálogo Digital Blade SSR**, **Estado Detallado / Reserva de Stock (v2.8)**, **Fase 2.5 Embarques (Multi-cliente y Remisiones corporativas)**, **Ajustes al Ciclo de Venta** y **Sprint de Octubre (Órdenes de Trabajo desacopladas, Control de Daños y Existencias por color para Melamina)** completados y auditados en código. El trabajo inmediato y prioritario está enfocado en **🔴 Fase 2.7 — Catálogos Administrables (URGENTE, 1°)** y **🔴 Fase 2.8 — Módulo de Devoluciones (URGENTE, 2°)** (*ambos Planeados, sin construir*). La **Fase 3.2 Cobranza está ⏸️ EN PAUSA** a la espera de respuestas del cliente.
+> El sistema se encuentra en **versión 2.8 estable** con los módulos de **Sprint Cliente (Agosto)**, **Fase 4.1 Catálogo Digital Blade SSR**, **Estado Detallado / Reserva de Stock (v2.8)**, **Fase 2.5 Embarques (Multi-cliente y Remisiones corporativas)**, **Ajustes al Ciclo de Venta** y **Sprint de Octubre (Órdenes de Trabajo desacopladas, Control de Daños y Existencias por color para Melamina)** completados y auditados en código. El trabajo inmediato y prioritario se estructura en: **🔴 Fase 0 — Hotfix Colores de Melamina (PRIORIDAD MÁXIMA)**, seguido de **🔴 Fase 2.7 — Catálogos Administrables (URGENTE, 1°)** y **🔴 Fase 2.8 — Módulo de Devoluciones (URGENTE, 2°)** (*planeados, en espera de "Procede hotfix"*). La **Fase 3.2 Cobranza está ⏸️ EN PAUSA** a la espera de respuestas del cliente.
 
 ---
 
@@ -22,7 +22,8 @@
 ✅ AJUSTES CICLO DE VENTA                        (COMPLETADA: Fecha compromiso editable + Modo Taller backend)
 ✅ SPRINT OCTUBRE 2026                           (COMPLETADO: OT autónomas, Dañadas, Existencias Melamina por Color)
                                            ↓
-🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES     (URGENTE: 1° en orden, categorías, materiales y colores) [¡Próxima tarea!]
+🔴 FASE 0 — HOTFIX COLORES DE MELAMINA           (PRIORIDAD MÁXIMA: 7 colores oficiales en código duro) [¡En espera de "Procede hotfix"!]
+🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES     (URGENTE: 1° en orden, categorías, materiales y colores)
 🔴 FASE 2.8 — MÓDULO DE DEVOLUCIONES              (URGENTE: 2° en orden, depende de color_id de 2.7)
                                            ↓
 ⏸️ FASE 3.2 — COBRANZA Y FINANZAS                 (EN PAUSA — esperando respuestas de negocio del cliente)
@@ -64,18 +65,33 @@ Los 5 puntos acordados con el cliente están completamente implementados y respa
 
 ---
 
-## 🔴 PRÓXIMA TAREA #1 (URGENTE — PRIORIDAD MÁXIMA): Fase 2.7 — Sprint Catálogos Administrables
-**Tiempo estimado:** 5 a 7 sesiones | **Prioridad:** 🔴 URGENTE (1° en orden de ejecución) | **Estado:** Planeado, sin construir
+## 🔴 PRÓXIMA TAREA #0 (PRIORIDAD MÁXIMA): Fase 0 — Hotfix Colores de Melamina
+**Tiempo estimado:** 1 sesión | **Prioridad:** 🔴 MÁXIMA (antes de la Fase 2.7) | **Estado:** Documentado, en espera de "Procede hotfix" del PM
 
-Categorías, materiales por categoría y colores por material están hardcodeados en código fuente y plantillas. Se requiere administrarlos dinámicamente porque un proveedor descontinuó un color de Melamina y agregó uno nuevo.
+Sustitución inmediata de los 4 colores erróneos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel` — reconocidos como un error de desarrollo) por los 7 oficiales de fábrica acordados: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`.
+- **Alcance Técnico (Código duro, sin alterar schema ni crear color_id):**
+  1. `ProductionController.php`: L119 (cálculo de faltantes por color) y L459 (`printReport` reporte impreso).
+  2. `Production/Index.vue`: L78 (selector en modal OT) y L522-525 (**eliminar default `'Blanco'`** para no asignar colores arbitrarios).
+  3. `Products/Create.vue`: L46 (matriz de colores de Melamina).
+  4. `Products/Edit.vue`: L25 (matriz de colores de Melamina).
+  5. `Sales/Create.vue`: L36-41 (matriz Melamina 7 colores, alinear MDF a 6 colores y Madera a 4 con códigos HEX de Blade) y L45-49 (**ajuste crítico en `getColorsForMaterial`:** como evalúa por subcadena, evitar que `"Madera y MDF enchapado"` caiga en la paleta de MDF; debe usar la de Madera: Chocolate, Caoba, Tabaco, Cherry).
+- **Regla estricta:** NO ejecutar hasta recibir del PM la confirmación explícita: *"Procede hotfix"*.
+
+---
+
+## 🔴 PRÓXIMA TAREA #1 (URGENTE — PRIORIDAD MÁXIMA): Fase 2.7 — Sprint Catálogos Administrables
+**Tiempo estimado:** 5 a 7 sesiones | **Prioridad:** 🔴 URGENTE (1° en orden de ejecución tras Fase 0) | **Estado:** Planeado, sin construir
+
+Categorías, materiales por categoría y colores por material están hardcodeados en código fuente y plantillas. Se requiere administrarlos dinámicamente porque un proveedor descontinuó un color y agregó uno nuevo.
 - **Alcance Técnico:**
   1. Auditoría y línea base de tests (`php artisan test`).
-  2. Migraciones y modelos: tabla `materials`, `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), columna `activo` en `categories`. Migrar de texto libre a `material_id` y `color_id`.
-  3. Pantalla de administración "Catálogos" exclusiva para `role:admin,supervisor` (el supervisor sigue sin acceso a Configuración).
-  4. Productos y POS alimentados de BD con validación categoría-material y regla de "color especial" (capturado en notas con costo extra, sin `color_id`; Melamina rechaza color especial).
-  5. Producción, órdenes de trabajo y embarques con `color_id` y regla de colores descontinuados (se permite embarcar si hay stock existente, pero se bloquea fabricar y vender).
-  6. Catálogo público dinámico, nota visible de color especial en reporte de taller (`Production/Print.vue`) y alertas de stock de descontinuados.
-  7. Tests automatizados de regresión.
+  2. Migraciones y modelos: tabla `materials` (4 confirmados: `MDF`, `Madera`, `Madera y MDF enchapado`, `Melamina`), `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), columna `activo` en `categories`. Migrar de texto libre a `material_id` y `color_id`.
+  3. Seeder fiel a la fuente de verdad (A12): 15 colores con HEX de `catalogo/index.blade.php` L437-442; conteos pendientes de confirmación del PM: 14 o más relaciones categoría↔material (según decisión sobre las 46 variantes de Madera en Roperos/Cómodas) y 17 o 21 relaciones material↔color (según si "Madera y MDF enchapado" comparte o tiene colores propios).
+  4. Pantalla de administración "Catálogos" exclusiva para `role:admin,supervisor` (el supervisor sigue sin acceso a Configuración).
+  5. Productos y POS alimentados de BD con validación categoría-material y regla de "color especial" (capturado en notas con costo extra, sin `color_id`; Melamina rechaza color especial).
+  6. Producción, órdenes de trabajo y embarques con `color_id` y regla de colores descontinuados (se permite embarcar si hay stock existente, pero se bloquea fabricar y vender).
+  7. Catálogo público dinámico, nota visible de color especial en reporte de taller (`Production/Print.vue`) y alertas de stock de descontinuados.
+  8. Tests automatizados de regresión, incluyendo validación firme: *todas las variantes existentes conservan categoría y material válidos tras la migración (incluyendo las 35 de Madera en Roperos y 11 en Cómodas, bajo regla firme A11)*.
 
 ---
 
@@ -86,10 +102,14 @@ Categorías, materiales por categoría y colores por material están hardcodeado
 - **Alcance Técnico:**
   1. Auditoría de lectura de "entregado" (realizada: ver `CONTEXTO_TECNICO.md` Anexo 0.3-X2).
   2. Migración y modelos para `sale_returns` y `sale_return_items`.
-  3. Controlador transaccional con `lockForUpdate`: validación `cantidad <= entregado neto`, destinos de pieza (`danada` reutiliza `damaged_stock_logs`, `baja` merma sin stock, `color_equivocado` suma al stock del color real capturado con color obligatorio en Melamina).
-  4. Recálculo dinámico de etapa: si quedan faltantes, el pedido regresa a `produccion` (registrado por `SaleObserver`, sin crear `SaleHistory` manual).
-  5. UI con selector de pedido/partida entregada, campo de texto obligatorio "Autorizado por" (`authorized_by`), comentario y visualización en el detalle del pedido (`Sales/Show.vue`).
-  6. Ajuste de todos los `withSum` de entregas para restar devoluciones netas. Sin reenvío automático (el taller decide en el Plan de Producción).
+  3. Controlador transaccional con `lockForUpdate` y acción de servicio (`DamagedStockService`): validación `cantidad <= entregado neto`, destinos de pieza:
+     - `danada`: suma a `product_variants.stock` Y `damaged_stock` (y en Melamina a `variant_color_stocks.stock` y `damaged_stock` del `color_id` correspondiente) y crea log en `damaged_stock_logs`. Rol `inventario` autorizado.
+     - `baja`: merma total sin reposición física.
+     - `color_equivocado`: suma al stock disponible del color real capturado (obligatorio color en Melamina).
+  4. Bloqueo estricto de cancelación de viaje: si un embarque tiene devoluciones registradas, se rechaza la cancelación con mensaje explicativo.
+  5. Recálculo dinámico de faltantes en producción (sin WorkOrder automática): restar de `completed` las piezas devueltas dañadas o de baja para reactivar el faltante en el Plan Taller. Si quedan faltantes en el pedido, su etapa regresa a `produccion` (registrado por `SaleObserver`, sin crear `SaleHistory` manual).
+  6. UI con selector de pedido/partida entregada, campo obligatorio "Autorizado por" (`authorized_by`), notas y visualización en el detalle del pedido (`Sales/Show.vue`).
+  7. Ajuste de todos los `withSum` de entregas para restar devoluciones netas. Tests automatizados de regresión.
 
 ---
 

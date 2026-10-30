@@ -15,8 +15,8 @@ Sistema de gestión de pedidos y manufactura diseñado específicamente para **m
 | Campo | Detalle |
 |-------|---------|
 | **Versión** | 2.8 — Estado Detallado y Reserva de Stock (sin cambio de versión) |
-| **Última auditoría** | 07 de septiembre 2026 (código real) — **Actualización documental:** 29 de octubre 2026 (Fases 2.7 y 2.8 añadidas como *Planeado, sin construir*; Cobranza en pausa) |
-| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado), Catálogo Blade SSR, Detallado/Reserva (v2.8) y Sprint de Octubre (OT independientes, Dañadas y Melamina por Color) integrados. Documentadas Fases 2.7 y 2.8 en backlog. |
+| **Última auditoría** | 07 de septiembre 2026 (código real) — **Actualización documental:** 30 de octubre 2026 (Fase 0 Hotfix Melamina añadida como Prioridad Máxima; Fases 2.7 y 2.8 añadidas como *Planeado, sin construir*; Cobranza en pausa) |
+| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado), Catálogo Blade SSR, Detallado/Reserva (v2.8) y Sprint de Octubre (OT independientes, Dañadas y Melamina por Color) integrados. Documentada Fase 0 Hotfix (7 colores oficiales), y Fases 2.7 y 2.8 en backlog. |
 | **Frontend** | Funcional en Vue 3 / Inertia.js para gestión interna sobre Tailwind v4; Laravel Blade SSR puro para Landing y Catálogo Comercial público. |
 | **Repositorio** | https://github.com/FredyLomeli/Taller360 |
 
@@ -99,20 +99,24 @@ Desarrollado en Laravel Blade puro (SSR) y Vanilla JS para máxima velocidad y o
 - Botón directo de cotización vía WhatsApp empresarial (`company_whatsapp`).
 - Precios y stock estrictamente ocultos al público.
 
+### 🎨 Hotfix Colores de Melamina (Fase 0 — 🔴 PRIORIDAD MÁXIMA, en espera de "Procede hotfix")
+Sustitución en código duro de los 4 colores erróneos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel` — error de desarrollo) por los 7 oficiales de fábrica acordados: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`. Alineación de MDF (6 colores) y Madera (4 colores) con los códigos HEX oficiales del catálogo Blade, protegiendo en `Sales/Create.vue` que `"Madera y MDF enchapado"` use la paleta de Madera y no caiga por error en MDF. En espera de confirmación explícita del PM para proceder.
+
 ### 🎨 Catálogos Administrables (Fase 2.7 — 🔴 URGENTE, Planeado, sin construir)
-Administración dinámica de categorías, materiales y colores globales/por material (`role:admin,supervisor`). Descontinuar color por material (`material_color.activo`), interruptor global de color, validación estricta categoría-material, regla de "color especial" (capturado en nota con costo extra; Melamina no admite color especial), candado de renombrado histórico y blindaje de seeders para retrocompatibilidad total.
+Administración dinámica de categorías, materiales (4 confirmados: `MDF`, `Madera`, `Madera y MDF enchapado`, `Melamina`) y colores globales/por material (`role:admin,supervisor`). Descontinuar color por material (`material_color.activo`), interruptor global de color, validación estricta categoría-material, regla de "color especial" (capturado en nota con costo extra; Melamina no admite color especial), candado de renombrado histórico y blindaje de seeders (15 colores del Blade; conteos pendientes de confirmación: 14 o más categoría↔material, 17 o 21 material↔color; preservando las 181 variantes existentes bajo regla firme A11).
 
 ### 🔄 Módulo de Devoluciones (Fase 2.8 — 🔴 URGENTE, Planeado, sin construir)
-Submenú en Embarques (`role:admin,inventario,supervisor`) para registrar devoluciones por partida de pedidos entregados. Destinos: `danada` (reutiliza `damaged_stock_logs` y entra a dañadas), `baja` (merma) y `color_equivocado` (suma existencias al color real indicado con `color_id` de Fase 2.7; obligatorio en Melamina). Recálculo dinámico de faltantes y reversión de etapa a `produccion` sin reenvío automático (Producción decide en Plan Taller cuándo se repone).
+Submenú en Embarques (`role:admin,inventario,supervisor`) para registrar devoluciones por partida de pedidos entregados. Destinos: `danada` (acción de servicio que suma a físico y dañadas con log en `damaged_stock_logs`), `baja` (merma) y `color_equivocado` (suma existencias al color real indicado con `color_id` de Fase 2.7; obligatorio en Melamina). Bloqueo de cancelación de viaje con devoluciones; recálculo dinámico de faltantes y reversión de etapa a `produccion` sin reenvío automático (Producción decide en Plan Taller cuándo se repone).
 
 ---
 
-## ⚠️ Pendiente Real y Prioridades del Proyecto (Actualizado 29 oct 2026)
+## ⚠️ Pendiente Real y Prioridades del Proyecto (Actualizado 30 oct 2026)
 
 | Prioridad | Tarea | Detalle |
 |-----------|-------|---------|
-| 🔴 **URGENTE (1°)** | **Fase 2.7: Catálogos Administrables** | CRUD dinámico de categorías, materiales y colores; asignación N:N; descontinuar por material; candado de renombrado; color especial con nota y costo extra; seeders fieles. *(Planeado, sin construir — estimado 5 a 7 sesiones)* |
-| 🔴 **URGENTE (2°)** | **Fase 2.8: Módulo de Devoluciones** | Submenú en Embarques para devoluciones por partida de pedidos entregados; destinos (`danada`, `baja`, `color_equivocado`); stock por color con `color_id`; recálculo a `produccion` sin reenvío automático. *(Planeado, sin construir — estimado 2 a 3 sesiones; depende de 2.7)* |
+| 🔴 **PRIORIDAD MÁXIMA** | **Fase 0: Hotfix Colores de Melamina** | Reemplazo en código duro de los 4 colores erróneos por los 7 oficiales de fábrica (`Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`); alinear MDF y Madera con HEX del Blade y proteger en POS que "Madera y MDF enchapado" use paleta de Madera. Sin migración ni tablas nuevas. *(En espera de confirmación "Procede hotfix")* |
+| 🔴 **URGENTE (1° Módulo)** | **Fase 2.7: Catálogos Administrables** | CRUD dinámico de categorías, materiales (4 confirmados) y colores; asignación N:N; descontinuar por material; candado de renombrado; color especial con nota y costo extra; seeders fieles (15 colores del Blade; conteos pendientes: 14+ cat↔mat, 17 o 21 mat↔col; regla firme A11). *(Planeado, sin construir — estimado 5 a 7 sesiones)* |
+| 🔴 **URGENTE (2° Módulo)** | **Fase 2.8: Módulo de Devoluciones** | Submenú en Embarques para devoluciones por partida de pedidos entregados; destinos (`danada`, `baja`, `color_equivocado`); stock por color con `color_id`; recálculo a `produccion` sin reenvío automático; bloqueo de cancelación de viaje con devoluciones. *(Planeado, sin construir — estimado 2 a 3 sesiones; depende de 2.7)* |
 | ⏸️ **En Pausa** | **Fase 3.2: Cobranza y Finanzas** | En pausa esperando respuestas de negocio del cliente (política de crédito, anticipos obligatorios, pagos globales, cancelaciones y reportes requeridos). |
 | 🟢 Completado | ~~Selector multi-cliente en Embarques~~ | ✅ Implementado en `Shipments/Create.vue` con soporte reactivo de `client_ids[]`. |
 | 🟢 Completado | ~~Remisión de embarque agrupada~~ | ✅ Implementado en `ShipmentController::printManifest()` y `shipment_manifest.blade.php` agrupado por pedido con formato corporativo. |

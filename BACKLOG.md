@@ -38,7 +38,7 @@
 - [x] Backend: En `ProductionController@index` y `@printReport`, cálculo inteligente de faltantes evaluado color por color para Melamina (`color_breakdown`), impidiendo que el stock de un color cubra la demanda de otro color faltante.
 - [x] Backend: En `ShipmentController@store`, validar disponibilidad atómica por color (`lockForUpdate`) y descontar del color exacto solicitado.
 - [x] Backend: En `ShipmentController@cancel`, restituir el stock al color exacto en `variant_color_stocks`.
-- [x] Frontend: `Products/Create.vue` y `Edit.vue` exclusivos para Melamina con los 4 colores oficiales de fábrica (`Blanco`, `Gris`, `Texturizado`, `Oyamel`), cálculo automático de Stock Total y sin opciones de crear o borrar colores arbitrarios.
+- [x] Frontend: `Products/Create.vue` y `Edit.vue` exclusivos para Melamina ~~con los 4 colores oficiales de fábrica (`Blanco`, `Gris`, `Texturizado`, `Oyamel`)~~ *(Nota: Los 4 colores fueron un error de desarrollo a subsanar en Fase 0 Hotfix; los 7 oficiales acordados son: Fresno andino, Parota, Nogal africano, Gris cenizo, Gris antracita, Tzalam, Moka)*, cálculo automático de Stock Total y sin opciones de crear o borrar colores arbitrarios.
 - [x] Frontend: `Products/Index.vue` con desglose visual de existencias por color (badges contrastados de piezas disponibles).
 - [x] Frontend: `Production/Index.vue` con selector de color en la modal de Orden de Trabajo, desglose visual de existencias por color, chips de color en pedidos y órdenes (`🎨 [Color]`) y alerta de faltantes por color.
 - [x] Frontend: `Production/Print.vue` con reporte para carpinteros desglosando existencias y necesidades por color, con instrucción directa de corte en notas (`[Fab: X Color]`).
@@ -171,13 +171,35 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
+## 🔴 FASE 0 — HOTFIX COLORES DE MELAMINA (PRIORIDAD MÁXIMA — EN ESPERA DE "PROCEDE HOTFIX")
+**Prioridad:** 🔴 MÁXIMA (antes de la Fase 2.7) | **Estado:** Documentado, en espera de orden explícita "Procede hotfix" del PM  
+**Motivo:** Los 4 colores hardcodeados de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel`) fueron un **error de desarrollo**, no colores de fábrica válidos. Los 7 colores oficiales acordados son: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`.  
+**Regla técnica fundamental:** Este hotfix NO crea tablas nuevas ni columnas foráneas `color_id`. Corrige únicamente los valores hardcodeados en el código existente para alinear el sistema a la realidad operativa antes de acometer la Fase 2.7.
+
+### Alcance Técnico de la Intervención (tras confirmación "Procede hotfix"):
+1. `app/Http/Controllers/ProductionController.php`:
+   - L119: Sustituir el array `['Blanco', 'Gris', 'Texturizado', 'Oyamel']` por los 7 oficiales (`['Fresno andino', 'Parota', 'Nogal africano', 'Gris cenizo', 'Gris antracita', 'Tzalam', 'Moka']`) en el cálculo de faltantes por color.
+   - L459: Actualizar el array en `printReport()` para el reporte de producción impreso.
+2. `resources/js/Pages/Production/Index.vue`:
+   - L78: Actualizar el selector de color en la modal de Orden de Trabajo con los 7 oficiales.
+   - L522-525: **Eliminar el default `'Blanco'`** en la asignación reactiva para evitar que pedidos u órdenes sin color se guarden erróneamente como Blanco.
+3. `resources/js/Pages/Products/Create.vue`:
+   - L46: Reemplazar la matriz fija de colores de Melamina por los 7 oficiales.
+4. `resources/js/Pages/Products/Edit.vue`:
+   - L25: Reemplazar la matriz fija de colores de Melamina por los 7 oficiales.
+5. `resources/js/Pages/Sales/Create.vue`:
+   - L36-41: Alinear la matriz de Melamina con los 7 oficiales; además, alinear MDF a 6 colores y Madera a 4 colores con los códigos HEX oficiales del Blade (`catalogo/index.blade.php` L437-442).
+   - L45-49: **Ajuste crítico en `getColorsForMaterial`:** La función actual evalúa por coincidencia de subcadena (`materialName.includes(k)`). Como `"Madera y MDF enchapado"` contiene `"MDF"`, si se evalúa `'MDF'` antes que `'Madera'`, caería erróneamente en la paleta de MDF. Se debe verificar y asegurar que `"Madera y MDF enchapado"` NO caiga en la lista de MDF por error y utilice la paleta de Madera (`Chocolate`, `Caoba`, `Tabaco`, `Cherry`).
+
+---
+
 ## 🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES (URGENTE — PLANEADO, SIN CONSTRUIR)
-**Prioridad:** 🔴 MÁXIMA / URGENTE (1° en orden de ejecución) | **Estimado:** 5 a 7 sesiones  
-**Motivo:** Actualmente categorías, materiales por categoría y colores por material están hardcodeados en PHP, Vue y Blade. Los 4 colores de Melamina (Blanco, Gris, Texturizado, Oyamel) son fijos. Un proveedor descontinuó un color y agregó uno nuevo; el cliente necesita administrarlos dinámicamente sin tocar código.
+**Prioridad:** 🔴 MÁXIMA / URGENTE (1° en orden de ejecución tras Fase 0) | **Estimado:** 5 a 7 sesiones  
+**Motivo:** Actualmente categorías, materiales por categoría y colores por material están hardcodeados en PHP, Vue y Blade. Los 4 colores originales de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel`) fueron un ~~error de desarrollo~~ que se subsana en la Fase 0 Hotfix (quedando los 7 oficiales: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`). No obstante, siguen fijos en código. Un proveedor descontinuó un color y agregó uno nuevo; el cliente necesita administrarlos dinámicamente sin tocar código.
 
 ### Checklist por Fases:
 - [ ] **Fase 1: Auditoría y línea base:** Ejecutar la auditoría de lectura (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X1) y correr `php artisan test`; los tests existentes deben estar en verde antes de empezar a escribir código.
-- [ ] **Fase 2: BD, modelos y seeders:** Crear migraciones para tabla `materials`, `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), agregar `activo` a `categories`, migrar `product_variants.material` a `material_id`, migrar `color` a `color_id` en `variant_color_stocks` y `work_orders`, y agregar `color_id` nullable a `sale_details` conservando `chosen_color` como snapshot textual. Seeders con datos actuales exactos (A12).
+- [ ] **Fase 2: BD, modelos y seeders:** Crear migraciones para tabla `materials` (4 confirmados: `MDF`, `Madera`, `Madera y MDF enchapado`, `Melamina`), `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), agregar `activo` a `categories`, migrar `product_variants.material` a `material_id`, migrar `color` a `color_id` en `variant_color_stocks` y `work_orders`, y agregar `color_id` nullable a `sale_details` conservando `chosen_color` como snapshot textual. Seeders con fuente de verdad oficial (A12): 15 colores con HEX de `catalogo/index.blade.php` L437-442; conteos pendientes de confirmar por el PM (14 o más relaciones categoría↔material; 17 o 21 relaciones material↔color).
 - [ ] **Fase 3: Pantalla "Catálogos" (Admin + Supervisor):** Nueva sección propia "Catálogos" en el menú principal (`role:admin,supervisor`). CRUD de categorías, materiales y colores; asignación muchos a muchos categoría↔material y material↔color; descontinuar color por material (`material_color.activo`); interruptor global (`colors.activo`); candado de renombrado (libre si no se ha usado; solo corrección tipográfica con confirmación si ya tiene registros históricos vinculados).
 - [ ] **Fase 4: Productos y POS leyendo de BD:** Formularios de productos (`Products/Create.vue` y `Edit.vue`) y POS (`Sales/Create.vue`) cargando catálogos reactivos desde base de datos. Validación estricta categoría-material en backend. Regla de "color especial" (capturado en nota de partida `custom_notes` con costo extra `additional_cost`, sin `color_id`). Melamina rechaza color especial: solo admite colores de línea activos. Ocultar productos de categoría o material desactivado en catálogo público y POS (visibles en inventario interno).
 - [ ] **Fase 5: Producción, órdenes de trabajo y embarques con `color_id` y regla de descontinuados:** *(FASE DE MAYOR RIESGO — toca stock por color)*. `ProductionController::index`, `@printReport`, `@storeCompletion`, `WorkOrderController` y `ShipmentController` operando con `color_id`. Permitir embarque y cancelación de embarque con color descontinuado mientras quede stock físico; bloquear nueva venta y fabricación de colores descontinuados.
@@ -191,13 +213,23 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 - [ ] Partida con color especial no toca `variant_color_stocks` ni falla validaciones de producción.
 - [ ] Melamina rechaza venta con color especial (exige color de línea activo).
 - [ ] Validación categoría-material rechaza variantes con material no asociado a la categoría.
+- [ ] Todas las variantes existentes conservan categoría y material válidos tras la migración (incluyendo las 35 de Madera en Roperos y 11 en Cómodas, bajo regla firme A11).
 - [ ] Producto de categoría o material desactivado se oculta en catálogo público y POS pero sigue visible en inventario interno.
 - [ ] Renombrar color: libre si no se ha usado; restringido con confirmación si ya tiene uso histórico.
-- [ ] Seeders reproducen exactamente las categorías, materiales, relaciones y colores actuales.
+- [ ] Seeders reproducen exactamente las categorías, materiales, relaciones y colores acordados (15 colores del Blade; conteos pendientes de confirmar: 14 o más categoría↔material, 17 o 21 material↔color).
 - [ ] Las suites existentes de tests siguen en verde tras cada fase.
+
+### ⚠️ Dudas Abiertas de Catálogos (Decisiones Pendientes):
+- **Materiales confirmados (4 materiales):** El PM confirmó que `MDF`, `Madera`, `Madera y MDF enchapado` y `Melamina` son **cuatro materiales distintos** en la tabla `materials`. Se resuelve y retira la duda sobre si eran uno o dos materiales.
+- **Regla firme e inviolable A11:** Tras la migración, **todas las variantes existentes deben conservar categoría y material válidos** (la regla de negocio A11 no puede invalidar variantes preexistentes).
+- **Dudas Abiertas Nuevas (Pendientes de Decisión del PM):**
+  1. **Colores de "Madera y MDF enchapado":** ¿Comparte los mismos 4 colores de Madera (`Chocolate`, `Caoba`, `Tabaco`, `Cherry`) o tiene una lista propia de colores? (Define si el pivote `material_color` tiene 17 o 21 relaciones en el seeder).
+  2. **46 variantes existentes de "Madera" en Roperos (35) y Cómodas (11):** La hoja oficial del PM no contempla "Madera" como material permitido para Roperos ni Cómodas. *Opción recomendada:* agregar "Madera" a esas dos categorías en `category_material` (aumentando las relaciones categoría↔material de 14 a 16). Decisión pendiente del PM; no tomarla por cuenta propia.
+  3. **Categoría "Trincheros" vs "Trinchers":** En código y BD actual existe "Trincheros", mientras que en la hoja oficial del PM figura como "Trinchers". Pendiente confirmación tipográfica.
 
 ### Riesgos Técnicos:
 - Migración de datos existentes de texto a IDs foráneos en stock por color (`variant_color_stocks`) y órdenes de trabajo (`work_orders`).
+- Invalidación accidental de variantes existentes si el seeder de `category_material` no asocia Madera a Roperos y Cómodas.
 - Pedidos históricos deben conservar snapshot textual del nombre y color vendido (`sale_details.chosen_color`).
 - Colores hardcodeados olvidados en controladores o vistas Blade/Vue secundarias (se detectaron 3 matrices distintas en el código).
 - Catálogo público en producción con caché activa (al desplegar en Neubox requerirá: `npm run build`, `php artisan config:cache`, `php artisan route:cache`, `php artisan view:cache`).
@@ -212,19 +244,27 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 ### Checklist por Fases:
 - [ ] **Fase 1: Auditoría de lectura de "entregado":** Auditoría exhaustiva completada (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X2) identificando todos los puntos donde se calcula "entregado" y deberán restar devoluciones (`ShipmentController`, `SaleController::show`, `ProductionController`, vistas Vue).
 - [ ] **Fase 2: BD y modelos:** Migraciones para `sale_returns` (`id`, `folio`, `client_id`, `user_id`, `authorized_by`, `returned_at`, `notes`, `timestamps`) y `sale_return_items` (`id`, `sale_return_id`, `sale_detail_id`, `shipment_id` nullable, `quantity`, `reason_type`, `disposition`, `color_id` nullable, `chosen_color` snapshot, `notes`, `timestamps`). Modelos Eloquent y relaciones.
-- [ ] **Fase 3: Controlador transaccional con `lockForUpdate`:** Endpoint `POST /shipments/returns` siguiendo el patrón transaccional de `ShipmentController::store`. Validación: `cantidad <= entregado neto`. Destinos: `danada` (reutiliza `damaged_stock_logs` y suma a `damaged_stock`), `baja` (merma sin stock), `color_equivocado` (suma al stock del color real indicado; obligatorio color en Melamina). Recálculo dinámico: si quedan faltantes en el pedido, regresar stage a `produccion` (historial automático vía `SaleObserver`, sin crear `SaleHistory` manual).
+- [ ] **Fase 3: Controlador transaccional con `lockForUpdate` y Acción de Servicio:** Endpoint `POST /shipments/returns` siguiendo el patrón transaccional de `ShipmentController::store`. Validación: `cantidad <= entregado neto`. Destinos:
+  - `danada`: Acción de servicio desacoplada (`DamagedStockService`) que en transacción con `lockForUpdate` suma simultáneamente a `product_variants.stock` Y `product_variants.damaged_stock` (y en Melamina a `variant_color_stocks.stock` y `damaged_stock` del `color_id` correspondiente) y genera el registro en `damaged_stock_logs`. El rol `inventario` tiene permiso para registrar devoluciones sin requerir ruta de `DamagedStockController`.
+  - `baja`: Merma total sin reposición de stock físico.
+  - `color_equivocado`: Suma al stock físico y disponible del color real indicado (obligatorio `color_id` en Melamina; opcional en otros).
+  - **Bloqueo estricto de cancelación de viaje:** Si un embarque tiene devoluciones registradas, se bloquea su cancelación (`ShipmentController::cancel`) con mensaje explicativo claro; los ajustes deben gestionarse por el módulo de devoluciones.
+  - **Recálculo dinámico a producción (sin WorkOrder automática):** La partida devuelta reaparece como faltante en el Plan Taller para que Producción decida cuándo fabricar. Para evitar que la fórmula `MAX(completed, detailed, delivered)` enmascare el faltante, se restan de `completed` las piezas con destino `danada` o `baja`. Si quedan faltantes netos en el pedido, su `stage` regresa a `produccion` (registrado limpiamente por `SaleObserver`, sin invocar `SaleHistory` manual).
 - [ ] **Fase 4: UI de Devoluciones:** Submenú en Embarques con listado de devoluciones, modal/formulario de captura con selector de pedido/partida entregada, motivo, destino, color real si Melamina, campo de texto libre obligatorio "Autorizado por" (`authorized_by`) y notas. Desglose visible de devoluciones en el detalle del pedido (`Sales/Show.vue`).
-- [ ] **Fase 5: Integración con producción y embarques:** Ajustar todos los `withSum` de entregas (`deliveries`) para restar devoluciones netas. Sin reenvío automático: Producción decide en el Plan Taller cuándo se reenvía o repone.
+- [ ] **Fase 5: Integración con producción y embarques:** Ajustar todos los `withSum` de entregas (`deliveries`) para restar devoluciones netas. Sin reenvío automático ni creación de WorkOrder automática: Producción decide en el Plan Taller cuándo se reenvía o repone. Bloqueo de cancelación en `ShipmentController::cancel` si existen devoluciones.
 - [ ] **Fase 6: Tests y regresión completa:** Pruebas unitarias y de integración para los flujos de devolución y verificación de suites completas en verde.
 
 ### Tests Nuevos a Construir:
 - [ ] Intento de devolución por cantidad mayor al entregado neto se rechaza con error de validación.
 - [ ] Destino 'danada' suma a `product_variants.damaged_stock` (y `stock` físico) y crea registro en `damaged_stock_logs`.
+- [ ] Destino 'danada' en Melamina suma a `variant_color_stocks.stock` y `damaged_stock` del color indicado.
+- [ ] Rol `inventario` registra devoluciones con destino 'danada' exitosamente sin tener acceso directo a `DamagedStockController`.
 - [ ] Destino 'baja' no toca inventario y deja registro histórico de la merma.
 - [ ] Destino 'color_equivocado' en Melamina suma existencias al color real indicado; si no se especifica color falla validación.
 - [ ] Destino 'color_equivocado' en otro material suma al stock general sin requerir color.
-- [ ] Pedido 'entregado' regresa a 'produccion' si tras la devolución quedan piezas pendientes; historial registrado por `SaleObserver`.
-- [ ] Plan de Producción recalcula faltantes considerando piezas devueltas según su destino.
+- [ ] Cancelar un embarque que tiene devoluciones registradas es bloqueado con error descriptivo.
+- [ ] Devolución con destino 'danada' o 'baja' reactiva el faltante en la partida de producción (se descuenta de `completed` en la fórmula de avance).
+- [ ] Pedido 'entregado' regresa a 'produccion' si tras la devolución quedan piezas pendientes; historial registrado por `SaleObserver` (sin duplicar `SaleHistory`).
 - [ ] Devolución de pedido completo (todas las partidas devueltas).
 - [ ] Campo "Autorizado por" es obligatorio; devolución permitida sin plazo límite tras la entrega.
 - [ ] Partida con color especial devuelta no altera `variant_color_stocks`.
@@ -233,7 +273,7 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ### Riesgos Técnicos:
 - Omisión de restar devoluciones en algún cálculo de "entregado" en producción o embarques (riesgo de cerrar pedidos indebidamente o generar sobreproducción).
-- Doble conteo entre cancelación de un viaje y devolución de partidas de ese mismo viaje.
+- Doble conteo entre cancelación de un viaje y devolución de partidas de ese mismo viaje (mitigado con el bloqueo estricto de cancelación de viaje con devoluciones).
 - Interacción con remanentes pausados (`production_hold`) y con la fórmula de avance máximo `MAX(completed, detailed, delivered)`.
 - Dependencia estricta de `color_id` de la Fase 2.7.
 
@@ -295,6 +335,11 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 | 1 | Input de moneda en Safari/iOS — permite caracteres no numéricos | No se revisó en esta auditoría (requiere prueba manual en Safari) |
 | 2 | `formatDate` sin usar en `Production/Index.vue` | ✅ Ya no existe en el código — resuelto |
 
+### ⚠️ Bugs Latentes Auditados en Código (Pendientes de Corrección)
+1. **`ProductionController::printReport` no calcula entregas:** Asume 0 entregas y filtra exclusivamente pedidos con `stage = 'produccion'`, omitiendo piezas pendientes de fabricación de pedidos en otras etapas y distorsionando el reporte impreso de taller.
+2. **`ShipmentController::store` suma entregas canceladas:** Al verificar `quantity_delivered` (L188-200), no excluye los embarques cancelados (`where('status', '!=', 'cancelled')`), provocando inconsistencias si una partida tuvo un embarque previo cancelado.
+3. **Validación de color obligatorio universal en POS:** `Sales/Create.vue` L274 exige seleccionar color en TODOS los materiales (contradiciendo la regla de negocio A3 donde en MDF y Madera el color es opcional/natural) y `SaleController::store` L106 valida `color` como `required` de forma universal.
+
 ### 🐛 BUGS NUEVOS (Alta Prioridad)
 - [x] **Fallo de Reactividad en Kanban:** Resuelto. Se implementó una captura local inmutable (`const sale = selectedSale.value;`) antes de lanzar promesas asíncronas de SweetAlert, y el backend ahora procesa el guardado en `updateStage`.
 
@@ -308,12 +353,14 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 📌 Orden de Dependencias (actualizado 29 oct 2026)
+## 📌 Orden de Dependencias (actualizado 30 oct 2026)
  
  ```
  Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
                                       ↓
                      Fase 2.5 — Embarques y CSS (COMPLETADO)
+                                      ↓
+                     🔴 Fase 0 — Hotfix Colores de Melamina (¡PRIORIDAD MÁXIMA!)
                                       ↓
                      🔴 Fase 2.7 — Catálogos Administrables (¡Prioridad 1 URGENTE!)
                                       ↓
