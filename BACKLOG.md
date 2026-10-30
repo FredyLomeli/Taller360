@@ -1,5 +1,5 @@
 # 📋 BACKLOG — TALLER 360
-**Auditado directamente contra el código fuente:** 05 de septiembre 2026
+**Auditado directamente contra el código fuente:** 05 de septiembre 2026 — **Actualización documental:** 29 de octubre 2026 (incorporación de Fase 2.7 Catálogos Administrables y Fase 2.8 Devoluciones como *Planeado, sin construir*, corrección de contradicciones y alineación de dependencias)
 **Nota importante:** las versiones anteriores de este archivo (`README.md`, `GUIA_RUTA.md` y este mismo `BACKLOG.md`) se contradecían entre sí sobre qué bugs estaban resueltos. Esta versión es la única verificada línea por línea contra el código real — es la nueva fuente de verdad.
 
 ---
@@ -75,10 +75,10 @@ Estos 5 puntos salieron de una reunión con el cliente. Todos tienen diseño té
 - [x] `DashboardController`: cambiar `stock <= 5` fijo por `stock <= COALESCE(min_stock, 5)`. Adicionalmente, se configuró para mostrar *siempre* los productos favoritos y colorearlos dinámicamente.
 
 ### 5. 🟢 Órdenes de Trabajo — producción sin pedido + pausa de remanentes parciales (COMPLETADO)
-- [x] Migración: nueva tabla `work_orders` (`product_variant_id`, `quantity_requested`, `target_date` nullable, `status` abierta/cerrada, `origin_sale_detail_id` nullable, `notes`, `created_by`, timestamps).
+- [x] Migración: nueva tabla `work_orders` (`product_variant_id`, `quantity_requested`, `target_date` nullable, status: ~~`status` abierta/cerrada~~ ✅ Corregido 29 oct 2026: valores reales en código y migración: 'pending'|'in_progress'|'completed', default:'pending', `origin_sale_detail_id` nullable, `notes`, `created_by`, timestamps).
 - [x] Migración: `sale_details.production_hold` (boolean, default `false`).
 - [x] Migración: hacer `production_completions.sale_detail_id` nullable + agregar `production_completions.work_order_id` (nullable).
-- [x] `ProductionController::index()`: unir necesidades de `sale_details` + `work_orders` abiertas en la misma cola.
+- [x] `ProductionController::index()`: unir necesidades de `sale_details` + `work_orders` pendientes o en proceso (`whereIn('status', ['pending', 'in_progress'])`) en la misma cola.
 - [x] `ProductionController::index()`: excluir de "pendiente de fabricar" las líneas con `production_hold = true`; mostrarlas en una sección aparte ("en espera de decisión").
 - [x] Lógica para activar `production_hold = true` automáticamente cuando un envío parcial deja remanente.
 - [x] Botón "Liberar a producción" en `Production/Index.vue` para apagar el flag y/o generar `work_order`.
@@ -162,12 +162,84 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 - [ ] Revisar índices en BD: `sale_details.sale_id`, `sale_details.product_variant_id`, `sale_deliveries.shipment_id`, `sale_deliveries.sale_detail_id`, `sales.stage` + `sales.promised_date` — no se pudo confirmar sin acceso al schema real de la BD.
 - [ ] `composer.lock`/`package-lock.json` — auditar dependencias de desarrollo innecesarias en producción en esta ronda final.
 
-### Roles y Fase 3 (Alta Prioridad - Siguiente tras Fase 4.2)
-- [ ] `supervisor` y `financiero` no tienen ninguna ruta asignada — caen directo a pantalla de bienvenida.
-- [ ] Dashboard/Módulo Financiero y estado de cuenta por cliente (Fase 3.2) — (PRÓXIMO OBJETIVO PRINCIPAL TRAS CATÁLOGO).
+### Roles y Fase 3 (Pausada / Posterior a Fases 2.7 y 2.8)
+- [ ] ~~`supervisor` y~~ `financiero` no tiene ninguna ruta asignada — cae directo a pantalla de bienvenida (~~`supervisor`~~ ya tiene acceso operativo completo a Producción, Almacén y Embarques ✅ Corregido 29 oct 2026).
+- [ ] Dashboard/Módulo Financiero y estado de cuenta por cliente (Fase 3.2) — ⏸️ **EN PAUSA** (esperando respuestas del cliente sobre crédito, anticipos y reglas de cobranza; no es prioridad actual).
 - [ ] Dashboard de Producción (Fase 3.1).
 - [ ] Selector de vista para Admin (Fase 3.3).
 - [ ] Sidebar y rutas condicionales completas por rol (Fase 3.4).
+
+---
+
+## 🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES (URGENTE — PLANEADO, SIN CONSTRUIR)
+**Prioridad:** 🔴 MÁXIMA / URGENTE (1° en orden de ejecución) | **Estimado:** 5 a 7 sesiones  
+**Motivo:** Actualmente categorías, materiales por categoría y colores por material están hardcodeados en PHP, Vue y Blade. Los 4 colores de Melamina (Blanco, Gris, Texturizado, Oyamel) son fijos. Un proveedor descontinuó un color y agregó uno nuevo; el cliente necesita administrarlos dinámicamente sin tocar código.
+
+### Checklist por Fases:
+- [ ] **Fase 1: Auditoría y línea base:** Ejecutar la auditoría de lectura (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X1) y correr `php artisan test`; los tests existentes deben estar en verde antes de empezar a escribir código.
+- [ ] **Fase 2: BD, modelos y seeders:** Crear migraciones para tabla `materials`, `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), agregar `activo` a `categories`, migrar `product_variants.material` a `material_id`, migrar `color` a `color_id` en `variant_color_stocks` y `work_orders`, y agregar `color_id` nullable a `sale_details` conservando `chosen_color` como snapshot textual. Seeders con datos actuales exactos (A12).
+- [ ] **Fase 3: Pantalla "Catálogos" (Admin + Supervisor):** Nueva sección propia "Catálogos" en el menú principal (`role:admin,supervisor`). CRUD de categorías, materiales y colores; asignación muchos a muchos categoría↔material y material↔color; descontinuar color por material (`material_color.activo`); interruptor global (`colors.activo`); candado de renombrado (libre si no se ha usado; solo corrección tipográfica con confirmación si ya tiene registros históricos vinculados).
+- [ ] **Fase 4: Productos y POS leyendo de BD:** Formularios de productos (`Products/Create.vue` y `Edit.vue`) y POS (`Sales/Create.vue`) cargando catálogos reactivos desde base de datos. Validación estricta categoría-material en backend. Regla de "color especial" (capturado en nota de partida `custom_notes` con costo extra `additional_cost`, sin `color_id`). Melamina rechaza color especial: solo admite colores de línea activos. Ocultar productos de categoría o material desactivado en catálogo público y POS (visibles en inventario interno).
+- [ ] **Fase 5: Producción, órdenes de trabajo y embarques con `color_id` y regla de descontinuados:** *(FASE DE MAYOR RIESGO — toca stock por color)*. `ProductionController::index`, `@printReport`, `@storeCompletion`, `WorkOrderController` y `ShipmentController` operando con `color_id`. Permitir embarque y cancelación de embarque con color descontinuado mientras quede stock físico; bloquear nueva venta y fabricación de colores descontinuados.
+- [ ] **Fase 6: Catálogo público, reporte de taller y alertas:** Vista de catálogo público (`catalogo/index.blade.php`) leyendo materiales y colores desde BD. En `Production/Print.vue` y en la cola de producción (`Production/Index.vue`), las partidas con color especial deben mostrar la nota de forma visible (ej. *"Color especial: ver nota"*). Alerta en Dashboard y Productos: *"quedan X piezas de [Material] [Color] (descontinuado)"*.
+- [ ] **Fase 7: Tests nuevos y regresión completa:** Crear tests automatizados de las reglas A1–A12 y verificar que las suites existentes sigan en verde.
+
+### Tests Nuevos a Construir:
+- [ ] Descontinuar un color en Melamina no lo bloquea en Madera ni en MDF.
+- [ ] Color descontinuado no aparece en POS, catálogo público, creación de productos nuevos ni órdenes de trabajo.
+- [ ] Embarcar y cancelar embarque con color descontinuado y stock existente funciona correctamente.
+- [ ] Partida con color especial no toca `variant_color_stocks` ni falla validaciones de producción.
+- [ ] Melamina rechaza venta con color especial (exige color de línea activo).
+- [ ] Validación categoría-material rechaza variantes con material no asociado a la categoría.
+- [ ] Producto de categoría o material desactivado se oculta en catálogo público y POS pero sigue visible en inventario interno.
+- [ ] Renombrar color: libre si no se ha usado; restringido con confirmación si ya tiene uso histórico.
+- [ ] Seeders reproducen exactamente las categorías, materiales, relaciones y colores actuales.
+- [ ] Las suites existentes de tests siguen en verde tras cada fase.
+
+### Riesgos Técnicos:
+- Migración de datos existentes de texto a IDs foráneos en stock por color (`variant_color_stocks`) y órdenes de trabajo (`work_orders`).
+- Pedidos históricos deben conservar snapshot textual del nombre y color vendido (`sale_details.chosen_color`).
+- Colores hardcodeados olvidados en controladores o vistas Blade/Vue secundarias (se detectaron 3 matrices distintas en el código).
+- Catálogo público en producción con caché activa (al desplegar en Neubox requerirá: `npm run build`, `php artisan config:cache`, `php artisan route:cache`, `php artisan view:cache`).
+
+---
+
+## 🔴 FASE 2.8 — MÓDULO DE DEVOLUCIONES (URGENTE — PLANEADO, SIN CONSTRUIR)
+**Prioridad:** 🔴 ALTA / URGENTE (2° en orden de ejecución; depende de Fase 2.7) | **Estimado:** 2 a 3 sesiones  
+**Ubicación:** Submenú "Devoluciones" dentro del módulo de Embarques / Logística (`role:admin,inventario,supervisor`).  
+**Dependencia:** Se construye **DESPUÉS de la fase 5 de la Fase 2.7** porque las devoluciones mueven stock por color y deben operar con `color_id`.
+
+### Checklist por Fases:
+- [ ] **Fase 1: Auditoría de lectura de "entregado":** Auditoría exhaustiva completada (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X2) identificando todos los puntos donde se calcula "entregado" y deberán restar devoluciones (`ShipmentController`, `SaleController::show`, `ProductionController`, vistas Vue).
+- [ ] **Fase 2: BD y modelos:** Migraciones para `sale_returns` (`id`, `folio`, `client_id`, `user_id`, `authorized_by`, `returned_at`, `notes`, `timestamps`) y `sale_return_items` (`id`, `sale_return_id`, `sale_detail_id`, `shipment_id` nullable, `quantity`, `reason_type`, `disposition`, `color_id` nullable, `chosen_color` snapshot, `notes`, `timestamps`). Modelos Eloquent y relaciones.
+- [ ] **Fase 3: Controlador transaccional con `lockForUpdate`:** Endpoint `POST /shipments/returns` siguiendo el patrón transaccional de `ShipmentController::store`. Validación: `cantidad <= entregado neto`. Destinos: `danada` (reutiliza `damaged_stock_logs` y suma a `damaged_stock`), `baja` (merma sin stock), `color_equivocado` (suma al stock del color real indicado; obligatorio color en Melamina). Recálculo dinámico: si quedan faltantes en el pedido, regresar stage a `produccion` (historial automático vía `SaleObserver`, sin crear `SaleHistory` manual).
+- [ ] **Fase 4: UI de Devoluciones:** Submenú en Embarques con listado de devoluciones, modal/formulario de captura con selector de pedido/partida entregada, motivo, destino, color real si Melamina, campo de texto libre obligatorio "Autorizado por" (`authorized_by`) y notas. Desglose visible de devoluciones en el detalle del pedido (`Sales/Show.vue`).
+- [ ] **Fase 5: Integración con producción y embarques:** Ajustar todos los `withSum` de entregas (`deliveries`) para restar devoluciones netas. Sin reenvío automático: Producción decide en el Plan Taller cuándo se reenvía o repone.
+- [ ] **Fase 6: Tests y regresión completa:** Pruebas unitarias y de integración para los flujos de devolución y verificación de suites completas en verde.
+
+### Tests Nuevos a Construir:
+- [ ] Intento de devolución por cantidad mayor al entregado neto se rechaza con error de validación.
+- [ ] Destino 'danada' suma a `product_variants.damaged_stock` (y `stock` físico) y crea registro en `damaged_stock_logs`.
+- [ ] Destino 'baja' no toca inventario y deja registro histórico de la merma.
+- [ ] Destino 'color_equivocado' en Melamina suma existencias al color real indicado; si no se especifica color falla validación.
+- [ ] Destino 'color_equivocado' en otro material suma al stock general sin requerir color.
+- [ ] Pedido 'entregado' regresa a 'produccion' si tras la devolución quedan piezas pendientes; historial registrado por `SaleObserver`.
+- [ ] Plan de Producción recalcula faltantes considerando piezas devueltas según su destino.
+- [ ] Devolución de pedido completo (todas las partidas devueltas).
+- [ ] Campo "Autorizado por" es obligatorio; devolución permitida sin plazo límite tras la entrega.
+- [ ] Partida con color especial devuelta no altera `variant_color_stocks`.
+- [ ] Roles no autorizados (`vendedor`, `produccion`) reciben 403 Forbidden al intentar registrar devoluciones.
+- [ ] Suites existentes + tests del módulo A siguen en verde.
+
+### Riesgos Técnicos:
+- Omisión de restar devoluciones en algún cálculo de "entregado" en producción o embarques (riesgo de cerrar pedidos indebidamente o generar sobreproducción).
+- Doble conteo entre cancelación de un viaje y devolución de partidas de ese mismo viaje.
+- Interacción con remanentes pausados (`production_hold`) y con la fórmula de avance máximo `MAX(completed, detailed, delivered)`.
+- Dependencia estricta de `color_id` de la Fase 2.7.
+
+#### 🔮 Integración futura con Cobranza (Fase 3.2 en Pausa):
+- La devolución almacena `sale_detail_id` para calcular posteriormente el valor económico devuelto: `(unit_price con descuento × cantidad) + proporción de additional_cost`.
+- Si la pieza devuelta se vendió como color especial (nota con costo extra), su `additional_cost` **debe incluirse** en el cálculo del saldo a favor / nota de crédito en Cobranza, a pesar de no tocar `variant_color_stocks`.
 
 ---
 
@@ -236,20 +308,28 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 📌 Orden de Dependencias (actualizado 10 sep 2026)
+## 📌 Orden de Dependencias (actualizado 29 oct 2026)
  
  ```
  Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
                                       ↓
                      Fase 2.5 — Embarques y CSS (COMPLETADO)
                                       ↓
-                     Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token) (¡Siguiente paso!)
+                     🔴 Fase 2.7 — Catálogos Administrables (¡Prioridad 1 URGENTE!)
                                       ↓
-                               Fase 3 (Dashboards) — Finanzas y Producción
+                     🔴 Fase 2.8 — Módulo de Devoluciones (¡Prioridad 2 URGENTE!)
                                       ↓
-                     Fase 5 (Flete dinámico) — depende de 4.2 (link personalizado)
+                     ⏸️ [Fase 3.2 Cobranza — EN PAUSA esperando respuestas del cliente]
                                       ↓
-                     Fase 6 (Reportes PDF) — depende de Fase 3
+                     Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token)
                                       ↓
-                     Fase 7 (Rendimiento en Hosting) — Paginación y Optimizaciones
+                     Fase 3 (Dashboards por rol) — Producción, Finanzas e Inventarios
+                                      ↓
+                     Fase 5 (Precios dinámicos por flete) — depende de Fase 4.2
+                                      ↓
+                     Fase 6 (Reportes PDF globales) — depende de Fase 3
+                                      ↓
+                     Fase 7 (Rendimiento en Hosting) — Paginación y Optimizaciones (Fase 2.6 pospuesta)
  ```
+
+> **Nota sobre Cobranza (Fase 3.2 en Pausa):** Se encuentra temporalmente detenida a la espera de definiciones de negocio por parte del cliente (política de crédito y días de gracia, obligatoriedad de anticipo para confirmar pedido, reglas de abonos globales entre ventas, política de anticipos ante cancelaciones, roles autorizados para cobrar, bloqueo automático por saldo vencido y formatos contables requeridos). Se reanudará una vez resueltas estas incógnitas.

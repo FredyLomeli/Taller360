@@ -14,20 +14,16 @@ Sistema de gestión de pedidos y manufactura diseñado específicamente para **m
 
 | Campo | Detalle |
 |-------|---------|
-| **Versión** | 2.8 — Estado Detallado y Reserva de Stock |
-| **Última auditoría** | 07 de septiembre 2026 — sincronizado directamente contra el código fuente real |
-| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado), Catálogo Blade SSR y lógica de Avance Máximo (v2.8) integrados. 16 suites de tests automatizados. |
-| **Frontend** | Funcional en Vue 3 / Inertia.js para gestión interna; Laravel Blade SSR puro para Landing y Catálogo Comercial público. |
+| **Versión** | 2.8 — Estado Detallado y Reserva de Stock (sin cambio de versión) |
+| **Última auditoría** | 07 de septiembre 2026 (código real) — **Actualización documental:** 29 de octubre 2026 (Fases 2.7 y 2.8 añadidas como *Planeado, sin construir*; Cobranza en pausa) |
+| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado), Catálogo Blade SSR, Detallado/Reserva (v2.8) y Sprint de Octubre (OT independientes, Dañadas y Melamina por Color) integrados. Documentadas Fases 2.7 y 2.8 en backlog. |
+| **Frontend** | Funcional en Vue 3 / Inertia.js para gestión interna sobre Tailwind v4; Laravel Blade SSR puro para Landing y Catálogo Comercial público. |
 | **Repositorio** | https://github.com/FredyLomeli/Taller360 |
 
 ---
-## 🆘 Hallazgo nuevo — conflicto de versiones de Tailwind CSS
+## ✅ Tailwind CSS v4 — Migración Completada (Actualizado 29 oct 2026)
 
-`package.json` tiene instaladas **dos versiones incompatibles de Tailwind al mismo tiempo**:
-- `tailwindcss: ^3.2.1` + `postcss` + `autoprefixer` (stack clásico de Tailwind v3).
-- `@tailwindcss/vite: ^4.0.0` (el plugin de Vite exclusivo de Tailwind v4, que reemplaza a PostCSS).
-
-`resources/css/app.css` usa la sintaxis clásica `@tailwind base; @tailwind components; @tailwind utilities;` (v3), y `vite.config.js` **no** incluye el plugin `@tailwindcss/vite`. Es decir: el proyecto **corre en v3 real**, pero tiene una dependencia de v4 instalada sin usar — probablemente un intento de migración a v4 que no se completó, o un `npm install` accidental. No rompe nada hoy, pero es peso muerto en `node_modules` y puede confundir a quien retome el proyecto pensando que ya está en v4.
+~~`package.json` tiene instaladas dos versiones incompatibles de Tailwind al mismo tiempo...~~ **✅ Resuelto:** El conflicto de versiones se resolvió satisfactoriamente migrando el proyecto por completo a **Tailwind CSS v4.3.3 nativo**. Se eliminaron `postcss.config.js` y `tailwind.config.js`. `vite.config.js` registra `@tailwindcss/vite` y `resources/css/app.css` usa `@import "tailwindcss"; @plugin "@tailwindcss/forms";`. No existe peso muerto ni PostCSS legacy.
 
 ---
 
@@ -103,22 +99,31 @@ Desarrollado en Laravel Blade puro (SSR) y Vanilla JS para máxima velocidad y o
 - Botón directo de cotización vía WhatsApp empresarial (`company_whatsapp`).
 - Precios y stock estrictamente ocultos al público.
 
+### 🎨 Catálogos Administrables (Fase 2.7 — 🔴 URGENTE, Planeado, sin construir)
+Administración dinámica de categorías, materiales y colores globales/por material (`role:admin,supervisor`). Descontinuar color por material (`material_color.activo`), interruptor global de color, validación estricta categoría-material, regla de "color especial" (capturado en nota con costo extra; Melamina no admite color especial), candado de renombrado histórico y blindaje de seeders para retrocompatibilidad total.
+
+### 🔄 Módulo de Devoluciones (Fase 2.8 — 🔴 URGENTE, Planeado, sin construir)
+Submenú en Embarques (`role:admin,inventario,supervisor`) para registrar devoluciones por partida de pedidos entregados. Destinos: `danada` (reutiliza `damaged_stock_logs` y entra a dañadas), `baja` (merma) y `color_equivocado` (suma existencias al color real indicado con `color_id` de Fase 2.7; obligatorio en Melamina). Recálculo dinámico de faltantes y reversión de etapa a `produccion` sin reenvío automático (Producción decide en Plan Taller cuándo se repone).
+
 ---
 
-## ⚠️ Pendiente Real Confirmado en Código (05 sep 2026)
+## ⚠️ Pendiente Real y Prioridades del Proyecto (Actualizado 29 oct 2026)
 
 | Prioridad | Tarea | Detalle |
 |-----------|-------|---------|
-| 🟢 Alta | Selector multi-cliente en Embarques | Backend listo con `client_ids[]`, falta componente UI en `Shipments/Create.vue` |
-| 🟢 Alta | Remisión de embarque agrupada | Modificar `shipment_manifest.blade.php` para separar partidas por cliente/pedido |
-| 🟢 Limpieza | Dependencias Tailwind CSS | Desinstalar `@tailwindcss/vite` (sin uso en v3) o completar migración a v4 |
-| 🟡 Media | Paginación y límite de consultas | Paginar `ProductController::index()` y limitar `Client::all()` en el POS |
-| 🟡 Media | Fecha compromiso editable | Permitir corregir `promised_date` tras la creación del pedido |
-| 🟡 Media | Forzar Modo Taller por rol | Asignar modo taller en backend para `supervisor`, `produccion` e `inventario` |
+| 🔴 **URGENTE (1°)** | **Fase 2.7: Catálogos Administrables** | CRUD dinámico de categorías, materiales y colores; asignación N:N; descontinuar por material; candado de renombrado; color especial con nota y costo extra; seeders fieles. *(Planeado, sin construir — estimado 5 a 7 sesiones)* |
+| 🔴 **URGENTE (2°)** | **Fase 2.8: Módulo de Devoluciones** | Submenú en Embarques para devoluciones por partida de pedidos entregados; destinos (`danada`, `baja`, `color_equivocado`); stock por color con `color_id`; recálculo a `produccion` sin reenvío automático. *(Planeado, sin construir — estimado 2 a 3 sesiones; depende de 2.7)* |
+| ⏸️ **En Pausa** | **Fase 3.2: Cobranza y Finanzas** | En pausa esperando respuestas de negocio del cliente (política de crédito, anticipos obligatorios, pagos globales, cancelaciones y reportes requeridos). |
+| 🟢 Completado | ~~Selector multi-cliente en Embarques~~ | ✅ Implementado en `Shipments/Create.vue` con soporte reactivo de `client_ids[]`. |
+| 🟢 Completado | ~~Remisión de embarque agrupada~~ | ✅ Implementado en `ShipmentController::printManifest()` y `shipment_manifest.blade.php` agrupado por pedido con formato corporativo. |
+| 🟢 Completado | ~~Dependencias Tailwind CSS~~ | ✅ Migración completa a Tailwind CSS v4.3.3 nativo con `@tailwindcss/vite`. |
+| 🟢 Completado | ~~Fecha compromiso editable~~ | ✅ Implementado en Kanban y `Sales/Show.vue` con SweetAlert. |
+| 🟢 Completado | ~~Forzar Modo Taller por rol~~ | ✅ Implementado en `SaleController::show()` (`is_production_mode = true` y `makeHidden()` para roles `produccion`, `inventario`, `supervisor`). |
 | 🟢 Comercial | Link de catálogo por cliente (Fase 4.2) | Generar `catalog_token` para mostrar precios personalizados según `price_tier` |
 | 🟡 Media | Dashboards especializados (Fase 3) | Construir vistas dedicadas para Producción, Finanzas e Inventarios |
 | 🔵 Futuro | Precios dinámicos por flete (Fase 5) | Cálculo kilométrico y zonas de flete |
 | 🟣 Final | Reportes PDF globales (Fase 6) | Balances financieros, cartera vencida y producción histórica |
+| ⚪ Pospuesto | Paginación y rendimiento en hosting (Fase 7 / 2.6) | Paginar `ProductController::index()` y limitar `Client::all()` en el POS |
 
 ---
 
@@ -165,7 +170,7 @@ php artisan view:cache
 | Frontend | Vue 3.4+ (`<script setup>`) | `package.json` |
 | Puente | Inertia.js (`@inertiajs/vue3` 2.x) | `package.json`, sin rutas `/api/` en `routes/web.php` |
 | Build | Vite 7.x + `laravel-vite-plugin` 2.x | `package.json`, `vite.config.js` |
-| Estilos | Tailwind CSS **3.2.1** (activo, vía PostCSS) | `resources/css/app.css` — ⚠️ ver hallazgo de conflicto de versiones arriba |
+| Estilos | Tailwind CSS **4.3.3** (nativo, vía `@tailwindcss/vite` y `@import "tailwindcss"`) — ✅ Corregido 29 oct 2026 (migración completada) | `package.json`, `resources/css/app.css`, `vite.config.js` |
 | Base de Datos | MySQL / MariaDB | |
 | PDFs | barryvdh/laravel-dompdf 3.1.2 | `composer.lock` |
 | Firma digital | vue-signature-pad 3.x | `package.json`, `Sales/Create.vue` |
