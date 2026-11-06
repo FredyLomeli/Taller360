@@ -21,31 +21,38 @@ const allowNegativeStock = computed(() => page.props.settings?.allow_negative_st
 // --- CONFIGURACIÓN DE COLORES (CATÁLOGO VISUAL) ---
 const materialColors = {
     'MDF': [
-        { name: 'Chocolate', hex: '#5D4037' },
-        { name: 'Blanco', hex: '#F5F5F5', border: true },
-        { name: 'Gris', hex: '#9E9E9E' },
-        { name: 'Nogal', hex: '#8D6E63' },
-        { name: 'Negro', hex: '#212121' }
+        { name: 'Chocolate', hex: '#3B2314' },
+        { name: 'Nogal', hex: '#5C3A21' },
+        { name: 'Blanco', hex: '#FFFFFF', border: true },
+        { name: 'Gris', hex: '#9CA3AF' },
+        { name: 'Cherry', hex: '#722F37' },
+        { name: '258', hex: '#A08A75' }
     ],
     'Madera': [
-        { name: 'Natural', hex: '#D7CCC8' },
-        { name: 'Caoba', hex: '#4E342E' },
-        { name: 'Nogal', hex: '#5D4037' },
-        { name: 'Cedro', hex: '#A1887F' }
+        { name: 'Chocolate', hex: '#3B2314' },
+        { name: 'Caoba', hex: '#4A1525' },
+        { name: 'Tabaco', hex: '#422A1D' },
+        { name: 'Cherry', hex: '#722F37' }
     ],
     'Melamina': [
-        { name: 'Blanco', hex: '#FFFFFF', border: true },
-        { name: 'Gris', hex: '#BDBDBD' },
-        { name: 'Texturizado', hex: '#EFEBE9' },
-        { name: 'Oyamel', hex: '#D7CCC8' }
+        { name: 'Fresno Andino', hex: '#D4C4A8' },
+        { name: 'Parota', hex: '#8B5A2B' },
+        { name: 'Nogal Africano', hex: '#50382B' },
+        { name: 'Gris Cenizo', hex: '#6B7280' },
+        { name: 'Gris Antracita', hex: '#374151' },
+        { name: 'Tzalam', hex: '#6F4E37' },
+        { name: 'Moka', hex: '#4A3728' }
     ],
     'default': [{ name: 'Estándar', hex: '#CCCCCC' }]
 };
 
 const getColorsForMaterial = (materialName) => {
     if (!materialName) return materialColors['default'];
-    const key = Object.keys(materialColors).find(k => materialName.includes(k));
-    return key ? materialColors[key] : materialColors['default'];
+    // Prioridad: "Madera y MDF enchapado" debe usar la paleta de Madera (no caer en MDF)
+    if (materialName.includes('Madera')) return materialColors['Madera'];
+    if (materialName.includes('Melamina')) return materialColors['Melamina'];
+    if (materialName.includes('MDF')) return materialColors['MDF'];
+    return materialColors['default'];
 };
 
 // --- GESTIÓN INTELIGENTE DE IMÁGENES ---

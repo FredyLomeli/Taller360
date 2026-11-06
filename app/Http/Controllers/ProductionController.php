@@ -116,7 +116,7 @@ class ProductionController extends Controller
 
             if ($isMelamina) {
                 $colorStocksMap = $variant->colorStocks ? $variant->colorStocks->keyBy('color') : collect();
-                $defaultColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel'];
+                $defaultColors = ['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka'];
                 $usedColors = $group->pluck('chosen_color')->filter()->unique();
                 $allColors = collect($defaultColors)->concat($usedColors)->unique()->values();
 
@@ -456,7 +456,7 @@ class ProductionController extends Controller
 
             if ($isMelamina) {
                 $colorStocksMap = $variant->colorStocks ? $variant->colorStocks->keyBy('color') : collect();
-                $defaultColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel'];
+                $defaultColors = ['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka'];
                 $usedColors = $group->pluck('chosen_color')->filter()->unique();
                 $allColors = collect($defaultColors)->concat($usedColors)->unique()->values();
 

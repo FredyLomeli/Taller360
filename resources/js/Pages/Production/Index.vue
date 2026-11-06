@@ -75,7 +75,7 @@ const selectVariant = (variant) => {
     searchQuery.value = variant.name;
     showDropdown.value = false;
     if (variant.material === 'Melamina' && !workOrderForm.color) {
-        workOrderForm.color = 'Blanco';
+        workOrderForm.color = '';
     }
 };
 
@@ -519,10 +519,14 @@ const submitCompletion = (sourceType, sourceId, maxQuantity) => {
                     <div v-if="selectedVariantObj?.material === 'Melamina' || (selectedVariantObj?.name && selectedVariantObj.name.includes('Melamina'))">
                         <label class="block text-xs font-bold text-purple-900 mb-1.5 uppercase tracking-wide">Color de Fabricación (Melamina) <span class="text-red-500">*</span></label>
                         <select v-model="workOrderForm.color" required class="w-full border-purple-200 bg-purple-50/50 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm p-2.5 font-bold text-purple-900">
-                            <option value="Blanco">Blanco</option>
-                            <option value="Gris">Gris</option>
-                            <option value="Texturizado">Texturizado</option>
-                            <option value="Oyamel">Oyamel</option>
+                            <option value="" disabled>Selecciona un color...</option>
+                            <option value="Fresno Andino">Fresno Andino</option>
+                            <option value="Parota">Parota</option>
+                            <option value="Nogal Africano">Nogal Africano</option>
+                            <option value="Gris Cenizo">Gris Cenizo</option>
+                            <option value="Gris Antracita">Gris Antracita</option>
+                            <option value="Tzalam">Tzalam</option>
+                            <option value="Moka">Moka</option>
                         </select>
                     </div>
                     <div v-else-if="selectedVariantObj">

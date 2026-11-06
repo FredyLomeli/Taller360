@@ -15,8 +15,8 @@ Sistema de gestión de pedidos y manufactura diseñado específicamente para **m
 | Campo | Detalle |
 |-------|---------|
 | **Versión** | 2.8 — Estado Detallado y Reserva de Stock (sin cambio de versión) |
-| **Última auditoría** | 07 de septiembre 2026 (código real) — **Actualización documental:** 30 de octubre 2026 (Fase 0 Hotfix Melamina añadida como Prioridad Máxima; Fases 2.7 y 2.8 añadidas como *Planeado, sin construir*; Cobranza en pausa) |
-| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto (Órdenes de Trabajo, Stock Mínimo, Auto-correo, Supervisor ampliado), Catálogo Blade SSR, Detallado/Reserva (v2.8) y Sprint de Octubre (OT independientes, Dañadas y Melamina por Color) integrados. Documentada Fase 0 Hotfix (7 colores oficiales), y Fases 2.7 y 2.8 en backlog. |
+| **Última auditoría** | 07 de septiembre 2026 (código real) — **Actualización documental:** 06 de noviembre 2026 (Fase 0 Hotfix Melamina y Paleta POS completado ✅; Fase 2.7 Catálogos y Fase 2.8 Devoluciones en backlog; Cobranza en pausa) |
+| **Backend** | Estable. Bugs históricos resueltos. Sprint de agosto, Catálogo Blade SSR, Detallado/Reserva (v2.8), Sprint de Octubre y Fase 0 Hotfix Melamina (7 colores oficiales + blindaje de paleta POS) integrados y validados (81/81 tests en verde). |
 | **Frontend** | Funcional en Vue 3 / Inertia.js para gestión interna sobre Tailwind v4; Laravel Blade SSR puro para Landing y Catálogo Comercial público. |
 | **Repositorio** | https://github.com/FredyLomeli/Taller360 |
 
@@ -99,8 +99,8 @@ Desarrollado en Laravel Blade puro (SSR) y Vanilla JS para máxima velocidad y o
 - Botón directo de cotización vía WhatsApp empresarial (`company_whatsapp`).
 - Precios y stock estrictamente ocultos al público.
 
-### 🎨 Hotfix Colores de Melamina (Fase 0 — 🔴 PRIORIDAD MÁXIMA, en espera de "Procede hotfix")
-Sustitución en código duro de los 4 colores erróneos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel` — error de desarrollo) por los 7 oficiales de fábrica acordados: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`. Alineación de MDF (6 colores) y Madera (4 colores) con los códigos HEX oficiales del catálogo Blade, protegiendo en `Sales/Create.vue` que `"Madera y MDF enchapado"` use la paleta de Madera y no caiga por error en MDF. En espera de confirmación explícita del PM para proceder.
+### 🎨 Hotfix Colores de Melamina y Paleta POS (Fase 0 — ✅ COMPLETADO)
+Sustitución en código duro de los 4 colores erróneos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel` — error de desarrollo) por los 7 oficiales de fábrica acordados: `Fresno Andino`, `Parota`, `Nogal Africano`, `Gris Cenizo`, `Gris Antracita`, `Tzalam`, `Moka`. Alineación de MDF (6 colores) y Madera (4 colores) con los códigos HEX oficiales del catálogo Blade, protegiendo en `Sales/Create.vue` que `"Madera y MDF enchapado"` use la paleta de Madera y no caiga por error en MDF. Validado en QA local y con 81 tests en verde.
 
 ### 🎨 Catálogos Administrables (Fase 2.7 — 🔴 URGENTE, Planeado, sin construir)
 Administración dinámica de categorías, materiales (4 confirmados: `MDF`, `Madera`, `Madera y MDF enchapado`, `Melamina`) y colores globales/por material (`role:admin,supervisor`). Descontinuar color por material (`material_color.activo`), interruptor global de color, validación estricta categoría-material, regla de "color especial" (capturado en nota con costo extra; Melamina no admite color especial), candado de renombrado histórico y blindaje de seeders (15 colores del Blade; conteos pendientes de confirmación: 14 o más categoría↔material, 17 o 21 material↔color; preservando las 181 variantes existentes bajo regla firme A11).
@@ -110,14 +110,14 @@ Submenú en Embarques (`role:admin,inventario,supervisor`) para registrar devolu
 
 ---
 
-## ⚠️ Pendiente Real y Prioridades del Proyecto (Actualizado 30 oct 2026)
+## ⚠️ Pendiente Real y Prioridades del Proyecto (Actualizado 06 nov 2026)
 
 | Prioridad | Tarea | Detalle |
 |-----------|-------|---------|
-| 🔴 **PRIORIDAD MÁXIMA** | **Fase 0: Hotfix Colores de Melamina** | Reemplazo en código duro de los 4 colores erróneos por los 7 oficiales de fábrica (`Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`); alinear MDF y Madera con HEX del Blade y proteger en POS que "Madera y MDF enchapado" use paleta de Madera. Sin migración ni tablas nuevas. *(En espera de confirmación "Procede hotfix")* |
 | 🔴 **URGENTE (1° Módulo)** | **Fase 2.7: Catálogos Administrables** | CRUD dinámico de categorías, materiales (4 confirmados) y colores; asignación N:N; descontinuar por material; candado de renombrado; color especial con nota y costo extra; seeders fieles (15 colores del Blade; conteos pendientes: 14+ cat↔mat, 17 o 21 mat↔col; regla firme A11). *(Planeado, sin construir — estimado 5 a 7 sesiones)* |
 | 🔴 **URGENTE (2° Módulo)** | **Fase 2.8: Módulo de Devoluciones** | Submenú en Embarques para devoluciones por partida de pedidos entregados; destinos (`danada`, `baja`, `color_equivocado`); stock por color con `color_id`; recálculo a `produccion` sin reenvío automático; bloqueo de cancelación de viaje con devoluciones. *(Planeado, sin construir — estimado 2 a 3 sesiones; depende de 2.7)* |
 | ⏸️ **En Pausa** | **Fase 3.2: Cobranza y Finanzas** | En pausa esperando respuestas de negocio del cliente (política de crédito, anticipos obligatorios, pagos globales, cancelaciones y reportes requeridos). |
+| 🟢 Completado | ~~Fase 0: Hotfix Melamina y POS~~ | ✅ Reemplazo en código de los 4 colores erróneos por los 7 oficiales de fábrica; paletas POS alineadas y blindadas. |
 | 🟢 Completado | ~~Selector multi-cliente en Embarques~~ | ✅ Implementado en `Shipments/Create.vue` con soporte reactivo de `client_ids[]`. |
 | 🟢 Completado | ~~Remisión de embarque agrupada~~ | ✅ Implementado en `ShipmentController::printManifest()` y `shipment_manifest.blade.php` agrupado por pedido con formato corporativo. |
 | 🟢 Completado | ~~Dependencias Tailwind CSS~~ | ✅ Migración completa a Tailwind CSS v4.3.3 nativo con `@tailwindcss/vite`. |

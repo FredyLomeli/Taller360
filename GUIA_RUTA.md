@@ -1,10 +1,10 @@
 # 🗺️ GUÍA DE RUTA — TALLER 360
-**Actualizada:** 05 de septiembre 2026 — **Sincronizada documentalmente:** 29 de octubre 2026 (v2.8 real)
+**Actualizada:** 05 de septiembre 2026 — **Sincronizada documentalmente:** 06 de noviembre 2026 (v2.8 real)
 
 ---
 
 ## Estado actual en una línea
-> El sistema se encuentra en **versión 2.8 estable** con los módulos de **Sprint Cliente (Agosto)**, **Fase 4.1 Catálogo Digital Blade SSR**, **Estado Detallado / Reserva de Stock (v2.8)**, **Fase 2.5 Embarques (Multi-cliente y Remisiones corporativas)**, **Ajustes al Ciclo de Venta** y **Sprint de Octubre (Órdenes de Trabajo desacopladas, Control de Daños y Existencias por color para Melamina)** completados y auditados en código. El trabajo inmediato y prioritario se estructura en: **🔴 Fase 0 — Hotfix Colores de Melamina (PRIORIDAD MÁXIMA)**, seguido de **🔴 Fase 2.7 — Catálogos Administrables (URGENTE, 1°)** y **🔴 Fase 2.8 — Módulo de Devoluciones (URGENTE, 2°)** (*planeados, en espera de "Procede hotfix"*). La **Fase 3.2 Cobranza está ⏸️ EN PAUSA** a la espera de respuestas del cliente.
+> El sistema se encuentra en **versión 2.8 estable** con los módulos de **Sprint Cliente (Agosto)**, **Fase 4.1 Catálogo Digital Blade SSR**, **Estado Detallado / Reserva de Stock (v2.8)**, **Fase 2.5 Embarques (Multi-cliente y Remisiones corporativas)**, **Ajustes al Ciclo de Venta**, **Sprint de Octubre** y **Fase 0 — Hotfix Colores de Melamina y Paleta POS (COMPLETADO ✅)** auditados y validados con pruebas manuales y suite automatizada (81/81 tests en verde). El trabajo prioritario inmediato pasa a la **🔴 Fase 2.7 — Catálogos Administrables (Paso 1: Auditoría y Línea Base)**, seguido de la **🔴 Fase 2.8 — Módulo de Devoluciones**. La **Fase 3.2 Cobranza sigue ⏸️ EN PAUSA** a la espera de respuestas del cliente.
 
 ---
 
@@ -21,9 +21,9 @@
 ✅ MIGRACIÓN TAILWIND V4                         (COMPLETADA: Tailwind v4.3.3 nativo con @tailwindcss/vite)
 ✅ AJUSTES CICLO DE VENTA                        (COMPLETADA: Fecha compromiso editable + Modo Taller backend)
 ✅ SPRINT OCTUBRE 2026                           (COMPLETADO: OT autónomas, Dañadas, Existencias Melamina por Color)
+✅ FASE 0 — HOTFIX COLORES DE MELAMINA           (COMPLETADO: 7 colores oficiales en código duro + blindaje POS)
                                            ↓
-🔴 FASE 0 — HOTFIX COLORES DE MELAMINA           (PRIORIDAD MÁXIMA: 7 colores oficiales en código duro) [¡En espera de "Procede hotfix"!]
-🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES     (URGENTE: 1° en orden, categorías, materiales y colores)
+🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES     (URGENTE: 1° en orden, categorías, materiales y colores) [¡Próxima tarea!]
 🔴 FASE 2.8 — MÓDULO DE DEVOLUCIONES              (URGENTE: 2° en orden, depende de color_id de 2.7)
                                            ↓
 ⏸️ FASE 3.2 — COBRANZA Y FINANZAS                 (EN PAUSA — esperando respuestas de negocio del cliente)
@@ -65,22 +65,22 @@ Los 5 puntos acordados con el cliente están completamente implementados y respa
 
 ---
 
-## 🔴 PRÓXIMA TAREA #0 (PRIORIDAD MÁXIMA): Fase 0 — Hotfix Colores de Melamina
-**Tiempo estimado:** 1 sesión | **Prioridad:** 🔴 MÁXIMA (antes de la Fase 2.7) | **Estado:** Documentado, en espera de "Procede hotfix" del PM
+## ✅ TAREA COMPLETADA: Fase 0 — Hotfix Colores de Melamina y Paleta POS (Noviembre 2026)
+**Estado:** COMPLETADO Y VALIDADO EN QA LOCAL (81/81 tests en verde)
 
-Sustitución inmediata de los 4 colores erróneos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel` — reconocidos como un error de desarrollo) por los 7 oficiales de fábrica acordados: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`.
-- **Alcance Técnico (Código duro, sin alterar schema ni crear color_id):**
-  1. `ProductionController.php`: L119 (cálculo de faltantes por color) y L459 (`printReport` reporte impreso).
-  2. `Production/Index.vue`: L78 (selector en modal OT) y L522-525 (**eliminar default `'Blanco'`** para no asignar colores arbitrarios).
-  3. `Products/Create.vue`: L46 (matriz de colores de Melamina).
-  4. `Products/Edit.vue`: L25 (matriz de colores de Melamina).
-  5. `Sales/Create.vue`: L36-41 (matriz Melamina 7 colores, alinear MDF a 6 colores y Madera a 4 con códigos HEX de Blade) y L45-49 (**ajuste crítico en `getColorsForMaterial`:** como evalúa por subcadena, evitar que `"Madera y MDF enchapado"` caiga en la paleta de MDF; debe usar la de Madera: Chocolate, Caoba, Tabaco, Cherry).
-- **Regla estricta:** NO ejecutar hasta recibir del PM la confirmación explícita: *"Procede hotfix"*.
+Sustitución en código duro de los 4 colores erróneos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel` — error de desarrollo) por los 7 oficiales de fábrica acordados: `Fresno Andino`, `Parota`, `Nogal Africano`, `Gris Cenizo`, `Gris Antracita`, `Tzalam`, `Moka`.
+- **Alcance Implementado y Auditado:**
+  1. [x] `ProductionController.php`: L119 (cálculo de faltantes por color en cola) y L459 (`printReport` reporte impreso) con los 7 colores oficiales.
+  2. [x] `Production/Index.vue`: L78 selector en modal OT con valor inicial vacío `''` (sin default arbitrario); L522-530 select con `<option>` deshabilitado de instrucción y los 7 colores de fábrica.
+  3. [x] `Products/Create.vue`: L46 matriz `defaultMelaminaColors` con los 7 colores y badge visual "Melamina (7 Colores de Fábrica)".
+  4. [x] `Products/Edit.vue`: L25 matriz `defaultMelaminaColors` con los 7 colores y badge visual "Melamina (7 Colores de Fábrica)".
+  5. [x] `Sales/Create.vue`: L36-41 matriz Melamina 7 colores, alinear MDF a 6 colores y Madera a 4 con códigos HEX de Blade; L45-51 `getColorsForMaterial` priorizando `'Madera'` para garantizar que `"Madera y MDF enchapado"` use paleta de Madera y no caiga en MDF.
+  6. [x] `tests/Feature/VariantColorStockTest.php`: Actualizado a los 7 colores oficiales y ruta `/production-plan`, validando 100% de aserciones en verde.
 
 ---
 
 ## 🔴 PRÓXIMA TAREA #1 (URGENTE — PRIORIDAD MÁXIMA): Fase 2.7 — Sprint Catálogos Administrables
-**Tiempo estimado:** 5 a 7 sesiones | **Prioridad:** 🔴 URGENTE (1° en orden de ejecución tras Fase 0) | **Estado:** Planeado, sin construir
+**Tiempo estimado:** 5 a 7 sesiones | **Prioridad:** 🔴 URGENTE (1° en orden de ejecución) | **Estado:** Planeado, sin construir (Próximo a iniciar)
 
 Categorías, materiales por categoría y colores por material están hardcodeados en código fuente y plantillas. Se requiere administrarlos dinámicamente porque un proveedor descontinuó un color y agregó uno nuevo.
 - **Alcance Técnico:**

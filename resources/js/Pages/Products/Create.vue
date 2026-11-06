@@ -43,7 +43,7 @@ const availableMaterials = computed(() => {
 });
 
 // --- GESTIÓN DE COLORES PARA MATERIALES (MELAMINA) ---
-const defaultMelaminaColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel'];
+const defaultMelaminaColors = ['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka'];
 
 const onMaterialChange = (variant) => {
     if (variant.material === 'Melamina') {
@@ -281,7 +281,7 @@ const sanitizeNumber = (variant, field) => {
                                                 Existencias por Color en Bodega
                                             </span>
                                             <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">
-                                                Melamina (4 Colores de Fábrica)
+                                                Melamina (7 Colores de Fábrica)
                                             </span>
                                         </div>
 

@@ -352,30 +352,24 @@ SHOW INDEX FROM sales;
 
 ---
 
-## 0.4 Fase 0 — Hotfix Colores de Melamina (🔴 PRIORIDAD MÁXIMA — En espera de "Procede hotfix")
+## 0.4 Fase 0 — Hotfix Colores de Melamina y Paleta POS (✅ COMPLETADO — Noviembre 2026)
 
-> **Alcance Estricto (NO tocar base de datos ni migraciones):**
-> Este hotfix corrige el error de desarrollo donde se codificaron 4 colores incorrectos (`Blanco`, `Gris`, `Texturizado`, `Oyamel`), alineando el código a los **7 colores oficiales de Melamina** acordados con el cliente:
+> **Estado:** Implementado, verificado con suite de pruebas automatizadas (81/81 tests en verde) y validado en QA local.
+> Este hotfix corrigió el error de desarrollo donde se codificaron 4 colores incorrectos (`Blanco`, `Gris`, `Texturizado`, `Oyamel`), sustituyéndolos por los **7 colores oficiales de Melamina** acordados con el cliente:
 > `Fresno Andino`, `Parota`, `Nogal Africano`, `Gris Cenizo`, `Gris Antracita`, `Tzalam`, `Moka`.
+> Además, se blindó la paleta en el POS para que `"Madera y MDF enchapado"` use la paleta de Madera y no caiga por coincidencia de subcadena en MDF.
 >
-> 1. **`app/Http/Controllers/ProductionController.php` (L119, L459):** Reemplazar `$defaultColors = ['Blanco', 'Gris', 'Texturizado', 'Oyamel']` por los 7 oficiales.
-> 2. **`resources/js/Pages/Production/Index.vue`:**
->    - En L77-78: **Eliminar el color por defecto `'Blanco'` para Melamina** en el formulario de Orden de Trabajo (`workOrderForm.color`). El usuario debe elegir obligatoriamente uno de los 7 colores de Melamina.
->    - En L522-525: Reemplazar los 4 `<option>` por los 7 colores oficiales de Melamina.
-> 3. **`resources/js/Pages/Products/Create.vue` (L46) y `Edit.vue` (L25):** Reemplazar `defaultMelaminaColors` por los 7 oficiales.
-> 4. **`resources/js/Pages/Sales/Create.vue` (L22-43):**
->    - Melamina (L36-41): Reemplazar por los 7 oficiales con sus códigos HEX de la matriz oficial del Blade:
->      - Fresno Andino (`#D4C4A8`)
->      - Parota (`#8B5A2B`)
->      - Nogal Africano (`#50382B`)
->      - Gris Cenizo (`#6B7280`)
->      - Gris Antracita (`#374151`)
->      - Tzalam (`#6F4E37`)
->      - Moka (`#4A3728`)
->    - MDF: Alinear a los 6 oficiales del Blade con sus HEX: Chocolate (`#3B2314`), Nogal (`#5C3A21`), Blanco (`#FFFFFF`), Gris (`#9CA3AF`), Cherry (`#722F37`), 258 (`#A08A75`).
->    - Madera: Alinear a los 4 oficiales del Blade con sus HEX: Chocolate (`#3B2314`), Caoba (`#4A1525`), Tabaco (`#422A1D`), Cherry (`#722F37`).
->    - **Ajuste crítico en `Sales/Create.vue` (`getColorsForMaterial` L45-49):** La función actual evalúa por coincidencia de subcadena (`materialName.includes(k)`). Como `"Madera y MDF enchapado"` contiene la subcadena `"MDF"`, si se evalúa `'MDF'` antes que `'Madera'`, caería por error en la paleta de MDF. En la implementación del Hotfix se debe verificar y garantizar que `"Madera y MDF enchapado"` NO caiga en la lista de MDF por error y utilice la paleta de Madera (`Chocolate`, `Caoba`, `Tabaco`, `Cherry`).
-> 5. **Regla de transición:** El color en MDF y Madera sigue siendo obligatorio en el hotfix (relajar la validación es alcance de la Fase 2.7). Sigue SIN tablas nuevas ni `color_id`.
+> 1. [x] **`app/Http/Controllers/ProductionController.php` (L119, L459):** Reemplazado `$defaultColors` por los 7 oficiales en cola de producción y reporte impreso.
+> 2. [x] **`resources/js/Pages/Production/Index.vue`:**
+>    - En L77-78: Eliminado el color por defecto `'Blanco'` para Melamina en el formulario de Orden de Trabajo (`workOrderForm.color = ''`).
+>    - En L522-530: Reemplazados los `<option>` por placeholder obligatorio y los 7 colores oficiales de Melamina.
+> 3. [x] **`resources/js/Pages/Products/Create.vue` (L46) y `Edit.vue` (L25):** Reemplazado `defaultMelaminaColors` por los 7 oficiales y actualizado badge a "7 Colores de Fábrica".
+> 4. [x] **`resources/js/Pages/Sales/Create.vue` (L22-43):**
+>    - Melamina (L36-41): Reemplazado por los 7 oficiales con sus códigos HEX canónicos del Blade (`Fresno Andino #D4C4A8`, `Parota #8B5A2B`, `Nogal Africano #50382B`, `Gris Cenizo #6B7280`, `Gris Antracita #374151`, `Tzalam #6F4E37`, `Moka #4A3728`).
+>    - MDF: Alineado a los 6 oficiales del Blade con sus HEX (`Chocolate #3B2314`, `Nogal #5C3A21`, `Blanco #FFFFFF`, `Gris #9CA3AF`, `Cherry #722F37`, `258 #A08A75`).
+>    - Madera: Alineado a los 4 oficiales del Blade con sus HEX (`Chocolate #3B2314`, `Caoba #4A1525`, `Tabaco #422A1D`, `Cherry #722F37`).
+>    - En `getColorsForMaterial` (L45-51): Blindado con coincidencia prioritaria hacia `'Madera'` para garantizar que `"Madera y MDF enchapado"` utilice siempre la paleta de Madera y no caiga en MDF.
+> 5. [x] **`tests/Feature/VariantColorStockTest.php`:** Actualizado con los 7 colores oficiales y ruta `/production-plan`, confirmando la suite al 100% en verde.
 
 ---
 

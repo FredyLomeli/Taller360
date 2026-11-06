@@ -386,12 +386,12 @@ class VariantColorStockTest extends TestCase
             'price_1' => 5000,
         ]);
 
-        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Blanco', 'stock' => 2]);
-        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Gris', 'stock' => 1]);
-        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Texturizado', 'stock' => 3]);
-        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Oyamel', 'stock' => 0]);
+        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Fresno Andino', 'stock' => 2]);
+        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Parota', 'stock' => 1]);
+        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Gris Cenizo', 'stock' => 3]);
+        VariantColorStock::create(['product_variant_id' => $variant->id, 'color' => 'Moka', 'stock' => 0]);
 
-        // Cliente pide 1 Oyamel (stock es 0 aunque el total sea 6)
+        // Cliente pide 1 Moka (stock es 0 aunque el total sea 6)
         $client = Client::factory()->create();
         $sale = Sale::create([
             'client_id' => $client->id,
@@ -410,19 +410,19 @@ class VariantColorStockTest extends TestCase
             'quantity' => 1,
             'unit_price' => 5000,
             'subtotal' => 5000,
-            'chosen_color' => 'Oyamel',
+            'chosen_color' => 'Moka',
             'production_hold' => false,
         ]);
 
-        $response = $this->actingAs($admin)->get('/production');
+        $response = $this->actingAs($admin)->get('/production-plan');
         $response->assertStatus(200);
 
         $response->assertInertia(function (\Inertia\Testing\AssertableInertia $page) use ($variant) {
             $page->has('productionQueue.' . $variant->id, function (\Inertia\Testing\AssertableInertia $group) {
                 $group->where('pending_to_fabricate', 1)
-                      ->has('color_breakdown', 4)
-                      ->where('color_breakdown.3.color', 'Oyamel')
-                      ->where('color_breakdown.3.pending_to_fabricate', 1)
+                      ->has('color_breakdown', 7)
+                      ->where('color_breakdown.6.color', 'Moka')
+                      ->where('color_breakdown.6.pending_to_fabricate', 1)
                       ->etc();
             });
         });
