@@ -12,6 +12,7 @@ class VariantColorStock extends Model
     protected $fillable = [
         'product_variant_id',
         'color',
+        'color_id',
         'stock',
         'damaged_stock',
         'reserved_stock',
@@ -27,5 +28,10 @@ class VariantColorStock extends Model
     public function productVariant()
     {
         return $this->belongsTo(ProductVariant::class);
+    }
+
+    public function colorRelation()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
     }
 }

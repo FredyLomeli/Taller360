@@ -15,6 +15,7 @@ use App\Http\Controllers\SalePaymentController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\WorkOrderController;
 use App\Http\Controllers\DamagedStockController;
+use App\Http\Controllers\CatalogManagementController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -113,6 +114,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('/damaged-stock', [DamagedStockController::class, 'store'])
         ->name('damaged-stock.store');
+
+        // C. GESTIÓN DE CATÁLOGOS DINÁMICOS (Fase 2.7)
+        Route::controller(CatalogManagementController::class)->group(function () {
+            Route::get('/catalogs', 'index')->name('catalogs.index');
+            Route::post('/catalogs/categories', 'storeCategory')->name('catalogs.categories.store');
+            Route::put('/catalogs/categories/{category}', 'updateCategory')->name('catalogs.categories.update');
+            Route::post('/catalogs/categories/{category}/materials', 'syncCategoryMaterials')->name('catalogs.categories.sync-materials');
+            
+            Route::post('/catalogs/materials', 'storeMaterial')->name('catalogs.materials.store');
+            Route::put('/catalogs/materials/{material}', 'updateMaterial')->name('catalogs.materials.update');
+            Route::post('/catalogs/materials/{material}/colors', 'syncMaterialColors')->name('catalogs.materials.sync-colors');
+            Route::post('/catalogs/materials/{material}/colors/{color}/toggle', 'toggleMaterialColor')->name('catalogs.materials.colors.toggle');
+
+            Route::post('/catalogs/colors', 'storeColor')->name('catalogs.colors.store');
+            Route::put('/catalogs/colors/{color}', 'updateColor')->name('catalogs.colors.update');
+        });
     });
 
     // ==========================================

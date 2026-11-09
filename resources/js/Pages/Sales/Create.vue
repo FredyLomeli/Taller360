@@ -12,47 +12,38 @@ const signaturePad = ref(null);
 
 const props = defineProps({
     products: Array,
+    materials: Array,
     clients: Array,
 });
 
 const page = usePage();
 const allowNegativeStock = computed(() => page.props.settings?.allow_negative_stock ?? false);
 
-// --- CONFIGURACIÓN DE COLORES (CATÁLOGO VISUAL) ---
-const materialColors = {
-    'MDF': [
-        { name: 'Chocolate', hex: '#3B2314' },
-        { name: 'Nogal', hex: '#5C3A21' },
-        { name: 'Blanco', hex: '#FFFFFF', border: true },
-        { name: 'Gris', hex: '#9CA3AF' },
-        { name: 'Cherry', hex: '#722F37' },
-        { name: '258', hex: '#A08A75' }
-    ],
-    'Madera': [
-        { name: 'Chocolate', hex: '#3B2314' },
-        { name: 'Caoba', hex: '#4A1525' },
-        { name: 'Tabaco', hex: '#422A1D' },
-        { name: 'Cherry', hex: '#722F37' }
-    ],
-    'Melamina': [
-        { name: 'Fresno Andino', hex: '#D4C4A8' },
-        { name: 'Parota', hex: '#8B5A2B' },
-        { name: 'Nogal Africano', hex: '#50382B' },
-        { name: 'Gris Cenizo', hex: '#6B7280' },
-        { name: 'Gris Antracita', hex: '#374151' },
-        { name: 'Tzalam', hex: '#6F4E37' },
-        { name: 'Moka', hex: '#4A3728' }
-    ],
-    'default': [{ name: 'Estándar', hex: '#CCCCCC' }]
+// --- CONFIGURACIÓN DE COLORES Y MATERIALES DINÁMICOS (DESDE BD) ---
+const getColorsForMaterial = (materialName, variant = null) => {
+    if (variant?.material_model?.active_colors && variant.material_model.active_colors.length > 0) {
+        return variant.material_model.active_colors;
+    }
+    if (materialName && props.materials) {
+        const mat = props.materials.find(m => m.name.toLowerCase() === materialName.toLowerCase());
+        if (mat?.active_colors) return mat.active_colors;
+    }
+    return [];
 };
 
-const getColorsForMaterial = (materialName) => {
-    if (!materialName) return materialColors['default'];
-    // Prioridad: "Madera y MDF enchapado" debe usar la paleta de Madera (no caer en MDF)
-    if (materialName.includes('Madera')) return materialColors['Madera'];
-    if (materialName.includes('Melamina')) return materialColors['Melamina'];
-    if (materialName.includes('MDF')) return materialColors['MDF'];
-    return materialColors['default'];
+const isColorObligatorio = (materialName, variant = null) => {
+    if (variant?.material_model) {
+        return Boolean(variant.material_model.color_obligatorio);
+    }
+    if (materialName && props.materials) {
+        const mat = props.materials.find(m => m.name.toLowerCase() === materialName.toLowerCase());
+        if (mat) return Boolean(mat.color_obligatorio);
+    }
+    return materialName === 'Melamina';
+};
+
+const allowsSpecialColor = (materialName, variant = null) => {
+    return !isColorObligatorio(materialName, variant);
 };
 
 // --- GESTIÓN INTELIGENTE DE IMÁGENES ---
@@ -175,6 +166,7 @@ const handleAddToCart = (product, variant) => {
         product_name: product.name, 
         category_name: product.category ? product.category.name : '', 
         material: variant.material, 
+        material_id: variant.material_id,
         measurements: variant.measurements, 
         sku: variant.sku, 
         image: product.image,
@@ -183,8 +175,12 @@ const handleAddToCart = (product, variant) => {
         available_stock: variant.available_stock || 0,
         discount_percent: 0,
         chosen_color: '', 
+        color_id: null,
+        is_special_color: false,
+        special_color_name: '',
         notes: '', 
-        additional_cost: 0
+        additional_cost: 0,
+        _variant: variant,
     });
 };
 
@@ -246,17 +242,20 @@ const openImageModal = (product) => {
     showImageModal.value = true;
 };
 
-// --- MODAL DE NOTAS/EXTRAS ---
+// --- MODAL DE NOTAS/EXTRAS Y COLOR ESPECIAL ---
 const showNotesModal = ref(false);
 const editingItemIndex = ref(null);
-const noteForm = ref({ notes: '', additional_cost: 0 });
+const noteForm = ref({ notes: '', additional_cost: 0, is_special_color: false, special_color_name: '' });
 
-const openNotesModal = (index) => {
+const openNotesModal = (index, triggerSpecialColor = false) => {
     editingItemIndex.value = index;
     const item = cart.value[index];
+    const isSpecial = triggerSpecialColor || Boolean(item.is_special_color);
     noteForm.value = { 
         notes: item.notes || '', 
-        additional_cost: item.additional_cost || 0 
+        additional_cost: item.additional_cost || 0,
+        is_special_color: isSpecial,
+        special_color_name: item.special_color_name || (item.chosen_color && item.chosen_color.startsWith('Especial: ') ? item.chosen_color.replace('Especial: ', '') : ''),
     };
     showNotesModal.value = true;
 };
@@ -266,8 +265,16 @@ const saveNotes = () => {
         let cost = parseFloat(noteForm.value.additional_cost);
         if (isNaN(cost) || cost < 0) cost = 0;
 
-        cart.value[editingItemIndex.value].notes = noteForm.value.notes;
-        cart.value[editingItemIndex.value].additional_cost = cost;
+        const item = cart.value[editingItemIndex.value];
+        item.notes = noteForm.value.notes;
+        item.additional_cost = cost;
+        item.is_special_color = noteForm.value.is_special_color;
+        item.special_color_name = noteForm.value.special_color_name;
+
+        if (item.is_special_color) {
+            item.chosen_color = item.special_color_name ? `Especial: ${item.special_color_name.trim()}` : 'Color Especial';
+            item.color_id = null;
+        }
     }
     showNotesModal.value = false;
 };
@@ -278,11 +285,31 @@ const paymentForm = ref({ method: 'Efectivo', amount_received: 0, promised_date:
 
 const openPaymentModal = () => {
     if (cart.value.length === 0) return;
-    const missingColor = cart.value.find(i => !i.chosen_color);
-    if (missingColor) { 
-        Swal.fire({ title: 'Falta Color', text: `Selecciona el color para: ${missingColor.product_name} (${missingColor.material} - ${missingColor.measurements})`, icon: 'warning' }); 
-        return; 
+    
+    // Validación de colores según reglas de material
+    for (let i = 0; i < cart.value.length; i++) {
+        const item = cart.value[i];
+        if (isColorObligatorio(item.material, item._variant) && !item.chosen_color) {
+            Swal.fire({
+                title: 'Falta Color Requerido',
+                text: `El material ${item.material} exige seleccionar un color para: ${item.product_name}`,
+                icon: 'warning'
+            });
+            return;
+        }
+
+        if (item.is_special_color && (!item.notes || !item.notes.trim())) {
+            Swal.fire({
+                title: 'Nota de Muestra Requerida',
+                text: `Para el color especial de "${item.product_name}", es obligatorio describir la muestra o tono en las notas técnicas.`,
+                icon: 'warning'
+            }).then(() => {
+                openNotesModal(i, true);
+            });
+            return;
+        }
     }
+
     showPaymentModal.value = true;
     const date = new Date(); date.setDate(date.getDate() + 15);
     paymentForm.value.promised_date = date.toISOString().split('T')[0];
@@ -311,9 +338,16 @@ const submitOrder = () => {
     const payload = {
         client_id: selectedClient.value.id,
         items: cart.value.map(item => ({
-            variant_id: item.variant_id, quantity: item.quantity, price: item.price, 
-            discount_percent: item.discount_percent, chosen_color: item.chosen_color, 
-            notes: item.notes, additional_cost: item.additional_cost
+            variant_id: item.variant_id,
+            quantity: item.quantity,
+            price: item.price, 
+            discount_percent: item.discount_percent,
+            chosen_color: item.chosen_color,
+            color_id: item.color_id,
+            is_special_color: item.is_special_color,
+            special_color_name: item.special_color_name,
+            notes: item.notes,
+            additional_cost: item.additional_cost
         })),
         payment_method: paymentForm.value.method,
         paid_amount: paymentForm.value.amount_received,
@@ -435,9 +469,48 @@ const clearSignature = () => signaturePad.value.clearSignature();
 
                         <div class="flex items-end justify-between gap-2 mb-2 border-t border-gray-50 pt-2">
                             <div class="flex-1 min-w-0">
-                                <label class="block text-[8px] font-bold text-gray-400 uppercase mb-1 truncate">Color: <span class="text-green-600 font-semibold">{{ item.chosen_color || '...' }}</span></label>
-                                <div class="flex flex-wrap gap-1">
-                                    <button v-for="color in getColorsForMaterial(item.material)" :key="color.name" @click="item.chosen_color = color.name" :title="color.name" class="w-5 h-5 rounded-full border shadow-sm transition-transform hover:scale-110 relative" :class="{'ring-1 ring-green-500 ring-offset-1 scale-110': item.chosen_color === color.name, 'border-gray-300': color.border}" :style="{ backgroundColor: color.hex }"></button>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="block text-[8px] font-bold text-gray-400 uppercase truncate">
+                                        Color: <span class="text-green-600 font-semibold">{{ item.chosen_color || (isColorObligatorio(item.material, item._variant) ? 'Pendiente' : 'Acabado Natural') }}</span>
+                                    </label>
+                                    <span v-if="isColorObligatorio(item.material, item._variant)" class="text-[8px] bg-purple-100 text-purple-700 px-1 rounded font-bold">
+                                        Obligatorio
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1">
+                                    <button 
+                                        v-for="color in getColorsForMaterial(item.material, item._variant)" 
+                                        :key="color.name" 
+                                        @click="item.chosen_color = color.name; item.color_id = color.id; item.is_special_color = false;" 
+                                        :title="color.name" 
+                                        class="w-5 h-5 rounded-full border shadow-sm transition-transform hover:scale-110 relative" 
+                                        :class="{'ring-2 ring-green-600 ring-offset-1 scale-110': item.chosen_color === color.name, 'border-gray-300': color.hex === '#FFFFFF'}" 
+                                        :style="{ backgroundColor: color.hex }"
+                                    ></button>
+
+                                    <!-- Opción Natural / Sin Color (si el material no es Melamina) -->
+                                    <button 
+                                        v-if="!isColorObligatorio(item.material, item._variant)"
+                                        type="button"
+                                        @click="item.chosen_color = null; item.color_id = null; item.is_special_color = false;"
+                                        title="Sin color / Acabado Natural"
+                                        class="px-1.5 py-0.5 text-[9px] rounded border font-medium transition"
+                                        :class="(!item.chosen_color && !item.is_special_color) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'"
+                                    >
+                                        Natural
+                                    </button>
+
+                                    <!-- Opción Color Especial (Regla A4/A7: prohibido en Melamina) -->
+                                    <button 
+                                        v-if="allowsSpecialColor(item.material, item._variant)"
+                                        type="button"
+                                        @click="openNotesModal(index, true)"
+                                        title="Solicitar color especial con muestra o costo extra"
+                                        class="px-1.5 py-0.5 text-[9px] rounded border font-medium transition flex items-center gap-0.5"
+                                        :class="item.is_special_color ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'"
+                                    >
+                                        <span>🎨 Especial</span>
+                                    </button>
                                 </div>
                             </div>
                             <div class="flex bg-gray-50 p-1 rounded-lg border border-gray-200 shrink-0 h-10 items-center">
@@ -492,22 +565,49 @@ const clearSignature = () => signaturePad.value.clearSignature();
             </div>
         </div>
 
-        <!-- MODAL DE NOTAS -->
+        <!-- MODAL DE NOTAS Y COLOR ESPECIAL -->
         <Modal :show="showNotesModal" @close="showNotesModal = false" maxWidth="sm">
             <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span class="bg-blue-100 text-blue-600 p-1 rounded"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></span>
-                    Detalles de Producción
+                    <span class="bg-blue-100 text-blue-600 p-1.5 rounded">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </span>
+                    {{ noteForm.is_special_color ? 'Especificación de Color Especial' : 'Detalles de Producción' }}
                 </h3>
                 
                 <div class="space-y-4">
+                    <!-- Campo de Color Especial si está activo -->
+                    <div v-if="noteForm.is_special_color" class="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                        <label class="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1">
+                            Nombre / Referencia de la Muestra *
+                        </label>
+                        <input 
+                            v-model="noteForm.special_color_name" 
+                            type="text" 
+                            placeholder="Ej: Verde Olivo, Caoba Rojizo, Muestra física #4" 
+                            class="w-full text-xs font-semibold rounded-lg border-amber-300 focus:border-amber-500 focus:ring-amber-500"
+                        />
+                        <p class="text-[10px] text-amber-700 mt-1">
+                            Regla A4: Este tono se fabricará sobre pedido especial.
+                        </p>
+                    </div>
+
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Notas / Especificaciones</label>
-                        <textarea v-model="noteForm.notes" rows="3" placeholder="Ej: Jaladeras doradas, Vidrio esmerilado, Altura especial..." class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"></textarea>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">
+                            {{ noteForm.is_special_color ? 'Notas Técnicas de Muestra (Obligatorias *)' : 'Notas / Especificaciones' }}
+                        </label>
+                        <textarea 
+                            v-model="noteForm.notes" 
+                            rows="3" 
+                            :placeholder="noteForm.is_special_color ? 'Describe la muestra de color, código de pintura o indicaciones precisas para taller...' : 'Ej: Jaladeras doradas, Vidrio esmerilado, Altura especial...'" 
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                        ></textarea>
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Costo Extra ($)</label>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">
+                            {{ noteForm.is_special_color ? 'Costo Adicional por Color Especial / Extras ($)' : 'Costo Extra ($)' }}
+                        </label>
                         <div class="relative">
                             <span class="absolute left-3 top-2.5 text-gray-500 font-bold">$</span>
                             <input v-model="noteForm.additional_cost" type="number" min="0" class="w-full pl-7 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 font-bold text-gray-800">
@@ -665,7 +765,7 @@ const clearSignature = () => signaturePad.value.clearSignature();
                                     <span class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Para {{ matGroup }}:</span>
                                     <div class="flex flex-wrap gap-2">
                                         <div v-for="color in getColorsForMaterial(matGroup)" :key="color.name" class="flex items-center gap-1.5 bg-white px-2 py-1 rounded border border-gray-200 shadow-2xs">
-                                            <span class="w-3.5 h-3.5 rounded-full border shadow-2xs" :class="{'border-gray-300': color.border}" :style="{ backgroundColor: color.hex }"></span>
+                                            <span class="w-3.5 h-3.5 rounded-full border shadow-2xs" :class="{'border-gray-300': color.hex === '#FFFFFF'}" :style="{ backgroundColor: color.hex }"></span>
                                             <span class="text-[11px] font-medium text-gray-700">{{ color.name }}</span>
                                         </div>
                                     </div>

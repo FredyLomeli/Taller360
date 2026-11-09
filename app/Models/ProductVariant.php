@@ -12,6 +12,7 @@ class ProductVariant extends Model
 protected $fillable = [
         'product_id',
         'material',
+        'material_id',
         'measurements',
         'sku',
         'stock',
@@ -50,5 +51,15 @@ protected $fillable = [
     public function colorStocks()
     {
         return $this->hasMany(VariantColorStock::class);
+    }
+
+    public function materialModel()
+    {
+        return $this->belongsTo(Material::class, 'material_id');
+    }
+
+    public function materialRelation()
+    {
+        return $this->belongsTo(Material::class, 'material_id');
     }
 }

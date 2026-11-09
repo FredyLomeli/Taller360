@@ -13,6 +13,7 @@ class WorkOrder extends Model
         'product_variant_id',
         'quantity_requested',
         'color',
+        'color_id',
         'target_date',
         'status',
         'origin_sale_detail_id',
@@ -42,5 +43,10 @@ class WorkOrder extends Model
     public function productionCompletions()
     {
         return $this->hasMany(ProductionCompletion::class);
+    }
+
+    public function colorRelation()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
     }
 }

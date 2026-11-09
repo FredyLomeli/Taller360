@@ -158,22 +158,32 @@ class ProductionController extends Controller
                 }
 
                 $salesNoColor = $salesGroup->filter(fn($i) => empty($i->chosen_color));
-                if ($salesNoColor->isNotEmpty()) {
-                    $noColorNeeded = $salesNoColor->sum('quantity');
+                $woNoColor = $woGroup->filter(fn($i) => empty($i->chosen_color));
+
+                $noColorWoNeeded = $woNoColor->sum('quantity');
+                $noColorWoCompleted = $woNoColor->sum('completed_quantity') ?? 0;
+                $pendingWoNoColor = max(0, $noColorWoNeeded - $noColorWoCompleted);
+                $pendingWO += $pendingWoNoColor;
+
+                if ($salesNoColor->isNotEmpty() || $woNoColor->isNotEmpty()) {
+                    $noColorSalesNeeded = $salesNoColor->sum('quantity');
                     $noColorDetailed = max(0, $salesNoColor->sum(fn($i) => $i->detailed_quantity ?? 0) - $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0));
                     $noColorDelivered = $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0);
-                    $pendingNoColor = max(0, $noColorNeeded - $noColorDetailed - $noColorDelivered);
-                    $pendingSales += $pendingNoColor;
-                    if ($pendingNoColor > 0) {
+                    $pendingSalesNoColor = max(0, $noColorSalesNeeded - $noColorDetailed - $noColorDelivered);
+                    $pendingSales += $pendingSalesNoColor;
+
+                    $pendingNoColorTotal = $pendingSalesNoColor + $pendingWoNoColor;
+
+                    if ($pendingNoColorTotal > 0) {
                         $colorBreakdown[] = [
                             'color' => 'Sin Color',
-                            'needed' => $noColorNeeded,
+                            'needed' => $noColorSalesNeeded + $noColorWoNeeded,
                             'in_stock' => 0,
                             'in_detailed' => $noColorDetailed,
                             'delivered' => $noColorDelivered,
-                            'pending_sales' => $pendingNoColor,
-                            'pending_wo' => 0,
-                            'pending_to_fabricate' => $pendingNoColor,
+                            'pending_sales' => $pendingSalesNoColor,
+                            'pending_wo' => $pendingWoNoColor,
+                            'pending_to_fabricate' => $pendingNoColorTotal,
                         ];
                     }
                 }
@@ -499,22 +509,32 @@ class ProductionController extends Controller
                 }
 
                 $salesNoColor = $salesGroup->filter(fn($i) => empty($i->chosen_color));
-                if ($salesNoColor->isNotEmpty()) {
-                    $noColorNeeded = $salesNoColor->sum('quantity');
+                $woNoColor = $woGroup->filter(fn($i) => empty($i->chosen_color));
+
+                $noColorWoNeeded = $woNoColor->sum('quantity');
+                $noColorWoCompleted = $woNoColor->sum('completed_quantity') ?? 0;
+                $pendingWoNoColor = max(0, $noColorWoNeeded - $noColorWoCompleted);
+                $pendingWO += $pendingWoNoColor;
+
+                if ($salesNoColor->isNotEmpty() || $woNoColor->isNotEmpty()) {
+                    $noColorSalesNeeded = $salesNoColor->sum('quantity');
                     $noColorDetailed = max(0, $salesNoColor->sum(fn($i) => $i->detailed_quantity ?? 0) - $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0));
                     $noColorDelivered = $salesNoColor->sum(fn($i) => $i->delivered_quantity ?? 0);
-                    $pendingNoColor = max(0, $noColorNeeded - $noColorDetailed - $noColorDelivered);
-                    $pendingSales += $pendingNoColor;
-                    if ($pendingNoColor > 0) {
+                    $pendingSalesNoColor = max(0, $noColorSalesNeeded - $noColorDetailed - $noColorDelivered);
+                    $pendingSales += $pendingSalesNoColor;
+
+                    $pendingNoColorTotal = $pendingSalesNoColor + $pendingWoNoColor;
+
+                    if ($pendingNoColorTotal > 0) {
                         $colorBreakdown[] = [
                             'color' => 'Sin Color',
-                            'needed' => $noColorNeeded,
+                            'needed' => $noColorSalesNeeded + $noColorWoNeeded,
                             'in_stock' => 0,
                             'in_detailed' => $noColorDetailed,
                             'delivered' => $noColorDelivered,
-                            'pending_sales' => $pendingNoColor,
-                            'pending_wo' => 0,
-                            'pending_to_fabricate' => $pendingNoColor,
+                            'pending_sales' => $pendingSalesNoColor,
+                            'pending_wo' => $pendingWoNoColor,
+                            'pending_to_fabricate' => $pendingNoColorTotal,
                         ];
                     }
                 }

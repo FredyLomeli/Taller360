@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\ProductVariant;
+use App\Models\Material;
+use App\Models\Color;
+use App\Models\VariantColorStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -40,7 +43,8 @@ class ProductController extends Controller
     public function create()
     {
         return Inertia::render('Products/Create', [
-            'categories' => Category::all()
+            'categories' => Category::with('activeMaterials.activeColors')->where('activo', true)->get(),
+            'materials' => Material::with('activeColors')->where('activo', true)->get(),
         ]);
     }
 
@@ -57,7 +61,8 @@ class ProductController extends Controller
             
             // Validación de Variantes (Solo Material y Precios)
             'variants' => 'required|array|min:1',
-            'variants.*.material' => 'required|string',
+            'variants.*.material' => 'nullable|string',
+            'variants.*.material_id' => 'nullable|exists:materials,id',
             'variants.*.sku' => 'nullable|string',
             'variants.*.stock' => 'required|integer|min:0',
             'variants.*.measurements' => 'required|string',
@@ -89,7 +94,16 @@ class ProductController extends Controller
 
             // 4. Crear Variantes
             foreach ($request->variants as $variantData) {
-                $sku = $variantData['sku'] ?? strtoupper(substr($product->name, 0, 3) . '-' . $variantData['measurements'] . '-' . substr($variantData['material'], 0, 3));
+                $material = null;
+                if (!empty($variantData['material_id'])) {
+                    $material = Material::find($variantData['material_id']);
+                } elseif (!empty($variantData['material'])) {
+                    $material = Material::where('name', $variantData['material'])->first();
+                }
+                $materialName = $material ? $material->name : ($variantData['material'] ?? 'Estándar');
+                $materialId = $material ? $material->id : ($variantData['material_id'] ?? null);
+
+                $sku = $variantData['sku'] ?? strtoupper(substr($product->name, 0, 3) . '-' . $variantData['measurements'] . '-' . substr($materialName, 0, 3));
                 $sku = str_replace(' ', '', $sku); // Limpiamos espacios
 
                 $initialStock = intval($variantData['stock'] ?? 0);
@@ -99,7 +113,8 @@ class ProductController extends Controller
 
                 $variant = ProductVariant::create([
                     'product_id' => $product->id,
-                    'material' => $variantData['material'],
+                    'material' => $materialName,
+                    'material_id' => $materialId,
                     'measurements' => $variantData['measurements'],
                     'sku' => $sku,
                     'stock' => $initialStock,
@@ -113,10 +128,18 @@ class ProductController extends Controller
 
                 if (!empty($variantData['color_stocks']) && is_array($variantData['color_stocks'])) {
                     foreach ($variantData['color_stocks'] as $cs) {
-                        if (!empty($cs['color'])) {
-                            \App\Models\VariantColorStock::create([
+                        $colorName = trim($cs['color'] ?? '');
+                        $colorId = $cs['color_id'] ?? null;
+                        if (!$colorId && !empty($colorName)) {
+                            $colModel = Color::where('name', $colorName)->first();
+                            $colorId = $colModel ? $colModel->id : null;
+                        }
+
+                        if (!empty($colorName) || $colorId) {
+                            VariantColorStock::create([
                                 'product_variant_id' => $variant->id,
-                                'color' => $cs['color'],
+                                'color' => $colorName,
+                                'color_id' => $colorId,
                                 'stock' => intval($cs['stock'] ?? 0),
                             ]);
                         }
@@ -130,10 +153,11 @@ class ProductController extends Controller
 
     public function edit(Product $product)
     {
-        // Cargamos el producto con sus variantes y stocks por color
+        // Cargamos el producto con sus variantes, stocks por color y modelo de material
         return Inertia::render('Products/Edit', [
-            'product' => $product->load('variants.colorStocks'),
-            'categories' => Category::all()
+            'product' => $product->load(['variants.colorStocks', 'variants.materialModel']),
+            'categories' => Category::with('activeMaterials.activeColors')->where('activo', true)->get(),
+            'materials' => Material::with('activeColors')->where('activo', true)->get(),
         ]);
     }
 
@@ -150,7 +174,8 @@ class ProductController extends Controller
 
             'variants' => 'required|array|min:1',
             'variants.*.measurements' => 'required|string',
-            'variants.*.material' => 'required|string',
+            'variants.*.material' => 'nullable|string',
+            'variants.*.material_id' => 'nullable|exists:materials,id',
             'variants.*.stock' => 'required|integer|min:0',
             'variants.*.price_1' => 'required|numeric|min:0',
             'variants.*.min_stock' => 'nullable|integer|min:0',
@@ -178,16 +203,20 @@ class ProductController extends Controller
             ]);
 
             // 3. Sincronización Inteligente de Variantes (Upsert)
-            // Obtenemos los IDs que vienen del formulario
             $incomingIds = collect($request->variants)->pluck('id')->filter()->toArray();
-
-            // Borramos las variantes que ya no están en el formulario (si el usuario eliminó una fila)
-            // Opcional: Podrías validar si tiene ventas antes de borrar, 
-            // pero el constraint de la BD (restrict) ya nos protegerá o fallará.
             $product->variants()->whereNotIn('id', $incomingIds)->delete();
 
             // Actualizamos o Creamos
             foreach ($request->variants as $variantData) {
+                $material = null;
+                if (!empty($variantData['material_id'])) {
+                    $material = Material::find($variantData['material_id']);
+                } elseif (!empty($variantData['material'])) {
+                    $material = Material::where('name', $variantData['material'])->first();
+                }
+                $materialName = $material ? $material->name : ($variantData['material'] ?? 'Estándar');
+                $materialId = $material ? $material->id : ($variantData['material_id'] ?? null);
+
                 $currentStock = intval($variantData['stock'] ?? 0);
                 if (isset($variantData['color_stocks']) && is_array($variantData['color_stocks']) && count($variantData['color_stocks']) > 0) {
                     $currentStock = collect($variantData['color_stocks'])->sum('stock');
@@ -197,7 +226,8 @@ class ProductController extends Controller
                     ['id' => $variantData['id'] ?? null], // Busca por ID
                     [
                         'product_id' => $product->id,
-                        'material' => $variantData['material'],
+                        'material' => $materialName,
+                        'material_id' => $materialId,
                         'measurements' => $variantData['measurements'],
                         'sku' => $variantData['sku'] ?? null,
                         'stock' => $currentStock,
@@ -213,11 +243,21 @@ class ProductController extends Controller
                 if (isset($variantData['color_stocks']) && is_array($variantData['color_stocks'])) {
                     $incomingColors = [];
                     foreach ($variantData['color_stocks'] as $cs) {
-                        if (!empty($cs['color'])) {
-                            $incomingColors[] = $cs['color'];
-                            \App\Models\VariantColorStock::updateOrCreate(
-                                ['product_variant_id' => $variant->id, 'color' => $cs['color']],
-                                ['stock' => intval($cs['stock'] ?? 0)]
+                        $colorName = trim($cs['color'] ?? '');
+                        $colorId = $cs['color_id'] ?? null;
+                        if (!$colorId && !empty($colorName)) {
+                            $colModel = Color::where('name', $colorName)->first();
+                            $colorId = $colModel ? $colModel->id : null;
+                        }
+
+                        if (!empty($colorName) || $colorId) {
+                            $incomingColors[] = $colorName;
+                            VariantColorStock::updateOrCreate(
+                                ['product_variant_id' => $variant->id, 'color' => $colorName],
+                                [
+                                    'stock' => intval($cs['stock'] ?? 0),
+                                    'color_id' => $colorId,
+                                ]
                             );
                         }
                     }

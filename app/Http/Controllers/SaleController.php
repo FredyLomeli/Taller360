@@ -6,6 +6,8 @@ use Inertia\Inertia;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Models\ProductVariant;
+use App\Models\Material;
+use App\Models\Color;
 use App\Models\Client;
 use App\Models\Setting;
 use App\Mail\SaleNoteEmail;
@@ -80,10 +82,12 @@ class SaleController extends Controller
             'products' => \App\Models\Product::select('id', 'name', 'category_id', 'image', 'is_favorite')
                 ->with([
                     'category:id,name',
-                    'variants:id,product_id,material,measurements,price_1,price_2,price_3,price_4,price_5,stock,reserved_stock'
+                    'variants:id,product_id,material,material_id,measurements,price_1,price_2,price_3,price_4,price_5,stock,reserved_stock',
+                    'variants.materialModel.activeColors'
                 ])
                 ->orderBy('is_favorite', 'desc')
                 ->get(),
+            'materials' => Material::with('activeColors')->where('activo', true)->get(),
             'clients' => Client::select('id', 'name', 'business_name', 'price_tier', 'phones', 'email')->get(),
         ]);
     }
@@ -103,7 +107,12 @@ class SaleController extends Controller
             'items.*.variant_id' => 'required|exists:product_variants,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
-            'items.*.chosen_color' => 'required|string', // Nuevo v2.0
+            'items.*.chosen_color' => 'nullable|string',
+            'items.*.color_id' => 'nullable|exists:colors,id',
+            'items.*.is_special_color' => 'nullable|boolean',
+            'items.*.special_color_name' => 'nullable|string',
+            'items.*.additional_cost' => 'nullable|numeric|min:0',
+            'items.*.notes' => 'nullable|string',
             
             'payment_method' => 'required|string',
             'signature' => 'required|string',
@@ -131,10 +140,8 @@ class SaleController extends Controller
                 $allowNegative = \App\Models\Setting::where('key', 'allow_negative_stock')->value('value') == 1;
 
                 // 2. Guardar Detalles
-                foreach ($request->items as $item) {
-                    // Seguimos usando lockForUpdate por integridad transaccional si hiciéramos deducciones de inventario,
-                    // aunque en el flujo 'pedido' no descontamos stock, pero es buena práctica para no tener lecturas sucias.
-                    $variant = ProductVariant::with('product')->lockForUpdate()->find($item['variant_id']);
+                foreach ($request->items as $index => $item) {
+                    $variant = ProductVariant::with(['product', 'materialModel.activeColors'])->lockForUpdate()->find($item['variant_id']);
 
                     if (!$allowNegative && $variant->available_stock < $item['quantity']) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
@@ -142,8 +149,88 @@ class SaleController extends Controller
                         ]);
                     }
 
+                    $material = $variant->materialModel ?? Material::where('name', $variant->material)->first();
+                    $isMelamina = $material ? ($material->color_obligatorio || $material->name === 'Melamina') : ($variant->material === 'Melamina');
+                    $isSpecial = !empty($item['is_special_color']) || (isset($item['chosen_color']) && str_starts_with($item['chosen_color'], 'Especial:'));
+
+                    $chosenColor = $item['chosen_color'] ?? null;
+                    $colorId = $item['color_id'] ?? null;
+                    $notes = $item['notes'] ?? null;
+
+                    if ($isMelamina) {
+                        // Regla A7: En Melamina NO se admite color especial
+                        if ($isSpecial) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'chosen_color' => "El material Melamina no admite colores especiales. Solo permite los colores de fábrica autorizados.",
+                                "items.{$index}.chosen_color" => "El material Melamina no admite colores especiales. Solo permite los colores de fábrica autorizados."
+                            ]);
+                        }
+
+                        // Regla A3: Melamina tiene color obligatorio
+                        if (empty($chosenColor) && empty($colorId)) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'chosen_color' => "El color es obligatorio para productos de Melamina.",
+                                "items.{$index}.chosen_color" => "El color es obligatorio para productos de Melamina."
+                            ]);
+                        }
+
+                        // Regla A6: Debe ser un color activo del material
+                        if ($material) {
+                            $activeColorNames = $material->activeColors->pluck('name')->all();
+                            $activeColorIds = $material->activeColors->pluck('id')->all();
+                            $isValid = in_array($chosenColor, $activeColorNames) || in_array($colorId, $activeColorIds);
+                            if (!$isValid) {
+                                throw \Illuminate\Validation\ValidationException::withMessages([
+                                    'chosen_color' => "El color seleccionado ({$chosenColor}) no está disponible o ha sido descontinuado para Melamina.",
+                                    "items.{$index}.chosen_color" => "El color seleccionado ({$chosenColor}) no está disponible o ha sido descontinuado para Melamina."
+                                ]);
+                            }
+                        }
+
+                        if (!$colorId && !empty($chosenColor)) {
+                            $colorId = Color::where('name', $chosenColor)->value('id');
+                        }
+                    } else {
+                        // Para MDF, Madera, etc:
+                        if ($isSpecial) {
+                            $colorId = null;
+                            $trimmedNotes = trim($notes ?? '');
+                            if (empty($trimmedNotes)) {
+                                throw \Illuminate\Validation\ValidationException::withMessages([
+                                    'notes' => "Es obligatorio incluir la nota técnica o referencia de muestra para un color especial.",
+                                    "items.{$index}.notes" => "Es obligatorio incluir la nota técnica o referencia de muestra para un color especial."
+                                ]);
+                            }
+                            if (!empty($item['special_color_name'])) {
+                                $chosenColor = 'Especial: ' . trim($item['special_color_name']);
+                            } else {
+                                $chosenColor = $chosenColor ?? 'Color Especial';
+                            }
+                        } else {
+                            if (!empty($chosenColor) || !empty($colorId)) {
+                                if ($material) {
+                                    $activeColorNames = $material->activeColors->pluck('name')->all();
+                                    $activeColorIds = $material->activeColors->pluck('id')->all();
+                                    $isValid = in_array($chosenColor, $activeColorNames) || in_array($colorId, $activeColorIds);
+                                    if (!$isValid) {
+                                        throw \Illuminate\Validation\ValidationException::withMessages([
+                                            'chosen_color' => "El color seleccionado ({$chosenColor}) no está disponible o ha sido descontinuado para {$material->name}.",
+                                            "items.{$index}.chosen_color" => "El color seleccionado ({$chosenColor}) no está disponible o ha sido descontinuado para {$material->name}."
+                                        ]);
+                                    }
+                                }
+                                if (!$colorId && !empty($chosenColor)) {
+                                    $colorId = Color::where('name', $chosenColor)->value('id');
+                                }
+                            } else {
+                                $chosenColor = null;
+                                $colorId = null;
+                            }
+                        }
+                    }
+
                     // Calculamos subtotal incluyendo costo adicional
-                    $additionalCost = $item['additional_cost'] ?? 0;
+                    $additionalCost = floatval($item['additional_cost'] ?? 0);
                     $lineTotal = ($item['price'] * $item['quantity']) + $additionalCost;
 
                     SaleDetail::create([
@@ -153,9 +240,10 @@ class SaleController extends Controller
                         'product_name' => $variant->product->name . ' (' . $variant->material . ' - ' . $variant->measurements . ')',
                         'quantity' => $item['quantity'],
                         
-                        // Nuevos campos V2.0
-                        'chosen_color' => $item['chosen_color'],
-                        'custom_notes' => $item['notes'] ?? null,
+                        // Campos de color V2.0 / Fase 2.7
+                        'chosen_color' => $chosenColor,
+                        'color_id' => $colorId,
+                        'custom_notes' => $notes,
                         'additional_cost' => $additionalCost,
                         
                         'unit_price' => $item['price'],

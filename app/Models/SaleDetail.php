@@ -15,6 +15,7 @@ class SaleDetail extends Model
         'product_name',
         'quantity',
         'chosen_color',    // Nuevo: El color se elige al vender
+        'color_id',
         'custom_notes',    // Nuevo: Detalles extra
         'additional_cost', // Nuevo: Costo de lo extra
         'unit_price',
@@ -55,5 +56,10 @@ class SaleDetail extends Model
     public function workOrders()
     {
         return $this->hasMany(WorkOrder::class, 'origin_sale_detail_id');
+    }
+
+    public function colorRelation()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
     }
 }
