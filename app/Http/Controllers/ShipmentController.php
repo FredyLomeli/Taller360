@@ -46,13 +46,14 @@ class ShipmentController extends Controller
                 'client',
                 'details' => function ($q) {
                     // Solo lo que Shipments/Create.vue realmente usa — nunca precios, nunca firma.
-                    $q->select('id', 'sale_id', 'product_variant_id', 'product_name', 'quantity', 'chosen_color')
+                    $q->select('id', 'sale_id', 'product_variant_id', 'product_name', 'quantity', 'chosen_color', 'color_id', 'custom_notes')
                     ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                         $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
                     }], 'quantity_delivered')
                     ->withSum('detalladoRecords as raw_detailed_quantity', 'quantity');
                 },
-                'details.variant:id,product_id,material,measurements,stock',
+                'details.variant:id,product_id,material,material_id,measurements,stock',
+                'details.variant.materialModel',
                 'details.variant.colorStocks',
                 'details.variant.product:id,name,image',
             ])
@@ -78,9 +79,12 @@ class ShipmentController extends Controller
                 $stock = $detail->variant->stock ?? 0;
 
                 // Validación de stock por color si la variante tiene desglose o es Melamina
-                $hasColorTracking = ($detail->variant?->material === 'Melamina') || ($detail->variant?->colorStocks && $detail->variant->colorStocks->isNotEmpty());
-                if ($detail->chosen_color && $hasColorTracking) {
-                    $colorRecord = $detail->variant?->colorStocks?->firstWhere('color', $detail->chosen_color);
+                $hasColorTracking = ($detail->variant?->materialModel ? $detail->variant->materialModel->stock_por_color : ($detail->variant?->material === 'Melamina')) || ($detail->variant?->colorStocks && $detail->variant->colorStocks->isNotEmpty());
+                if (($detail->chosen_color || $detail->color_id) && $hasColorTracking) {
+                    $colorRecord = $detail->variant?->colorStocks?->first(function ($cs) use ($detail) {
+                        return ($detail->color_id && $cs->color_id === $detail->color_id)
+                            || ($detail->chosen_color && $cs->color === $detail->chosen_color);
+                    });
                     $colorStock = $colorRecord ? $colorRecord->stock : 0;
                     $detail->available_color_stock = $colorStock;
 
@@ -136,7 +140,7 @@ class ShipmentController extends Controller
                 $allowNegative = Setting::where('key', 'allow_negative_stock')->value('value');
 
                 foreach ($request->items as $item) {
-                    $detail = SaleDetail::with(['variant', 'sale'])->findOrFail($item['sale_detail_id']);
+                    $detail = SaleDetail::with(['variant.materialModel', 'sale'])->findOrFail($item['sale_detail_id']);
 
                     if ($detail->variant) {
                         // Bloqueo de actualización explícito para evitar condiciones de carrera
@@ -148,18 +152,27 @@ class ShipmentController extends Controller
 
                         // Validación y deducción por color
                         $chosenColor = $detail->chosen_color;
-                        $hasColorTracking = ($variant->material === 'Melamina') || \App\Models\VariantColorStock::where('product_variant_id', $variant->id)->exists();
+                        $colorId = $detail->color_id;
+                        $hasColorTracking = ($variant->materialModel ? $variant->materialModel->stock_por_color : ($variant->material === 'Melamina'))
+                            || \App\Models\VariantColorStock::where('product_variant_id', $variant->id)->exists();
                         $colorStockRecord = null;
 
-                        if ($chosenColor && $hasColorTracking) {
+                        if (($chosenColor || $colorId) && $hasColorTracking) {
                             $colorStockRecord = \App\Models\VariantColorStock::where('product_variant_id', $variant->id)
-                                ->where('color', $chosenColor)
+                                ->where(function ($q) use ($colorId, $chosenColor) {
+                                    if ($colorId) {
+                                        $q->where('color_id', $colorId)->orWhere('color', $chosenColor);
+                                    } else {
+                                        $q->where('color', $chosenColor);
+                                    }
+                                })
                                 ->lockForUpdate()
                                 ->first();
 
                             $availableInColor = $colorStockRecord ? $colorStockRecord->stock : 0;
                             if (!$allowNegative && $availableInColor < $item['quantity']) {
-                                throw new \Exception("Stock insuficiente para el color '{$chosenColor}' en {$detail->product_name}. Disponible en este color: {$availableInColor}, solicitado: {$item['quantity']}.");
+                                $nameForError = $chosenColor ?? ($colorId ? \App\Models\Color::find($colorId)?->name : 'N/A');
+                                throw new \Exception("Stock insuficiente para el color '{$nameForError}' en {$detail->product_name}. Disponible en este color: {$availableInColor}, solicitado: {$item['quantity']}.");
                             }
                         }
 
@@ -329,13 +342,32 @@ class ShipmentController extends Controller
                     $detail->variant->increment('stock', $delivery->quantity_delivered);
 
                     $chosenColor = $detail->chosen_color;
-                    if ($chosenColor) {
-                        $hasColorTracking = ($detail->variant->material === 'Melamina') || \App\Models\VariantColorStock::where('product_variant_id', $detail->variant->id)->exists();
+                    $colorId = $detail->color_id;
+                    if ($chosenColor || $colorId) {
+                        $hasColorTracking = ($detail->variant->materialModel ? $detail->variant->materialModel->stock_por_color : ($detail->variant->material === 'Melamina')) || \App\Models\VariantColorStock::where('product_variant_id', $detail->variant->id)->exists();
                         if ($hasColorTracking) {
-                            $colorStockRecord = \App\Models\VariantColorStock::firstOrCreate(
-                                ['product_variant_id' => $detail->variant->id, 'color' => $chosenColor],
-                                ['stock' => 0, 'damaged_stock' => 0, 'reserved_stock' => 0]
-                            );
+                            $colorStockRecord = \App\Models\VariantColorStock::where('product_variant_id', $detail->variant->id)
+                                ->where(function ($q) use ($colorId, $chosenColor) {
+                                    if ($colorId) {
+                                        $q->where('color_id', $colorId)->orWhere('color', $chosenColor);
+                                    } else {
+                                        $q->where('color', $chosenColor);
+                                    }
+                                })->first();
+
+                            if (!$colorStockRecord) {
+                                $colorStockRecord = \App\Models\VariantColorStock::create([
+                                    'product_variant_id' => $detail->variant->id,
+                                    'color' => $chosenColor ?? ($colorId ? \App\Models\Color::find($colorId)?->name : 'General'),
+                                    'color_id' => $colorId,
+                                    'stock' => 0,
+                                    'damaged_stock' => 0,
+                                    'reserved_stock' => 0,
+                                ]);
+                            } elseif (!$colorStockRecord->color_id && $colorId) {
+                                $colorStockRecord->update(['color_id' => $colorId]);
+                            }
+
                             $colorStockRecord->increment('stock', $delivery->quantity_delivered);
                         }
                     }

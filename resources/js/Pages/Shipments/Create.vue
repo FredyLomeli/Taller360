@@ -325,10 +325,16 @@ const totalItemsInTruck = computed(() => {
                                                 
                                                 <div class="flex-1">
                                                     <p class="font-bold text-sm text-gray-800">{{ detail.product_name }}</p>
-                                                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                                                        Color: {{ detail.chosen_color || 'N/A' }}
+                                                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center flex-wrap gap-1">
+                                                        <span>Color: {{ detail.chosen_color || 'N/A' }}</span>
+                                                        <span v-if="detail.custom_notes || (detail.chosen_color && detail.chosen_color.startsWith('Especial:'))" class="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] px-1.5 py-0.2 rounded font-black">
+                                                            ⭐ Especial
+                                                        </span>
                                                         <span v-if="detail.variant?.measurements" class="text-gray-300 mx-1">|</span>
                                                         <span v-if="detail.variant?.measurements">Medida: {{ detail.variant.measurements }}</span>
+                                                    </p>
+                                                    <p v-if="detail.custom_notes" class="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-semibold mt-1">
+                                                        📝 Muestra: {{ detail.custom_notes }}
                                                     </p>
                                                     <div class="flex items-center gap-4 mt-1 text-xs flex-wrap">
                                                         <span class="text-gray-500 font-medium">Pendientes: <span class="font-bold text-red-500">{{ detail.quantity - (detail.delivered_quantity || 0) }}</span></span>

@@ -37,7 +37,7 @@ class ProductionController extends Controller
                     $sq->where('status', '!=', 'cancelado');
                 });
             }], 'quantity_delivered')
-            ->with(['variant.product', 'variant.colorStocks', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
+            ->with(['variant.product', 'variant.colorStocks', 'variant.materialModel.activeColors', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
                 return (object)[
@@ -51,6 +51,10 @@ class ProductionController extends Controller
                     'detailed_quantity' => $item->detailed_quantity ?? 0,
                     'delivered_quantity' => $item->delivered_quantity ?? 0,
                     'chosen_color' => $item->chosen_color,
+                    'color_id' => $item->color_id,
+                    'custom_notes' => $item->custom_notes,
+                    'additional_cost' => $item->additional_cost,
+                    'is_special' => !empty($item->custom_notes) || str_starts_with($item->chosen_color ?? '', 'Especial:'),
                     'variant' => $item->variant,
                     'sale' => $item->sale,
                 ];
@@ -79,7 +83,7 @@ class ProductionController extends Controller
         // 2. ORDENES DE TRABAJO (Pendientes o en proceso)
         $workOrders = WorkOrder::whereIn('status', ['pending', 'in_progress'])
             ->withSum('productionCompletions as completed_quantity', 'quantity_completed')
-            ->with(['productVariant.product', 'productVariant.colorStocks'])
+            ->with(['productVariant.product', 'productVariant.colorStocks', 'productVariant.materialModel.activeColors'])
             ->get()
             ->map(function ($wo) {
                 return (object)[
@@ -91,6 +95,8 @@ class ProductionController extends Controller
                     'completed_quantity' => $wo->completed_quantity ?? 0,
                     'detailed_quantity' => 0, // No aplica para WorkOrders
                     'chosen_color' => $wo->color,
+                    'color_id' => $wo->color_id,
+                    'notes' => $wo->notes,
                     'variant' => $wo->productVariant,
                     'sale' => null,
                 ];
@@ -111,14 +117,17 @@ class ProductionController extends Controller
             $wipDetailed = max(0, $salesDetailed - $salesDelivered);
             $stockFisico = $variant->available_stock ?? 0;
 
-            $isMelamina = ($variant->material === 'Melamina');
+            $isMelamina = ($variant->materialModel ? $variant->materialModel->stock_por_color : ($variant->material === 'Melamina'));
             $colorBreakdown = [];
 
             if ($isMelamina) {
                 $colorStocksMap = $variant->colorStocks ? $variant->colorStocks->keyBy('color') : collect();
-                $defaultColors = ['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka'];
+                $activeColors = ($variant->materialModel && $variant->materialModel->activeColors && $variant->materialModel->activeColors->isNotEmpty())
+                    ? $variant->materialModel->activeColors->pluck('name')
+                    : collect(['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka']);
                 $usedColors = $group->pluck('chosen_color')->filter()->unique();
-                $allColors = collect($defaultColors)->concat($usedColors)->unique()->values();
+                $stockColors = $variant->colorStocks ? $variant->colorStocks->pluck('color')->filter()->unique() : collect();
+                $allColors = $activeColors->concat($usedColors)->concat($stockColors)->unique()->values();
 
                 $pendingSales = 0;
                 $pendingWO = 0;
@@ -252,6 +261,10 @@ class ProductionController extends Controller
                         'delivered_quantity' => $item->delivered_quantity ?? 0,
                         'pending_quantity' => $rem,
                         'chosen_color' => $item->chosen_color,
+                        'color_id' => $item->color_id ?? null,
+                        'custom_notes' => $item->custom_notes ?? null,
+                        'is_special' => $item->is_special ?? false,
+                        'notes' => $item->notes ?? null,
                         'is_covered_by_stock' => $isCovered,
                         'variant' => $item->variant,
                         'sale' => $item->sale ?? null,
@@ -287,8 +300,8 @@ class ProductionController extends Controller
             ->with(['variant.product', 'variant.colorStocks', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get();
 
-        $allVariants = \App\Models\ProductVariant::select('id', 'product_id', 'material', 'measurements')
-            ->with('product:id,name')
+        $allVariants = \App\Models\ProductVariant::select('id', 'product_id', 'material', 'material_id', 'measurements')
+            ->with(['product:id,name', 'materialModel.activeColors:id,name,hex'])
             ->get();
 
         return Inertia::render('Production/Index', [
@@ -328,14 +341,33 @@ class ProductionController extends Controller
                 $saleDetail->variant->increment('stock', $request->quantity);
 
                 $color = $saleDetail->chosen_color;
-                if ($color) {
-                    $hasColorTracking = ($saleDetail->variant->material === 'Melamina') 
+                $colorId = $saleDetail->color_id;
+                if ($color || $colorId) {
+                    $hasColorTracking = ($saleDetail->variant->materialModel ? $saleDetail->variant->materialModel->stock_por_color : ($saleDetail->variant->material === 'Melamina')) 
                         || \App\Models\VariantColorStock::where('product_variant_id', $saleDetail->variant->id)->exists();
                     if ($hasColorTracking) {
-                        $colorStock = \App\Models\VariantColorStock::firstOrCreate(
-                            ['product_variant_id' => $saleDetail->variant->id, 'color' => $color],
-                            ['stock' => 0, 'damaged_stock' => 0, 'reserved_stock' => 0]
-                        );
+                        $colorStock = \App\Models\VariantColorStock::where('product_variant_id', $saleDetail->variant->id)
+                            ->where(function ($q) use ($colorId, $color) {
+                                if ($colorId) {
+                                    $q->where('color_id', $colorId)->orWhere('color', $color);
+                                } else {
+                                    $q->where('color', $color);
+                                }
+                            })->first();
+
+                        if (!$colorStock) {
+                            $colorStock = \App\Models\VariantColorStock::create([
+                                'product_variant_id' => $saleDetail->variant->id,
+                                'color' => $color ?? ($colorId ? \App\Models\Color::find($colorId)?->name : 'General'),
+                                'color_id' => $colorId,
+                                'stock' => 0,
+                                'damaged_stock' => 0,
+                                'reserved_stock' => 0,
+                            ]);
+                        } elseif (!$colorStock->color_id && $colorId) {
+                            $colorStock->update(['color_id' => $colorId]);
+                        }
+
                         $colorStock->increment('stock', $request->quantity);
                     }
                 }
@@ -347,7 +379,7 @@ class ProductionController extends Controller
                     'notes' => "Producción: Se fabricaron {$request->quantity} piezas de {$saleDetail->product_name}"
                 ]);
             } else {
-                $workOrder = WorkOrder::with('productVariant')->findOrFail($request->work_order_id);
+                $workOrder = WorkOrder::with(['productVariant.materialModel'])->findOrFail($request->work_order_id);
                 
                 ProductionCompletion::create([
                     'work_order_id' => $workOrder->id,
@@ -359,14 +391,33 @@ class ProductionController extends Controller
                 $workOrder->productVariant->increment('stock', $request->quantity);
 
                 $color = $workOrder->color;
-                if ($color) {
-                    $hasColorTracking = ($workOrder->productVariant->material === 'Melamina') 
+                $colorId = $workOrder->color_id;
+                if ($color || $colorId) {
+                    $hasColorTracking = ($workOrder->productVariant->materialModel ? $workOrder->productVariant->materialModel->stock_por_color : ($workOrder->productVariant->material === 'Melamina')) 
                         || \App\Models\VariantColorStock::where('product_variant_id', $workOrder->productVariant->id)->exists();
                     if ($hasColorTracking) {
-                        $colorStock = \App\Models\VariantColorStock::firstOrCreate(
-                            ['product_variant_id' => $workOrder->productVariant->id, 'color' => $color],
-                            ['stock' => 0, 'damaged_stock' => 0, 'reserved_stock' => 0]
-                        );
+                        $colorStock = \App\Models\VariantColorStock::where('product_variant_id', $workOrder->productVariant->id)
+                            ->where(function ($q) use ($colorId, $color) {
+                                if ($colorId) {
+                                    $q->where('color_id', $colorId)->orWhere('color', $color);
+                                } else {
+                                    $q->where('color', $color);
+                                }
+                            })->first();
+
+                        if (!$colorStock) {
+                            $colorStock = \App\Models\VariantColorStock::create([
+                                'product_variant_id' => $workOrder->productVariant->id,
+                                'color' => $color ?? ($colorId ? \App\Models\Color::find($colorId)?->name : 'General'),
+                                'color_id' => $colorId,
+                                'stock' => 0,
+                                'damaged_stock' => 0,
+                                'reserved_stock' => 0,
+                            ]);
+                        } elseif (!$colorStock->color_id && $colorId) {
+                            $colorStock->update(['color_id' => $colorId]);
+                        }
+
                         $colorStock->increment('stock', $request->quantity);
                     }
                 }
@@ -401,7 +452,7 @@ class ProductionController extends Controller
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
             ->withSum('detalladoRecords as detailed_quantity', 'quantity')
-            ->with(['variant.product', 'variant.colorStocks', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
+            ->with(['variant.product', 'variant.colorStocks', 'variant.materialModel.activeColors', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
                 return (object)[
@@ -414,6 +465,9 @@ class ProductionController extends Controller
                     'completed_quantity' => $item->completed_quantity ?? 0,
                     'detailed_quantity' => $item->detailed_quantity ?? 0,
                     'chosen_color' => $item->chosen_color,
+                    'color_id' => $item->color_id,
+                    'custom_notes' => $item->custom_notes,
+                    'is_special' => !empty($item->custom_notes) || str_starts_with($item->chosen_color ?? '', 'Especial:'),
                     'variant' => $item->variant,
                     'sale' => $item->sale,
                 ];
@@ -421,7 +475,7 @@ class ProductionController extends Controller
 
         $workOrders = WorkOrder::whereIn('status', ['pending', 'in_progress'])
             ->withSum('productionCompletions as completed_quantity', 'quantity_completed')
-            ->with(['productVariant.product', 'productVariant.colorStocks'])
+            ->with(['productVariant.product', 'productVariant.colorStocks', 'productVariant.materialModel.activeColors'])
             ->get()
             ->map(function ($wo) {
                 return (object)[
@@ -433,6 +487,8 @@ class ProductionController extends Controller
                     'completed_quantity' => $wo->completed_quantity ?? 0,
                     'detailed_quantity' => 0,
                     'chosen_color' => $wo->color,
+                    'color_id' => $wo->color_id,
+                    'notes' => $wo->notes,
                     'variant' => $wo->productVariant,
                     'sale' => null,
                 ];
@@ -461,14 +517,17 @@ class ProductionController extends Controller
             $wipDetailed = max(0, $salesDetailed - $salesDelivered);
             $stockFisico = $variant->available_stock ?? 0;
 
-            $isMelamina = ($variant->material === 'Melamina');
+            $isMelamina = ($variant->materialModel ? $variant->materialModel->stock_por_color : ($variant->material === 'Melamina'));
             $colorBreakdown = [];
 
             if ($isMelamina) {
                 $colorStocksMap = $variant->colorStocks ? $variant->colorStocks->keyBy('color') : collect();
-                $defaultColors = ['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka'];
+                $activeColors = ($variant->materialModel && $variant->materialModel->activeColors && $variant->materialModel->activeColors->isNotEmpty())
+                    ? $variant->materialModel->activeColors->pluck('name')
+                    : collect(['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka']);
                 $usedColors = $group->pluck('chosen_color')->filter()->unique();
-                $allColors = collect($defaultColors)->concat($usedColors)->unique()->values();
+                $stockColors = $variant->colorStocks ? $variant->colorStocks->pluck('color')->filter()->unique() : collect();
+                $allColors = $activeColors->concat($usedColors)->concat($stockColors)->unique()->values();
 
                 $pendingSales = 0;
                 $pendingWO = 0;
