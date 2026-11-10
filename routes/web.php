@@ -16,6 +16,7 @@ use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\WorkOrderController;
 use App\Http\Controllers\DamagedStockController;
 use App\Http\Controllers\CatalogManagementController;
+use App\Http\Controllers\SaleReturnController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -157,6 +158,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     }); // Fin middleware admin
 
     Route::middleware('role:admin,inventario,supervisor')->group(function () {
+        Route::controller(SaleReturnController::class)->group(function () {
+            Route::get('/shipments/returns', 'index')->name('shipments.returns.index');
+            Route::get('/shipments/returns/create', 'create')->name('shipments.returns.create');
+            Route::post('/shipments/returns', 'store')->name('shipments.returns.store');
+        });
+
         Route::controller(ShipmentController::class)->group(function () {
             Route::get('/shipments/create','create')->name('shipments.create');
             Route::post('/shipments', 'store')->name('shipments.store');

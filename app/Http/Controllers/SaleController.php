@@ -295,13 +295,17 @@ class SaleController extends Controller
             'created_at', 'updated_at'
         ])->with([
             'client', 
-            // Agregamos la suma de las entregas a los detalles
+            // Agregamos la suma de las entregas y devoluciones a los detalles
             'details' => function($query) {
-                $query->with(['variant.product'])
+                $query->with(['variant.product', 'colorRelation'])
                     ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                         $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
                     }], 'quantity_delivered')
-                    ->withSum('detalladoRecords as reserved_quantity', 'quantity');
+                    ->withSum('returnItems as returned_quantity', 'quantity')
+                    ->withSum('detalladoRecords as reserved_quantity', 'quantity')
+                    ->with(['returnItems' => function ($rq) {
+                        $rq->with(['saleReturn:id,folio,authorized_by,returned_at', 'shipment:id,driver_name', 'colorRelation:id,name,hex']);
+                    }]);
             }, 
             'history', 
             'payments'

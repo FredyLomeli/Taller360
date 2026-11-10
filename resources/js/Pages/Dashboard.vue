@@ -12,6 +12,7 @@ const props = defineProps({
     sellersStats: Array,
     lowStockProducts: Array,
     discontinuedColorStocks: Array,
+    pendingReturns: Array,
     recentSales: Array,
     filters: Object
 });
@@ -107,7 +108,7 @@ const stageLabels = {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
+                <div :class="['grid grid-cols-1 md:grid-cols-2 gap-5 shrink-0', isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-2']">
                     <div class="bg-white shadow-sm rounded-2xl p-6 border-l-4 border-green-500 relative overflow-hidden">
                         <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Ingreso Cobrado</div>
                         <div class="text-3xl font-black text-gray-800">{{ formatMoney(kpis.income) }}</div>
@@ -134,6 +135,17 @@ const stageLabels = {
                         <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Crédito Pendiente</div>
                         <div class="text-3xl font-black text-gray-800">{{ formatMoney(kpis.credit_receivable) }}</div>
                         <div class="text-[11px] text-gray-400 mt-2">Cuentas por cobrar</div>
+                    </div>
+
+                    <div v-if="isAdmin" class="bg-white shadow-sm rounded-2xl p-6 border-l-4 border-amber-500 flex flex-col justify-between">
+                        <div>
+                            <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Devoluciones</div>
+                            <div class="text-3xl font-black" :class="(kpis.pending_returns || 0) > 0 ? 'text-amber-600' : 'text-gray-800'">
+                                {{ kpis.pending_returns || 0 }} <span class="text-sm font-bold text-gray-300">por reponer</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 mt-2">Reingresos con reposición</div>
+                        </div>
+                        <Link :href="route('shipments.returns.index')" class="text-xs text-amber-600 font-bold underline mt-4 hover:text-amber-800">Ver devoluciones →</Link>
                     </div>
                 </div>
 

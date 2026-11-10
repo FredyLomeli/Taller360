@@ -65,7 +65,12 @@ const cancelShipment = () => {
                     <ul class="divide-y divide-gray-100">
                         <li v-for="del in shipment.deliveries" :key="del.id" class="px-6 py-4 flex justify-between items-center">
                             <div>
-                                <p class="font-bold text-gray-800">{{ del.sale_detail.product_name }}</p>
+                                <p class="font-bold text-gray-800 flex items-center gap-2 flex-wrap">
+                                    <span>{{ del.sale_detail.product_name }}</span>
+                                    <span v-if="del.sale_detail?.return_items && del.sale_detail.return_items.length > 0" class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1 shadow-2xs">
+                                        <span>↩️</span> Reposición por Devolución (Sin Costo)
+                                    </span>
+                                </p>
                                 <!-- Color del mueble -->
                                 <p class="text-xs text-gray-500 font-bold uppercase">Color: {{ del.sale_detail.chosen_color || 'N/A' }}</p>
                                 <p class="text-xs text-gray-400">Pedido #{{ del.sale_detail.sale_id.toString().padStart(6, '0') }} | Cliente: {{ del.sale_detail.sale.client?.name || 'Mostrador' }}</p>

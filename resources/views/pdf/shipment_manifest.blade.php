@@ -230,28 +230,31 @@
                     @php
                         $subtotalAcumulado = 0;
                         $descuentoAcumulado = 0;
+                        $descuentoDevolucionAcumulado = 0;
                     @endphp
 
                     @foreach($deliveries as $delivery)
                         @php
                             $item = $delivery->saleDetail;
                             $qty = $delivery->quantity_delivered;
+                            $isReturnReplacement = ($item->returnItems && $item->returnItems->isNotEmpty());
                             
                             $originalUnitPrice = ($item->discount_percent > 0) 
                                 ? $item->unit_price / (1 - ($item->discount_percent / 100)) 
                                 : ($item->unit_price ?? 0);
 
-                            // Subtotal renglón bruto
                             $rowBruto = $originalUnitPrice * $qty;
-                            
-                            // Subtotal renglón neto
-                            $rowNeto = ($item->unit_price ?? 0) * $qty;
-                            
-                            $rowSubtotalNeto = $rowNeto; 
-                            $ahorroRenglon = $rowBruto - $rowNeto;
-                            
+                            $ahorroComercial = ($originalUnitPrice - ($item->unit_price ?? 0)) * $qty;
                             $subtotalAcumulado += $rowBruto;
-                            $descuentoAcumulado += $ahorroRenglon;
+                            $descuentoAcumulado += $ahorroComercial;
+
+                            if ($isReturnReplacement) {
+                                $bonifDevolucion = ($item->unit_price ?? 0) * $qty;
+                                $descuentoDevolucionAcumulado += $bonifDevolucion;
+                                $rowNeto = 0;
+                            } else {
+                                $rowNeto = ($item->unit_price ?? 0) * $qty;
+                            }
                         @endphp
                         <tr style="border-bottom: 1px solid #eee;">
                             <td class="text-center" style="vertical-align: middle; font-weight: bold; font-size: 13px;">
@@ -264,6 +267,11 @@
                                         Color: {{ $item->chosen_color ?? '-' }}
                                     </span>
                                 </div>
+                                @if($isReturnReplacement)
+                                    <div style="display: inline-block; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 8px; font-weight: bold; padding: 2px 5px; border-radius: 3px; margin-top: 3px;">
+                                        [REPOSICIÓN POR DEVOLUCIÓN - SIN COSTO]
+                                    </div>
+                                @endif
                                 <div style="margin-left: 10px; margin-top: 3px; line-height: 1.2;">
                                     @if(!empty($item->custom_notes))
                                         <div style="font-size: 9px; color: #555;">
@@ -284,9 +292,19 @@
                                 <div style="font-weight: bold; font-size: 12px; color: #000; margin-top: 1px;">
                                     ${{ number_format($item->unit_price ?? 0, 2) }}
                                 </div>
+                                @if($isReturnReplacement)
+                                    <div style="display: inline-block; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 7.5px; font-weight: bold; padding: 1px 4px; border-radius: 3px; margin-top: 2px;">
+                                        -100% Reposición
+                                    </div>
+                                @endif
                             </td>
-                            <td class="text-right" style="vertical-align: middle; font-weight: bold; font-size: 13px; color: #1a4d2e;">
-                                ${{ number_format($rowSubtotalNeto, 2) }}
+                            <td class="text-right" style="vertical-align: middle; font-weight: bold; font-size: 13px;">
+                                @if($isReturnReplacement)
+                                    <span style="color: #b45309; font-size: 11px;">$0.00</span>
+                                    <div style="font-size: 8px; color: #777; font-weight: normal;">(Garantía)</div>
+                                @else
+                                    <span style="color: #1a4d2e;">${{ number_format($rowNeto, 2) }}</span>
+                                @endif
                             </td>
                         </tr>
                     @endforeach
@@ -317,7 +335,7 @@
                 </div>
 
                 @php
-                    $totalGeneralEnvio = $subtotalAcumulado - $descuentoAcumulado;
+                    $totalGeneralEnvio = max(0, $subtotalAcumulado - $descuentoAcumulado - $descuentoDevolucionAcumulado);
                 @endphp
 
                 <table class="totals-table">
@@ -327,35 +345,19 @@
                     </tr>
                     @if($descuentoAcumulado > 0)
                     <tr>
-                        <td class="text-right" style="color: #d32f2f;">Descuento Remisión</td>
+                        <td class="text-right" style="color: #d32f2f;">Descuento Comercial</td>
                         <td class="text-right" style="color: #d32f2f;"> - ${{ number_format($descuentoAcumulado, 2) }}</td>
                     </tr>
                     @endif
+                    @if($descuentoDevolucionAcumulado > 0)
+                    <tr>
+                        <td class="text-right" style="color: #b45309; font-weight: bold;">Bonificación por Devolución</td>
+                        <td class="text-right" style="color: #b45309; font-weight: bold;"> - ${{ number_format($descuentoDevolucionAcumulado, 2) }}</td>
+                    </tr>
+                    @endif
                     <tr class="total-row">
-                        <td class="text-right">TOTAL ESTE VIAJE</td>
+                        <td class="text-right">TOTAL A COBRAR ESTE VIAJE</td>
                         <td class="text-right">${{ number_format($totalGeneralEnvio, 2) }}</td>
-                    </tr>
-                    
-                    <tr>
-                        <td colspan="2" style="height: 15px; border: none;"></td>
-                    </tr>
-
-                    <tr>
-                        <td class="text-right" style="font-size: 11px;">Total Global del Pedido</td>
-                        <td class="text-right" style="font-size: 11px;">${{ number_format($sale->total ?? 0, 2) }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-right text-gray-500" style="font-size: 11px;">Anticipos Previos</td>
-                        <td class="text-right" style="font-size: 11px;">${{ number_format($sale->paid_amount ?? 0, 2) }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-right text-gray-500" style="font-size: 11px;">Saldo Restante Pedido</td>
-                        @php
-                            $saldoPendiente = max(0, ($sale->total ?? 0) - ($sale->paid_amount ?? 0));
-                        @endphp
-                        <td class="text-right" style="font-size: 11px; color: {{ $saldoPendiente > 0 ? 'red' : 'black' }};">
-                            ${{ number_format($saldoPendiente, 2) }}
-                        </td>
                     </tr>
                 </table>
             </div>

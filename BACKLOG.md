@@ -229,40 +229,43 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 🔴 FASE 2.8 — MÓDULO DE DEVOLUCIONES (URGENTE — PLANEADO, SIN CONSTRUIR)
-**Prioridad:** 🔴 ALTA / URGENTE (2° en orden de ejecución; depende de Fase 2.7) | **Estimado:** 2 a 3 sesiones  
+## ✅ FASE 2.8 — MÓDULO DE DEVOLUCIONES E INTEGRACIÓN EN CASCADA (COMPLETADO Y VALIDADO EN QA — NOVIEMBRE 2026)
+**Prioridad:** 🔴 ALTA / URGENTE | **Estado:** COMPLETADO Y VALIDADO EN QA (134/134 tests en verde)  
 **Ubicación:** Submenú "Devoluciones" dentro del módulo de Embarques / Logística (`role:admin,inventario,supervisor`).  
-**Dependencia:** Se construye **DESPUÉS de la fase 5 de la Fase 2.7** porque las devoluciones mueven stock por color y deben operar con `color_id`.
+**Dependencia:** Construido exitosamente con soporte integral de `color_id`, stock físico/dañado, reversión automática de pedidos, cálculo neto en plan de producción, remisión de reposición sin costo y monitoreo KPI en Dashboard.
 
 ### Checklist por Fases:
-- [ ] **Fase 1: Auditoría de lectura de "entregado":** Auditoría exhaustiva completada (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X2) identificando todos los puntos donde se calcula "entregado" y deberán restar devoluciones (`ShipmentController`, `SaleController::show`, `ProductionController`, vistas Vue).
-- [ ] **Fase 2: BD y modelos:** Migraciones para `sale_returns` (`id`, `folio`, `client_id`, `user_id`, `authorized_by`, `returned_at`, `notes`, `timestamps`) y `sale_return_items` (`id`, `sale_return_id`, `sale_detail_id`, `shipment_id` nullable, `quantity`, `reason_type`, `disposition`, `color_id` nullable, `chosen_color` snapshot, `notes`, `timestamps`). Modelos Eloquent y relaciones.
-- [ ] **Fase 3: Controlador transaccional con `lockForUpdate` y Acción de Servicio:** Endpoint `POST /shipments/returns` siguiendo el patrón transaccional de `ShipmentController::store`. Validación: `cantidad <= entregado neto`. Destinos:
-  - `danada`: Acción de servicio desacoplada (`DamagedStockService`) que en transacción con `lockForUpdate` suma simultáneamente a `product_variants.stock` Y `product_variants.damaged_stock` (y en Melamina a `variant_color_stocks.stock` y `damaged_stock` del `color_id` correspondiente) y genera el registro en `damaged_stock_logs`. El rol `inventario` tiene permiso para registrar devoluciones sin requerir ruta de `DamagedStockController`.
+- [x] **Fase 1: Auditoría de lectura de "entregado":** Auditoría exhaustiva completada (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X2) identificando todos los puntos donde se calcula "entregado" y restan devoluciones (`ShipmentController`, `SaleController::show`, `ProductionController`, vistas Vue).
+- [x] **Fase 2: BD y modelos:** Migración `2026_11_09_214706_create_sale_returns_and_items_tables.php` para `sale_returns` (`id`, `folio`, `client_id`, `user_id`, `authorized_by`, `returned_at`, `notes`, `timestamps`) y `sale_return_items` (`id`, `sale_return_id`, `sale_detail_id`, `shipment_id` nullable, `quantity`, `reason_type`, `disposition`, `color_id` nullable, `chosen_color` snapshot, `notes`, `timestamps`). Modelos Eloquent `SaleReturn` y `SaleReturnItem` con relaciones completas.
+- [x] **Fase 3: Controlador transaccional con `lockForUpdate` y Acción de Servicio:** Endpoint `POST /shipments/returns` siguiendo el patrón transaccional de `ShipmentController::store`. Validación: `cantidad <= entregado neto`. Destinos:
+  - `danada`: Acción atómica con `lockForUpdate` que suma simultáneamente a `product_variants.stock` Y `product_variants.damaged_stock` (y en Melamina a `variant_color_stocks.stock` y `damaged_stock` del `color_id` devuelto) y genera el registro en `damaged_stock_logs`. El rol `inventario` tiene permiso para registrar devoluciones sin requerir ruta de `DamagedStockController`.
   - `baja`: Merma total sin reposición de stock físico.
   - `color_equivocado`: Suma al stock físico y disponible del color real indicado (obligatorio `color_id` en Melamina; opcional en otros).
-  - **Bloqueo estricto de cancelación de viaje:** Si un embarque tiene devoluciones registradas, se bloquea su cancelación (`ShipmentController::cancel`) con mensaje explicativo claro; los ajustes deben gestionarse por el módulo de devoluciones.
-  - **Recálculo dinámico a producción (sin WorkOrder automática):** La partida devuelta reaparece como faltante en el Plan Taller para que Producción decida cuándo fabricar. Para evitar que la fórmula `MAX(completed, detailed, delivered)` enmascare el faltante, se restan de `completed` las piezas con destino `danada` o `baja`. Si quedan faltantes netos en el pedido, su `stage` regresa a `produccion` (registrado limpiamente por `SaleObserver`, sin invocar `SaleHistory` manual).
-- [ ] **Fase 4: UI de Devoluciones:** Submenú en Embarques con listado de devoluciones, modal/formulario de captura con selector de pedido/partida entregada, motivo, destino, color real si Melamina, campo de texto libre obligatorio "Autorizado por" (`authorized_by`) y notas. Desglose visible de devoluciones en el detalle del pedido (`Sales/Show.vue`).
-- [ ] **Fase 5: Integración con producción y embarques:** Ajustar todos los `withSum` de entregas (`deliveries`) para restar devoluciones netas. Sin reenvío automático ni creación de WorkOrder automática: Producción decide en el Plan Taller cuándo se reenvía o repone. Bloqueo de cancelación en `ShipmentController::cancel` si existen devoluciones.
-- [ ] **Fase 6: Tests y regresión completa:** Pruebas unitarias y de integración para los flujos de devolución y verificación de suites completas en verde.
+  - **Bloqueo estricto de cancelación de viaje (Regla B4-Bis):** Si un embarque tiene devoluciones registradas, se bloquea su cancelación (`ShipmentController::cancel`) con mensaje explicativo claro; los ajustes deben gestionarse por el módulo de devoluciones.
+  - **Recálculo dinámico a producción (Regla B7 y B8):** La partida devuelta reaparece como faltante en el Plan Taller. Se descuentan las devoluciones en la fórmula de faltantes (`effectiveCompleted = max(0, completed - returned)`). Si quedan faltantes netos en el pedido, su `stage` regresa a `produccion` (asentado en `SaleHistory` con notas de auditoría).
+- [x] **Fase 4: UI de Devoluciones:** Submenú en Embarques con listado de devoluciones (`Shipments/Returns/Index.vue`), modal de detalle con enlace directo al pedido `#00XX`, y pantalla de creación interactiva (`Shipments/Returns/Create.vue`) con selector de cliente, listado de entregas activas, motivo, destino, selector de color real si Melamina, campo de texto libre obligatorio "Autorizado por" (`authorized_by`) y notas. Desglose visible de auditoría y barra de avance neta en el detalle del pedido (`Sales/Show.vue`).
+- [x] **Fase 5: Integración con producción, embarques y remisiones:** Ajustados los `withSum` de entregas (`deliveries`) para restar devoluciones netas en Plan de Producción, Armado de Viaje (`Shipments/Create.vue`) reconociendo piezas devueltas listas para re-embarcar, remisión PDF (`shipment_manifest.blade.php`) con bonificación por devolución (-100%) y total exacto a cobrar en el flete sin bloques confusos de saldos globales, y tarjeta KPI de Devoluciones en Dashboard (`kpis.pending_returns`) con decremento automático al confirmar la entrega de reposición.
+- [x] **Fase 6: Tests y regresión completa:** 19 pruebas dedicadas en `SaleReturnDatabaseTest.php`, `SaleReturnTransactionTest.php`, `SaleReturnUiTest.php` y `SaleReturnCascadeTest.php`. Suite global de 134 tests y 941 aserciones en verde.
 
-### Tests Nuevos a Construir:
-- [ ] Intento de devolución por cantidad mayor al entregado neto se rechaza con error de validación.
-- [ ] Destino 'danada' suma a `product_variants.damaged_stock` (y `stock` físico) y crea registro en `damaged_stock_logs`.
-- [ ] Destino 'danada' en Melamina suma a `variant_color_stocks.stock` y `damaged_stock` del color indicado.
-- [ ] Rol `inventario` registra devoluciones con destino 'danada' exitosamente sin tener acceso directo a `DamagedStockController`.
-- [ ] Destino 'baja' no toca inventario y deja registro histórico de la merma.
-- [ ] Destino 'color_equivocado' en Melamina suma existencias al color real indicado; si no se especifica color falla validación.
-- [ ] Destino 'color_equivocado' en otro material suma al stock general sin requerir color.
-- [ ] Cancelar un embarque que tiene devoluciones registradas es bloqueado con error descriptivo.
-- [ ] Devolución con destino 'danada' o 'baja' reactiva el faltante en la partida de producción (se descuenta de `completed` en la fórmula de avance).
-- [ ] Pedido 'entregado' regresa a 'produccion' si tras la devolución quedan piezas pendientes; historial registrado por `SaleObserver` (sin duplicar `SaleHistory`).
-- [ ] Devolución de pedido completo (todas las partidas devueltas).
-- [ ] Campo "Autorizado por" es obligatorio; devolución permitida sin plazo límite tras la entrega.
-- [ ] Partida con color especial devuelta no altera `variant_color_stocks`.
-- [ ] Roles no autorizados (`vendedor`, `produccion`) reciben 403 Forbidden al intentar registrar devoluciones.
-- [ ] Suites existentes + tests del módulo A siguen en verde.
+### Tests Nuevos Construidos y Validados:
+- [x] Intento de devolución por cantidad mayor al entregado neto se rechaza con error de validación.
+- [x] Destino 'danada' suma a `product_variants.damaged_stock` (y `stock` físico) y crea registro en `damaged_stock_logs`.
+- [x] Destino 'danada' en Melamina suma a `variant_color_stocks.stock` y `damaged_stock` del color indicado.
+- [x] Rol `inventario` registra devoluciones con destino 'danada' exitosamente sin tener acceso directo a `DamagedStockController`.
+- [x] Destino 'baja' no toca inventario y deja registro histórico de la merma.
+- [x] Destino 'color_equivocado' en Melamina suma existencias al color real indicado; si no se especifica color falla validación.
+- [x] Destino 'color_equivocado' en otro material suma al stock general sin requerir color.
+- [x] Cancelar un embarque que tiene devoluciones registradas es bloqueado con error descriptivo (Regla B4-Bis).
+- [x] Devolución con destino 'danada' o 'baja' reactiva el faltante en la partida de producción (se descuenta de entregado neto y completado).
+- [x] Pedido 'entregado' regresa a 'produccion' si tras la devolución quedan piezas pendientes; historial registrado con notas de auditoría.
+- [x] Devolución de pedido completo (todas las partidas devueltas).
+- [x] Campo "Autorizado por" es obligatorio; devolución permitida sin plazo límite tras la entrega.
+- [x] Partida con color especial devuelta no altera `variant_color_stocks`.
+- [x] Roles no autorizados (`vendedor`, `produccion`) reciben 403 Forbidden al intentar registrar devoluciones.
+- [x] Re-embarque de reposición en `/shipments/create` exponiendo la partida pendiente con badge distintivo.
+- [x] Remisión PDF de viaje imprime desglose de bonificación por devolución (-100%) y total exacto a cobrar en viaje.
+- [x] Dashboard refleja indicador KPI de devoluciones pendientes y se descuenta a 0 automáticamente al confirmar la entrega de reposición.
+- [x] Suites existentes siguen en verde tras la integración (134 passed, 941 assertions).
 
 ### Riesgos Técnicos:
 - Omisión de restar devoluciones en algún cálculo de "entregado" en producción o embarques (riesgo de cerrar pedidos indebidamente o generar sobreproducción).
@@ -346,22 +349,22 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 📌 Orden de Dependencias (actualizado 06 nov 2026)
+## 📌 Orden de Dependencias (actualizado 10 nov 2026)
  
  ```
  Fase 0 ✅ → Fase 1 ✅ → Sprint Cliente (5 puntos) ✅ → Fase 4.1 Catálogo Público ✅
                                       ↓
-                     Fase 2.5 — Embarques y CSS (COMPLETADO)
+                     Fase 2.5 — Embarques y CSS (COMPLETADO ✅)
                                       ↓
-                     ✅ Fase 0 — Hotfix Colores de Melamina (COMPLETADO)
+                     Fase 0 — Hotfix Colores de Melamina (COMPLETADO ✅)
                                       ↓
-                     🔴 Fase 2.7 — Catálogos Administrables (¡Prioridad 1 URGENTE!)
+                     Fase 2.7 — Catálogos Administrables (COMPLETADO ✅)
                                       ↓
-                     🔴 Fase 2.8 — Módulo de Devoluciones (¡Prioridad 2 URGENTE!)
+                     Fase 2.8 — Módulo de Devoluciones (COMPLETADO ✅)
                                       ↓
                      ⏸️ [Fase 3.2 Cobranza — EN PAUSA esperando respuestas del cliente]
                                       ↓
-                     Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token)
+                     🔴 Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token) (¡SIGUIENTE PRIORIDAD!)
                                       ↓
                      Fase 3 (Dashboards por rol) — Producción, Finanzas e Inventarios
                                       ↓

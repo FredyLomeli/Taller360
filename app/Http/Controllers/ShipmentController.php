@@ -21,6 +21,7 @@ class ShipmentController extends Controller
     {
         return Inertia::render('Shipments/Index', [
             'shipments' => Shipment::select('id', 'driver_name', 'license_plate', 'destination', 'status', 'pickup_type', 'created_at')
+                ->withCount('returnItems as return_items_count')
                 ->latest()
                 ->get()
         ]);
@@ -50,6 +51,7 @@ class ShipmentController extends Controller
                     ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                         $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
                     }], 'quantity_delivered')
+                    ->withSum('returnItems as returned_quantity', 'quantity')
                     ->withSum('detalladoRecords as raw_detailed_quantity', 'quantity');
                 },
                 'details.variant:id,product_id,material,material_id,measurements,stock',
@@ -69,13 +71,15 @@ class ShipmentController extends Controller
             // 2. Tenga stock físico en almacén para poder enviarse HOY (validando color si aplica)
             $hasShippableItems = false;
             foreach($sale->details as $detail) {
-                // Cálculo dinámico del remanente en detallado real (excluyendo lo ya embarcado)
+                // Cálculo dinámico del remanente en detallado real (excluyendo lo ya embarcado y considerando devoluciones)
                 $total_detallado = $detail->raw_detailed_quantity ?? 0;
-                $total_entregado = $detail->delivered_quantity ?? 0;
+                $net_entregado = max(0, ($detail->delivered_quantity ?? 0) - ($detail->returned_quantity ?? 0));
+                $detail->delivered_quantity = $net_entregado;
+                $detail->has_returned_items = ($detail->returned_quantity ?? 0) > 0;
                 
-                $detail->detailed_quantity = max(0, $total_detallado - $total_entregado);
+                $detail->detailed_quantity = max(0, $total_detallado - $net_entregado);
 
-                $pending = $detail->quantity - ($detail->delivered_quantity ?? 0);
+                $pending = $detail->quantity - $net_entregado;
                 $stock = $detail->variant->stock ?? 0;
 
                 // Validación de stock por color si la variante tiene desglose o es Melamina
@@ -231,6 +235,7 @@ class ShipmentController extends Controller
                 'deliveries.saleDetail:id,sale_id,product_name,chosen_color',
                 'deliveries.saleDetail.sale:id,client_id',
                 'deliveries.saleDetail.sale.client:id,name',
+                'deliveries.saleDetail.returnItems:id,sale_detail_id,quantity',
             ])
             ->findOrFail($id);
 
@@ -241,7 +246,8 @@ class ShipmentController extends Controller
     {
         $shipment = Shipment::with([
             'user',
-            'deliveries.saleDetail.sale.client'
+            'deliveries.saleDetail.sale.client',
+            'deliveries.saleDetail.returnItems',
         ])->findOrFail($id);
 
         $groupedDeliveries = $shipment->deliveries->groupBy(function ($delivery) {
@@ -289,11 +295,13 @@ class ShipmentController extends Controller
         $sale = $detail->sale()->with(['details' => function ($q) {
             $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
                 $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
-            }], 'quantity_delivered');
+            }], 'quantity_delivered')
+            ->withSum('returnItems as returned_quantity', 'quantity');
         }])->first();
 
         $allDelivered = $sale->details->every(function ($d) {
-            return ($d->delivered_quantity ?? 0) >= $d->quantity;
+            $netDelivered = max(0, ($d->delivered_quantity ?? 0) - ($d->returned_quantity ?? 0));
+            return $netDelivered >= $d->quantity;
         });
 
         if ($allDelivered) {
@@ -327,6 +335,12 @@ class ShipmentController extends Controller
         if ($shipment->status === 'cancelado') {
             return back()->withErrors(['error' => 'Este embarque ya está cancelado.']);
         }
+
+        // Regla B4-Bis: Bloqueo estricto si el embarque tiene devoluciones asociadas
+        if (\App\Models\SaleReturnItem::where('shipment_id', $shipment->id)->exists()) {
+            return back()->with('error', 'No se puede cancelar un embarque que tiene devoluciones asociadas. Cualquier ajuste debe realizarse mediante el módulo de Devoluciones.');
+        }
+
         if ($shipment->pickup_type === 'flota_propia' && $shipment->status === 'entregado') {
             return back()->withErrors(['error' => 'No se puede cancelar un embarque de flota propia ya entregado.']);
         }

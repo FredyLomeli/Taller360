@@ -324,7 +324,12 @@ const totalItemsInTruck = computed(() => {
                                             <div v-if="isShippable(detail)" class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 p-3 rounded-lg shadow-sm gap-4" :class="{'opacity-75': getAvailableToSend(detail) === 0 && !(form.items.find(i => i.sale_detail_id === detail.id)?.quantity > 0)}">
                                                 
                                                 <div class="flex-1">
-                                                    <p class="font-bold text-sm text-gray-800">{{ detail.product_name }}</p>
+                                                    <p class="font-bold text-sm text-gray-800 flex items-center gap-2 flex-wrap">
+                                                        <span>{{ detail.product_name }}</span>
+                                                        <span v-if="detail.has_returned_items" class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1 shadow-2xs">
+                                                            <span>↩️</span> Reposición por Devolución
+                                                        </span>
+                                                    </p>
                                                     <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center flex-wrap gap-1">
                                                         <span>Color: {{ detail.chosen_color || 'N/A' }}</span>
                                                         <span v-if="detail.custom_notes || (detail.chosen_color && detail.chosen_color.startsWith('Especial:'))" class="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] px-1.5 py-0.2 rounded font-black">

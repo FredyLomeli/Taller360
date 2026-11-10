@@ -41,6 +41,7 @@ const cancelShipment = (id) => {
 // Nuevo: decide si se puede cancelar
 const canCancel = (ship) => {
     if (ship.status === 'cancelado') return false;
+    if (ship.return_items_count > 0) return false;
     if (ship.status === 'en_transito') return true;
     // Solo mostrador puede cancelarse después de 'entregado'
     return ship.status === 'entregado' && ship.pickup_type === 'recoleccion_cliente';
@@ -58,10 +59,15 @@ const canCancel = (ship) => {
                         <h2 class="text-2xl font-black text-gray-800">Historial de Embarques</h2>
                         <p class="text-sm text-gray-500">Seguimiento de rutas y entregas</p>
                     </div>
-                    <Link :href="route('shipments.create')" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow transition-all active:scale-95 flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        Nuevo Viaje
-                    </Link>
+                    <div class="flex items-center gap-3">
+                        <Link :href="route('shipments.returns.index')" class="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-4 py-2.5 rounded-lg font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2">
+                            <span>↩️</span> Devoluciones
+                        </Link>
+                        <Link :href="route('shipments.create')" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow transition-all active:scale-95 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Nuevo Viaje
+                        </Link>
+                    </div>
                 </div>
 
                 <!-- Tabla de Viajes -->
@@ -78,7 +84,12 @@ const canCancel = (ship) => {
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50">
-                                <td class="px-6 py-4 font-black text-blue-600">#{{ ship.id.toString().padStart(4, '0') }}</td>
+                                <td class="px-6 py-4 font-black text-blue-600">
+                                    <div>#{{ ship.id.toString().padStart(4, '0') }}</div>
+                                    <div v-if="ship.return_items_count > 0" class="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mt-1 inline-flex items-center gap-1">
+                                        <span>↩️</span> Con Devolución
+                                    </div>
+                                </td>
                                 <td class="px-6 py-4 font-bold">{{ ship.driver_name }} <br><span class="text-xs text-gray-400 font-normal">{{ ship.license_plate }}</span></td>
                                 <td class="px-6 py-4">{{ ship.destination }}</td>
                                 <td class="px-6 py-4 text-center">

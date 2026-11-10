@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductionCompletion;
+use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Models\SaleHistory;
 use App\Models\WorkOrder;
@@ -21,6 +22,33 @@ class ProductionController extends Controller
 
         $endWeek = $startWeek->copy()->endOfWeek();
 
+        // Regularización automática: Pedidos con devoluciones que hayan quedado con saldo pendiente
+        $salesToRevert = Sale::whereIn('stage', ['entregado', 'enviado'])
+            ->whereHas('details.returnItems')
+            ->with(['details' => function ($q) {
+                $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
+                    $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
+                }], 'quantity_delivered')
+                ->withSum('returnItems as returned_quantity', 'quantity');
+            }])
+            ->get();
+
+        foreach ($salesToRevert as $saleRev) {
+            $hasPending = $saleRev->details->contains(function ($d) {
+                $netDeliv = max(0, ($d->delivered_quantity ?? 0) - ($d->returned_quantity ?? 0));
+                return $netDeliv < $d->quantity;
+            });
+            if ($hasPending) {
+                $saleRev->update(['stage' => 'produccion']);
+                \App\Models\SaleHistory::create([
+                    'sale_id' => $saleRev->id,
+                    'user_id' => auth()->id() ?? 1,
+                    'to_stage' => 'produccion',
+                    'notes' => '↩️ Regularización por piezas devueltas pendientes de reposición.',
+                ]);
+            }
+        }
+
         // 1. Buscamos lo de esta semana + TODO LO ATRASADO + Los sin fecha (SOLO NO PAUSADOS)
         $saleItems = SaleDetail::where('production_hold', false)
             ->whereHas('sale', function ($query) use ($endWeek) {
@@ -37,9 +65,11 @@ class ProductionController extends Controller
                     $sq->where('status', '!=', 'cancelado');
                 });
             }], 'quantity_delivered')
+            ->withSum('returnItems as returned_quantity', 'quantity')
             ->with(['variant.product', 'variant.colorStocks', 'variant.materialModel.activeColors', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
+                $netDelivered = max(0, ($item->delivered_quantity ?? 0) - ($item->returned_quantity ?? 0));
                 return (object)[
                     'source_type' => 'sale_detail',
                     'source_id' => $item->id,
@@ -49,7 +79,8 @@ class ProductionController extends Controller
                     'quantity' => $item->quantity,
                     'completed_quantity' => $item->completed_quantity ?? 0,
                     'detailed_quantity' => $item->detailed_quantity ?? 0,
-                    'delivered_quantity' => $item->delivered_quantity ?? 0,
+                    'delivered_quantity' => $netDelivered,
+                    'returned_quantity' => $item->returned_quantity ?? 0,
                     'chosen_color' => $item->chosen_color,
                     'color_id' => $item->color_id,
                     'custom_notes' => $item->custom_notes,
@@ -60,8 +91,9 @@ class ProductionController extends Controller
                 ];
             })
             ->filter(function ($item) use ($startWeek, $endWeek) {
-                // Cálculo de faltantes previniendo la doble deducción incluyendo envíos directos
-                $faltantes = $item->quantity - max($item->completed_quantity ?? 0, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0);
+                // Cálculo de faltantes previniendo la doble deducción incluyendo envíos directos y devoluciones
+                $effectiveCompleted = max(0, ($item->completed_quantity ?? 0) - ($item->returned_quantity ?? 0));
+                $faltantes = $item->quantity - max($effectiveCompleted, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0);
                 
                 // Condición A: Aún faltan piezas por fabricar
                 if ($faltantes > 0) {
@@ -150,21 +182,17 @@ class ProductionController extends Controller
                     $pendingWOColor = max(0, $woNeededColor - $woCompletedColor);
 
                     $pendingToFabricateColor = $pendingSalesColor + $pendingWOColor;
-                    $totalColorNeeded = $salesNeededColor + $woNeededColor;
 
-                    // Para el reporte impreso: únicamente incluir colores con requerimiento o a fabricar
-                    if ($totalColorNeeded > 0 || $pendingToFabricateColor > 0) {
-                        $colorBreakdown[] = [
-                            'color' => $c,
-                            'needed' => $totalColorNeeded,
-                            'in_stock' => $stockFisicoColor,
-                            'in_detailed' => $wipDetailedColor,
-                            'delivered' => $salesDeliveredColor,
-                            'pending_sales' => $pendingSalesColor,
-                            'pending_wo' => $pendingWOColor,
-                            'pending_to_fabricate' => $pendingToFabricateColor,
-                        ];
-                    }
+                    $colorBreakdown[] = [
+                        'color' => $c,
+                        'needed' => $salesNeededColor + $woNeededColor,
+                        'in_stock' => $stockFisicoColor,
+                        'in_detailed' => $wipDetailedColor,
+                        'delivered' => $salesDeliveredColor,
+                        'pending_sales' => $pendingSalesColor,
+                        'pending_wo' => $pendingWOColor,
+                        'pending_to_fabricate' => $pendingToFabricateColor,
+                    ];
 
                     $pendingSales += $pendingSalesColor;
                     $pendingWO += $pendingWOColor;
@@ -239,9 +267,10 @@ class ProductionController extends Controller
                     ];
                 })->unique(fn($o) => $o['id'] . '-' . ($o['chosen_color'] ?? ''))->values(),
                 'details' => $group->map(function ($item) use ($isMelamina, $colorBreakdown, $pendingSales) {
+                    $effectiveCompleted = max(0, ($item->completed_quantity ?? 0) - ($item->returned_quantity ?? 0));
                     $rem = ($item->source_type === 'work_order')
                         ? max(0, $item->quantity - ($item->completed_quantity ?? 0))
-                        : max(0, $item->quantity - max($item->completed_quantity ?? 0, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0));
+                        : max(0, $item->quantity - max($effectiveCompleted, $item->detailed_quantity ?? 0, $item->delivered_quantity ?? 0));
 
                     $isCovered = false;
                     if ($item->source_type === 'sale_detail') {
@@ -456,9 +485,16 @@ class ProductionController extends Controller
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
             ->withSum('detalladoRecords as detailed_quantity', 'quantity')
+            ->withSum(['deliveries as delivered_quantity' => function ($q) {
+                $q->whereHas('shipment', function ($sq) {
+                    $sq->where('status', '!=', 'cancelado');
+                });
+            }], 'quantity_delivered')
+            ->withSum('returnItems as returned_quantity', 'quantity')
             ->with(['variant.product', 'variant.colorStocks', 'variant.materialModel.activeColors', 'sale:id,client_id,promised_date', 'sale.client:id,name'])
             ->get()
             ->map(function ($item) {
+                $netDelivered = max(0, ($item->delivered_quantity ?? 0) - ($item->returned_quantity ?? 0));
                 return (object)[
                     'source_type' => 'sale_detail',
                     'source_id' => $item->id,
@@ -468,6 +504,8 @@ class ProductionController extends Controller
                     'quantity' => $item->quantity,
                     'completed_quantity' => $item->completed_quantity ?? 0,
                     'detailed_quantity' => $item->detailed_quantity ?? 0,
+                    'delivered_quantity' => $netDelivered,
+                    'returned_quantity' => $item->returned_quantity ?? 0,
                     'chosen_color' => $item->chosen_color,
                     'color_id' => $item->color_id,
                     'custom_notes' => $item->custom_notes,
@@ -555,21 +593,17 @@ class ProductionController extends Controller
                     $pendingWOColor = max(0, $woNeededColor - $woCompletedColor);
 
                     $pendingToFabricateColor = $pendingSalesColor + $pendingWOColor;
-                    $totalColorNeeded = $salesNeededColor + $woNeededColor;
 
-                    // Para el reporte impreso: únicamente incluir colores con requerimiento o a fabricar
-                    if ($totalColorNeeded > 0 || $pendingToFabricateColor > 0) {
-                        $colorBreakdown[] = [
-                            'color' => $c,
-                            'needed' => $totalColorNeeded,
-                            'in_stock' => $stockFisicoColor,
-                            'in_detailed' => $wipDetailedColor,
-                            'delivered' => $salesDeliveredColor,
-                            'pending_sales' => $pendingSalesColor,
-                            'pending_wo' => $pendingWOColor,
-                            'pending_to_fabricate' => $pendingToFabricateColor,
-                        ];
-                    }
+                    $colorBreakdown[] = [
+                        'color' => $c,
+                        'needed' => $salesNeededColor + $woNeededColor,
+                        'in_stock' => $stockFisicoColor,
+                        'in_detailed' => $wipDetailedColor,
+                        'delivered' => $salesDeliveredColor,
+                        'pending_sales' => $pendingSalesColor,
+                        'pending_wo' => $pendingWOColor,
+                        'pending_to_fabricate' => $pendingToFabricateColor,
+                    ];
 
                     $pendingSales += $pendingSalesColor;
                     $pendingWO += $pendingWOColor;
@@ -607,6 +641,8 @@ class ProductionController extends Controller
                 }
 
                 $pendingToFabricate = $pendingSales + $pendingWO;
+                // Filtrar para el reporte impreso: únicamente colores solicitados o a fabricar
+                $colorBreakdown = collect($colorBreakdown)->filter(fn($cb) => $cb['needed'] > 0 || $cb['pending_to_fabricate'] > 0)->values()->all();
             } else {
                 $pendingSales = max(0, $salesNeeded - $stockFisico - $wipDetailed - $salesDelivered);
                 $pendingWO = max(0, $woGroup->sum('quantity') - ($woGroup->sum('completed_quantity') ?? 0));

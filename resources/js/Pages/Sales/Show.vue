@@ -50,8 +50,8 @@ const openDetalladoModal = (detail) => {
     activeDetailName.value = detail.product_name || (detail.variant?.product?.name + ' (' + detail.variant?.material + ')');
     
     const detalladoPrevio = detail.reserved_quantity || 0;
-    const entregado = detail.delivered_quantity || 0;
-    const maxLogico = detail.quantity - detalladoPrevio - entregado;
+    const entregadoNeto = Math.max(0, (detail.delivered_quantity || 0) - (detail.returned_quantity || 0));
+    const maxLogico = detail.quantity - detalladoPrevio - entregadoNeto;
     
     const availableFisico = detail.variant?.available_stock || 0;
     
@@ -60,6 +60,33 @@ const openDetalladoModal = (detail) => {
     detalladoForm.quantity = 1;
     showDetalladoModal.value = true;
 };
+
+const getDispositionBadge = (disp) => {
+    switch (disp) {
+        case 'danada': return { label: '⚠️ Dañada (Taller)', class: 'bg-amber-100 text-amber-800' };
+        case 'baja': return { label: '🗑️ Baja (Merma)', class: 'bg-red-100 text-red-800' };
+        case 'color_equivocado': return { label: '🎨 Color Equivocado', class: 'bg-purple-100 text-purple-800' };
+        case 'buen_estado': return { label: '✓ Buen Estado', class: 'bg-green-100 text-green-800' };
+        default: return { label: disp, class: 'bg-gray-100 text-gray-800' };
+    }
+};
+
+const allReturnItems = computed(() => {
+    const list = [];
+    if (!props.sale.details) return list;
+    for (const d of props.sale.details) {
+        if (d.return_items && d.return_items.length > 0) {
+            for (const item of d.return_items) {
+                list.push({
+                    ...item,
+                    product_name: d.product_name,
+                    material: d.variant?.material
+                });
+            }
+        }
+    }
+    return list;
+});
 
 const submitDetallado = () => {
     detalladoForm.post(route('sale-details.detallado', activeDetailId.value), {
@@ -236,15 +263,19 @@ const formatDate = (dateString) => {
                                         <div v-if="!productionMode" class="mt-4 pt-3 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                             <div class="text-xs">
                                                 <span class="text-gray-500 font-bold uppercase tracking-wider block mb-1">Progreso de Entrega</span>
-                                                <span class="font-black text-lg text-gray-800">{{ item.delivered_quantity || 0 }}</span> 
-                                                <span class="text-gray-500">de {{ item.quantity }} enviadas</span>
-                                                <span v-if="(item.delivered_quantity || 0) === item.quantity" class="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">✓ Completado</span>
+                                                <span class="font-black text-lg text-gray-800">{{ Math.max(0, (item.delivered_quantity || 0) - (item.returned_quantity || 0)) }}</span> 
+                                                <span class="text-gray-500">de {{ item.quantity }} entregadas</span>
+                                                <span v-if="Math.max(0, (item.delivered_quantity || 0) - (item.returned_quantity || 0)) === item.quantity" class="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">✓ Completado</span>
 
-                                                <div v-else class="mt-1">
-                                                    <span :class="(item.variant?.available_stock || 0) >= (item.quantity - (item.delivered_quantity || 0)) ? 'text-green-600' : 'text-red-500'" class="font-bold">
+                                                <span v-if="(item.returned_quantity || 0) > 0" class="ml-2 bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold text-[11px] inline-flex items-center gap-1 border border-amber-200">
+                                                    <span>↩️</span> {{ item.returned_quantity }} devuelta(s)
+                                                </span>
+
+                                                <div v-else-if="Math.max(0, (item.delivered_quantity || 0) - (item.returned_quantity || 0)) < item.quantity" class="mt-1">
+                                                    <span :class="(item.variant?.available_stock || 0) >= (item.quantity - Math.max(0, (item.delivered_quantity || 0) - (item.returned_quantity || 0))) ? 'text-green-600' : 'text-red-500'" class="font-bold">
                                                         Stock disponible libre: {{ item.variant?.available_stock || 0 }}
                                                     </span>
-                                                    <span v-if="(item.variant?.available_stock || 0) < (item.quantity - (item.delivered_quantity || 0))" class="text-red-500 ml-1">
+                                                    <span v-if="(item.variant?.available_stock || 0) < (item.quantity - Math.max(0, (item.delivered_quantity || 0) - (item.returned_quantity || 0)))" class="text-red-500 ml-1">
                                                         ⚠️ insuficiente para completar
                                                     </span>
                                                 </div>
@@ -253,7 +284,7 @@ const formatDate = (dateString) => {
                                                 </div>
                                             </div>
 
-                                            <div class="flex flex-col gap-2 items-end" v-if="(item.quantity - (item.delivered_quantity || 0)) > 0">
+                                            <div class="flex flex-col gap-2 items-end" v-if="(item.quantity - Math.max(0, (item.delivered_quantity || 0) - (item.returned_quantity || 0))) > 0">
                                                 <button v-if="(sale.stage === 'produccion' || sale.stage === 'confirmado') && (item.variant?.available_stock || 0) > 0" @click="openDetalladoModal(item)" class="text-xs font-bold text-orange-600 hover:text-orange-800 underline flex items-center gap-1">
                                                     🛠️ Mandar a Detallado
                                                 </button>
@@ -291,6 +322,51 @@ const formatDate = (dateString) => {
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        
+                        <!-- TABLA AUDITORÍA DE DEVOLUCIONES DEL PEDIDO -->
+                        <div v-if="allReturnItems.length > 0" class="mt-8 pt-6 border-t border-amber-200">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-black text-gray-800 flex items-center gap-2 text-sm">
+                                    <span class="text-amber-600">↩️</span> Devoluciones Asociadas a este Pedido
+                                </h3>
+                                <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full border border-amber-200">
+                                    {{ allReturnItems.reduce((acc, it) => acc + (it.quantity || 0), 0) }} pieza(s) devuelta(s)
+                                </span>
+                            </div>
+
+                            <div class="overflow-x-auto bg-amber-50/30 rounded-xl border border-amber-200 p-3">
+                                <table class="w-full text-left text-xs">
+                                    <thead>
+                                        <tr class="text-gray-500 border-b border-amber-200/60 uppercase tracking-wider font-semibold text-[10px]">
+                                            <th class="pb-2">Folio Devolución</th>
+                                            <th class="pb-2">Fecha</th>
+                                            <th class="pb-2">Producto</th>
+                                            <th class="pb-2 text-center">Cant.</th>
+                                            <th class="pb-2">Motivo</th>
+                                            <th class="pb-2">Destino / Disposición</th>
+                                            <th class="pb-2">Autorizado Por</th>
+                                            <th class="pb-2">Notas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-amber-100/80">
+                                        <tr v-for="ret in allReturnItems" :key="ret.id" class="hover:bg-amber-100/40 transition-colors">
+                                            <td class="py-2.5 font-black text-amber-800">{{ ret.sale_return?.folio || 'DEV-S/F' }}</td>
+                                            <td class="py-2.5 text-gray-600">{{ formatDate(ret.sale_return?.returned_at) }}</td>
+                                            <td class="py-2.5 font-bold text-gray-800">{{ ret.product_name }}</td>
+                                            <td class="py-2.5 text-center font-black text-gray-900">{{ ret.quantity }}</td>
+                                            <td class="py-2.5 capitalize text-gray-700">{{ (ret.reason_type || '').replace('_', ' ') }}</td>
+                                            <td class="py-2.5">
+                                                <span :class="getDispositionBadge(ret.disposition).class" class="px-2 py-0.5 rounded text-[10px] font-bold">
+                                                    {{ getDispositionBadge(ret.disposition).label }}
+                                                </span>
+                                            </td>
+                                            <td class="py-2.5 text-gray-800 font-semibold">{{ ret.sale_return?.authorized_by }}</td>
+                                            <td class="py-2.5 text-gray-500 italic max-w-xs truncate">{{ ret.notes || '—' }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         
                         <div class="mt-8 border-t pt-4 text-sm text-gray-500">

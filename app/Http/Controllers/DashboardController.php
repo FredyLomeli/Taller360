@@ -112,6 +112,33 @@ class DashboardController extends Controller
                     ];
                 })->values();
 
+            // F. DEVOLUCIONES PENDIENTES DE REPOSICIÓN
+            $pendingReturns = \App\Models\SaleReturn::whereHas('items.saleDetail.sale', function ($q) {
+                $q->whereIn('stage', ['confirmado', 'produccion', 'enviado']);
+            })
+            ->with([
+                'client:id,name,phones',
+                'items.saleDetail.sale:id,stage',
+                'items.saleDetail.variant.product:id,name',
+            ])
+            ->latest('returned_at')
+            ->get()
+            ->map(function ($ret) {
+                $saleId = $ret->items->first()?->saleDetail?->sale_id;
+                $totalPieces = (int) $ret->items->sum('quantity');
+                $damagedPieces = (int) $ret->items->where('disposition', 'danada')->sum('quantity');
+                return [
+                    'id' => $ret->id,
+                    'folio' => $ret->folio,
+                    'client_name' => $ret->client?->name ?? 'Cliente',
+                    'sale_id' => $saleId,
+                    'total_pieces' => $totalPieces,
+                    'damaged_pieces' => $damagedPieces,
+                    'returned_at' => $ret->returned_at?->format('d/m/Y H:i'),
+                    'authorized_by' => $ret->authorized_by,
+                ];
+            })->values();
+
             return Inertia::render('Dashboard', [
                 'isAdmin' => true,
                 'kpis' => [
@@ -120,11 +147,13 @@ class DashboardController extends Controller
                     'tickets' => $countSales,
                     // Agregamos los operativos
                     'in_production' => $inProduction, 
-                    'ready_to_ship' => $readyToShip
+                    'ready_to_ship' => $readyToShip,
+                    'pending_returns' => $pendingReturns->count(),
                 ],
                 'sellersStats' => $sellersStats,
                 'lowStockProducts' => $lowStockProducts,
                 'discontinuedColorStocks' => $discontinuedColorStocks,
+                'pendingReturns' => $pendingReturns,
                 'filters' => [
                     'start_date' => $start->format('Y-m-d'),
                     'end_date' => $end->format('Y-m-d')

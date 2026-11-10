@@ -58,6 +58,11 @@ class SaleDetail extends Model
         return $this->hasMany(WorkOrder::class, 'origin_sale_detail_id');
     }
 
+    public function returnItems()
+    {
+        return $this->hasMany(SaleReturnItem::class);
+    }
+
     public function colorRelation()
     {
         return $this->belongsTo(Color::class, 'color_id');
