@@ -48,18 +48,17 @@
 
 ---
 
-## 0.3 Requerimientos Planeados — Fase 2.7 Catálogos Administrables y Fase 2.8 Devoluciones (Octubre 2026) 🔴 URGENTE — PLANEADO, SIN CONSTRUIR
+## 0.3 Requerimientos de Catálogos y Devoluciones — Noviembre 2026
 
-> **Estado:** ambos módulos están **documentados y auditados en lectura (29-30 oct 2026), sin una sola línea de código construida**: no existen las tablas `materials`, `colors`, `category_material`, `material_color`, `sale_returns` ni `sale_return_items`, ni sus modelos, rutas o vistas. Todo lo descrito aquí es diseño acordado con el PM.
-> **Orden de ejecución vigente:** 
-> 1) **Fase 0 — Hotfix colores de Melamina** (🔴 PRIORIDAD MÁXIMA, antes de la 2.7; corrige el error de desarrollo sustituyendo las 4 constantes por los 7 colores oficiales en código sin tocar schema).
-> 2) **Fase 2.7 Catálogos Administrables** (URGENTE).
-> 3) **Fase 2.8 Devoluciones** (depende de 2.7 porque usa `color_id`; se construye después de la fase 5 de 2.7).
+> **Estado Actualizado:**
+> 1) **Fase 0 — Hotfix colores de Melamina:** COMPLETADA Y VALIDADA ✅.
+> 2) **Fase 2.7 — Catálogos Administrables:** COMPLETADA Y VALIDADA EN QA (114/114 tests en verde) ✅. Migraciones ejecutadas, modelos y relaciones Eloquent, módulo `/catalogs` (CRUD, asignaciones, descontinuado por material, candado de renombrado histórico), integración reactiva en Productos y POS, OTs y Embarques con `color_id`, alertas de stock remanente, vista compacta en taller y catálogo público Blade 100% dinámico.
+> 3) **Fase 2.8 — Módulo de Devoluciones:** 🔴 SIGUIENTE EN ORDEN DE EJECUCIÓN (URGENTE). Dependía de la Fase 2.7 por operar con `color_id`.
 > 4) **Fase 3.2 Cobranza: EN PAUSA** (esperando respuestas del cliente; solo se documenta estado y puntos de integración futura).
 > 5) Fase 4.2 (catálogo por cliente), Fase 3 (dashboards por rol), Fase 5, Fase 6 y rendimiento en hosting (Fase 2.6/7).
 > **Numeración:** `2.7` y `2.8` estaban libres (la numeración existente llegaba hasta 2.6); no hubo conflicto.
 
-### 0.3-A. Fase 2.7 — Sprint Catálogos Administrables (🔴 URGENTE, estimado 5 a 7 sesiones)
+### 0.3-A. Fase 2.7 — Sprint Catálogos Administrables (COMPLETADO Y VALIDADO EN QA — NOVIEMBRE 2026) ✅
 
 **Motivo:** hoy categorías, materiales por categoría y colores por material están hardcodeados (PHP, Vue, Blade). Los 4 colores previos de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel`) fueron un **error de desarrollo** que se subsana preliminarmente en la Fase 0 Hotfix (alineándolos a los 7 oficiales: `Fresno Andino`, `Parota`, `Nogal Africano`, `Gris Cenizo`, `Gris Antracita`, `Tzalam`, `Moka`). Además, un proveedor descontinuó acabados y agregó nuevos; el cliente necesita administrarlos dinámicamente en base de datos.
 

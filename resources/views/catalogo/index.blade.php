@@ -417,29 +417,10 @@
         
         const mWhatsappBtn = document.getElementById('modalWhatsAppBtn');
         
-        // --- Matrices de Fabricación ---
-        const categoryMaterials = {
-            'ropero': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'trinchero': ['Madera', 'Madera y MDF enchapado', 'MDF'],
-            'cómoda': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'loker': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'recámara': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'comedor': ['MDF', 'Madera y MDF enchapado', 'Melamina'],
-            'base': ['MDF', 'Madera']
-        };
-
-        const materialColors = {
-            'MDF': ['Chocolate', 'Nogal', 'Blanco', 'Gris', 'Cherry', '258'],
-            'MADERA': ['Chocolate', 'Caoba', 'Tabaco', 'Cherry'],
-            'MELAMINA': ['Fresno Andino', 'Parota', 'Nogal Africano', 'Gris Cenizo', 'Gris Antracita', 'Tzalam', 'Moka']
-        };
-
-        const colorHex = {
-            'Chocolate': '#3B2314', 'Caoba': '#4A1525', 'Tabaco': '#422A1D', 'Cherry': '#722F37', 'Nogal': '#5C3A21',
-            'Blanco': '#FFFFFF', 'Gris': '#9CA3AF', 'Gris Antracita': '#374151', 'Gris Cenizo': '#6B7280',
-            'Parota': '#8B5A2B', 'Tzalam': '#6F4E37', 'Moka': '#4A3728', 'Fresno Andino': '#D4C4A8', 'Nogal Africano': '#50382B',
-            '258': '#A08A75'
-        };
+        // --- Matrices de Fabricación Dinámicas (Desde Base de Datos) ---
+        const categoryMaterials = @json($categoryMaterials ?? []);
+        const materialColors = @json($materialColors ?? []);
+        const colorHex = @json($colorHex ?? []);
 
         @if(isset($waNumber))
             const baseWaUrl = "https://wa.me/{{ $waNumber }}?text=";
@@ -494,13 +475,21 @@
             const catName = product.category ? product.category.trim().toLowerCase() : '';
             let materials = [];
             
-            for (const key in categoryMaterials) {
-                if (catName.includes(key)) {
-                    materials = categoryMaterials[key];
-                    break;
+            if (product.category_id && categoryMaterials[product.category_id] && categoryMaterials[product.category_id].length > 0) {
+                materials = categoryMaterials[product.category_id];
+            } else if (categoryMaterials[catName] && categoryMaterials[catName].length > 0) {
+                materials = categoryMaterials[catName];
+            } else {
+                for (const key in categoryMaterials) {
+                    if (catName.includes(key) || key.includes(catName)) {
+                        materials = categoryMaterials[key];
+                        break;
+                    }
                 }
             }
-            if (materials.length === 0) materials = ['MDF', 'Madera']; // Fallback
+            if (materials.length === 0) {
+                materials = Object.keys(materialColors).filter(k => k === k.toUpperCase());
+            }
 
             // 3. Colores agrupados por material
             let hasAnyColors = false;
@@ -508,12 +497,17 @@
                 const upperMat = mat.toUpperCase();
                 let colorsForMat = [];
                 
-                if (materialColors[upperMat]) {
+                if (materialColors[mat]) {
+                    colorsForMat = materialColors[mat];
+                } else if (materialColors[upperMat]) {
                     colorsForMat = materialColors[upperMat];
-                } else if (upperMat.includes('MADERA')) {
-                    colorsForMat = materialColors['MADERA'];
-                } else if (upperMat.includes('MDF')) {
-                    colorsForMat = materialColors['MDF'];
+                } else {
+                    for (const mKey in materialColors) {
+                        if (upperMat.includes(mKey.toUpperCase()) || mKey.toUpperCase().includes(upperMat)) {
+                            colorsForMat = materialColors[mKey];
+                            break;
+                        }
+                    }
                 }
 
                 if (colorsForMat.length > 0) {

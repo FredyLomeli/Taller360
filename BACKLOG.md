@@ -186,31 +186,31 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
-## 🔴 FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES (URGENTE — PLANEADO, SIN CONSTRUIR)
-**Prioridad:** 🔴 MÁXIMA / URGENTE (1° en orden de ejecución tras Fase 0) | **Estimado:** 5 a 7 sesiones  
-**Motivo:** Actualmente categorías, materiales por categoría y colores por material están hardcodeados en PHP, Vue y Blade. Los 4 colores originales de Melamina (`Blanco`, `Gris`, `Texturizado`, `Oyamel`) fueron un ~~error de desarrollo~~ que se subsana en la Fase 0 Hotfix (quedando los 7 oficiales: `Fresno andino`, `Parota`, `Nogal africano`, `Gris cenizo`, `Gris antracita`, `Tzalam`, `Moka`). No obstante, siguen fijos en código. Un proveedor descontinuó un color y agregó uno nuevo; el cliente necesita administrarlos dinámicamente sin tocar código.
+## ✅ FASE 2.7 — SPRINT CATÁLOGOS ADMINISTRABLES (COMPLETADO Y VALIDADO EN QA — NOVIEMBRE 2026)
+**Prioridad:** 🔴 MÁXIMA / URGENTE | **Estado:** COMPLETADO Y VALIDADO EN QA (114/114 tests en verde)  
+**Motivo:** Categorías, materiales por categoría y colores por material ahora son 100% dinámicos y administrables desde base de datos. Se superó la etapa de matrices fijas en código. Se incorporó el candado de renombrado histórico, soporte de color_id en existencias, OTs, ventas y embarques, vista compacta en taller, catálogo público Blade alimentado desde BD y alertas de stock remanente para colores descontinuados (Reglas A1–A12).
 
 ### Checklist por Fases:
-- [ ] **Fase 1: Auditoría y línea base:** Ejecutar la auditoría de lectura (ver tabla en `CONTEXTO_TECNICO.md` Anexo 0.3-X1) y correr `php artisan test`; los tests existentes deben estar en verde antes de empezar a escribir código.
-- [ ] **Fase 2: BD, modelos y seeders:** Crear migraciones para tabla `materials` (4 confirmados: `MDF`, `Madera`, `Madera y MDF enchapado`, `Melamina`), `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), agregar `activo` a `categories`, migrar `product_variants.material` a `material_id`, migrar `color` a `color_id` en `variant_color_stocks` y `work_orders`, y agregar `color_id` nullable a `sale_details` conservando `chosen_color` como snapshot textual. Seeders con fuente de verdad oficial (A12): 15 colores con HEX de `catalogo/index.blade.php` L437-442; conteos pendientes de confirmar por el PM (14 o más relaciones categoría↔material; 17 o 21 relaciones material↔color).
-- [ ] **Fase 3: Pantalla "Catálogos" (Admin + Supervisor):** Nueva sección propia "Catálogos" en el menú principal (`role:admin,supervisor`). CRUD de categorías, materiales y colores; asignación muchos a muchos categoría↔material y material↔color; descontinuar color por material (`material_color.activo`); interruptor global (`colors.activo`); candado de renombrado (libre si no se ha usado; solo corrección tipográfica con confirmación si ya tiene registros históricos vinculados).
-- [ ] **Fase 4: Productos y POS leyendo de BD:** Formularios de productos (`Products/Create.vue` y `Edit.vue`) y POS (`Sales/Create.vue`) cargando catálogos reactivos desde base de datos. Validación estricta categoría-material en backend. Regla de "color especial" (capturado en nota de partida `custom_notes` con costo extra `additional_cost`, sin `color_id`). Melamina rechaza color especial: solo admite colores de línea activos. Ocultar productos de categoría o material desactivado en catálogo público y POS (visibles en inventario interno).
-- [ ] **Fase 5: Producción, órdenes de trabajo y embarques con `color_id` y regla de descontinuados:** *(FASE DE MAYOR RIESGO — toca stock por color)*. `ProductionController::index`, `@printReport`, `@storeCompletion`, `WorkOrderController` y `ShipmentController` operando con `color_id`. Permitir embarque y cancelación de embarque con color descontinuado mientras quede stock físico; bloquear nueva venta y fabricación de colores descontinuados.
-- [ ] **Fase 6: Catálogo público, reporte de taller y alertas:** Vista de catálogo público (`catalogo/index.blade.php`) leyendo materiales y colores desde BD. En `Production/Print.vue` y en la cola de producción (`Production/Index.vue`), las partidas con color especial deben mostrar la nota de forma visible (ej. *"Color especial: ver nota"*). Alerta en Dashboard y Productos: *"quedan X piezas de [Material] [Color] (descontinuado)"*.
-- [ ] **Fase 7: Tests nuevos y regresión completa:** Crear tests automatizados de las reglas A1–A12 y verificar que las suites existentes sigan en verde.
+- [x] **Fase 1: Auditoría y línea base:** Ejecutada la auditoría de lectura y línea base previa en verde.
+- [x] **Fase 2: BD, modelos y seeders:** Migraciones para tablas `materials`, `colors`, pivote `category_material`, pivote `material_color` (con campo `activo` para descontinuar por material), columna `activo` en `categories`, `material_id` en `product_variants`, `color_id` en `variant_color_stocks`, `work_orders` y `sale_details` conservando `chosen_color` como snapshot textual. Seeders con los 15 colores oficiales del Blade (A12), 4 materiales confirmados y retrocompatibilidad total (A11).
+- [x] **Fase 3: Pantalla "Catálogos" (Admin + Supervisor):** Módulo `/catalogs` accesible para `admin` y `supervisor`. CRUD reactivo de categorías, materiales y colores; asignaciones muchos a muchos categoría↔material y material↔color; descontinuar color por material (`material_color.activo`); interruptor global (`colors.activo`); candado de renombrado (libre si no se ha usado; confirmación explícita con SweetAlert2 si tiene uso histórico).
+- [x] **Fase 4: Productos y POS leyendo de BD:** `Products/Create.vue`, `Edit.vue` y `Sales/Create.vue` cargando catálogos dinámicos. Validación estricta categoría-material en backend. Regla de "color especial" (capturado en `custom_notes` con `additional_cost`, sin `color_id`). Melamina rechaza color especial exigiendo color de línea activo. Ocultamiento de productos de categorías inactivas en catálogo público y POS.
+- [x] **Fase 5: Producción, órdenes de trabajo y embarques con `color_id` y regla de descontinuados:** `ProductionController::index`, `@printReport`, `@storeCompletion`, `WorkOrderController` y `ShipmentController` operando con `color_id`. Embarque y cancelación de embarque permitidos para colores descontinuados mientras reste stock físico; bloqueo estricto de nuevas ventas y fabricación. Optimización de filas compactas horizontales (inline) en Plan de Producción.
+- [x] **Fase 6: Catálogo público, reporte de taller y alertas:** Vista de catálogo público (`catalogo/index.blade.php`) leyendo materiales, colores y códigos HEX desde BD vía `CatalogController`. En `Production/Print.vue` reporte ultra-compacto filtrando únicamente colores solicitados o a fabricar (eliminados los renglones vacíos con ceros) y notas técnicas de muestras visibles (`📝 Muestra: ...`). Alerta de stock remanente en Dashboard e Inventario de Productos (`⚠️ Quedan X piezas en [Color] (descontinuado)`).
+- [x] **Fase 7: Tests nuevos y regresión completa:** Pruebas unitarias e integrales en `tests/Feature/CatalogDatabaseTest.php`, `CatalogManagementTest.php`, `CatalogProductAndPosTest.php`, `ProductionAndShipmentColorIdTest.php` y `PublicCatalogAndPrintReportTest.php`. Suite global de 114 tests y 716 aserciones en verde.
 
-### Tests Nuevos a Construir:
-- [ ] Descontinuar un color en Melamina no lo bloquea en Madera ni en MDF.
-- [ ] Color descontinuado no aparece en POS, catálogo público, creación de productos nuevos ni órdenes de trabajo.
-- [ ] Embarcar y cancelar embarque con color descontinuado y stock existente funciona correctamente.
-- [ ] Partida con color especial no toca `variant_color_stocks` ni falla validaciones de producción.
-- [ ] Melamina rechaza venta con color especial (exige color de línea activo).
-- [ ] Validación categoría-material rechaza variantes con material no asociado a la categoría.
-- [ ] Todas las variantes existentes conservan categoría y material válidos tras la migración (incluyendo las 35 de Madera en Roperos y 11 en Cómodas, bajo regla firme A11).
-- [ ] Producto de categoría o material desactivado se oculta en catálogo público y POS pero sigue visible en inventario interno.
-- [ ] Renombrar color: libre si no se ha usado; restringido con confirmación si ya tiene uso histórico.
-- [ ] Seeders reproducen exactamente las categorías, materiales, relaciones y colores acordados (15 colores del Blade; conteos pendientes de confirmar: 14 o más categoría↔material, 17 o 21 material↔color).
-- [ ] Las suites existentes de tests siguen en verde tras cada fase.
+### Tests Nuevos Construidos y Validados:
+- [x] Descontinuar un color en Melamina no lo bloquea en Madera ni en MDF.
+- [x] Color descontinuado no aparece en POS, catálogo público, creación de productos nuevos ni órdenes de trabajo.
+- [x] Embarcar y cancelar embarque con color descontinuado y stock existente funciona correctamente.
+- [x] Partida con color especial no toca `variant_color_stocks` ni falla validaciones de producción.
+- [x] Melamina rechaza venta con color especial (exige color de línea activo).
+- [x] Validación categoría-material rechaza variantes con material no asociado a la categoría.
+- [x] Todas las variantes existentes conservan categoría y material válidos tras la migración (incluyendo las 35 de Madera en Roperos y 11 en Cómodas, bajo regla firme A11).
+- [x] Producto de categoría o material desactivado se oculta en catálogo público y POS pero sigue visible en inventario interno.
+- [x] Renombrar color: libre si no se ha usado; restringido con confirmación si ya tiene uso histórico.
+- [x] Seeders reproducen exactamente las categorías, materiales, relaciones y colores acordados (15 colores del Blade; 16 categoría↔material, 21 material↔color).
+- [x] Las suites existentes de tests siguen en verde tras cada fase (114 passed, 716 assertions).
 
 ### ⚠️ Dudas Abiertas de Catálogos (Decisiones Pendientes):
 - **Materiales confirmados (4 materiales):** El PM confirmó que `MDF`, `Madera`, `Madera y MDF enchapado` y `Melamina` son **cuatro materiales distintos** en la tabla `materials`. Se resuelve y retira la duda sobre si eran uno o dos materiales.

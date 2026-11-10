@@ -53,11 +53,11 @@ onMounted(() => {
                         <span class="font-bold uppercase text-[11px] leading-none block">{{ group.name }}</span>
                         <span class="text-[9px] text-gray-600 block mt-0.5">Mat: {{ group.material }} <span v-if="group.measurements">| {{ group.measurements }}</span></span>
                         
-                        <!-- Desglose por color si es Melamina -->
-                        <div v-if="group.material === 'Melamina' && group.color_breakdown && group.color_breakdown.length > 0" class="mt-1 pt-1 border-t border-gray-300 text-[9px]">
+                        <!-- Desglose por color -->
+                        <div v-if="group.color_breakdown && group.color_breakdown.length > 0" class="mt-1 pt-1 border-t border-gray-300 text-[9px]">
                             <div v-for="cb in group.color_breakdown" :key="cb.color" class="flex justify-between items-center py-0.5" :class="{'font-bold text-black': cb.pending_to_fabricate > 0}">
-                                <span>{{ cb.color }}:</span>
-                                <span>Bodega: {{ cb.in_stock }} | Req: {{ cb.needed }} | <strong>Fab: {{ cb.pending_to_fabricate }}</strong></span>
+                                <span>• {{ cb.color }}:</span>
+                                <span>Bodega: {{ cb.in_stock }} | Req: {{ cb.needed }} | <strong :class="cb.pending_to_fabricate > 0 ? 'text-black underline' : 'text-gray-600'">Fab: {{ cb.pending_to_fabricate }}</strong></span>
                             </div>
                         </div>
                     </td>
@@ -69,10 +69,18 @@ onMounted(() => {
                     </td>
                     <td class="border border-black px-1 py-1.5 text-center"></td>
                     <td class="border border-black px-1 py-1.5 text-[9px]">
-                        <div v-if="group.material === 'Melamina' && group.color_breakdown">
+                        <div v-if="group.pending_to_fabricate === 0" class="font-bold text-gray-800 mb-0.5">
+                            ✓ En Bodega (Listo)
+                        </div>
+                        <div v-else-if="group.color_breakdown && group.color_breakdown.length > 0" class="mb-0.5">
                             <span v-for="cb in group.color_breakdown.filter(c => c.pending_to_fabricate > 0)" :key="cb.color" class="inline-block mr-1 font-bold">
                                 [Fab: {{ cb.pending_to_fabricate }} {{ cb.color }}]
                             </span>
+                        </div>
+                        <div v-if="group.special_notes && group.special_notes.length > 0" class="text-gray-800 space-y-0.5">
+                            <div v-for="(note, nIdx) in group.special_notes" :key="nIdx" class="font-semibold text-[8.5px]">
+                                📝 {{ note }}
+                            </div>
                         </div>
                     </td>
                 </tr>

@@ -11,6 +11,7 @@ const props = defineProps({
     kpis: Object,
     sellersStats: Array,
     lowStockProducts: Array,
+    discontinuedColorStocks: Array,
     recentSales: Array,
     filters: Object
 });
@@ -133,6 +134,26 @@ const stageLabels = {
                         <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Crédito Pendiente</div>
                         <div class="text-3xl font-black text-gray-800">{{ formatMoney(kpis.credit_receivable) }}</div>
                         <div class="text-[11px] text-gray-400 mt-2">Cuentas por cobrar</div>
+                    </div>
+                </div>
+
+                <!-- Alerta de Colores Descontinuados con Stock Remanente (Regla A6) -->
+                <div v-if="discontinuedColorStocks && discontinuedColorStocks.length > 0" 
+                     class="bg-amber-50 border border-amber-200 rounded-2xl p-4 shrink-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-xs uppercase tracking-wider text-amber-900">Stock Remanente en Colores Descontinuados</h4>
+                            <p class="text-[11px] text-amber-700">Estas piezas pueden despacharse o venderse pero no admiten nueva fabricación.</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 max-w-xl">
+                        <span v-for="item in discontinuedColorStocks" :key="item.id" 
+                              class="text-[11px] bg-white text-amber-900 border border-amber-300 px-2.5 py-1 rounded-lg font-bold shadow-2xs">
+                            ⚠️ {{ item.stock }} pza(s) de {{ item.product_name }} en {{ item.color }}
+                        </span>
                     </div>
                 </div>
 

@@ -150,17 +150,21 @@ class ProductionController extends Controller
                     $pendingWOColor = max(0, $woNeededColor - $woCompletedColor);
 
                     $pendingToFabricateColor = $pendingSalesColor + $pendingWOColor;
+                    $totalColorNeeded = $salesNeededColor + $woNeededColor;
 
-                    $colorBreakdown[] = [
-                        'color' => $c,
-                        'needed' => $salesNeededColor + $woNeededColor,
-                        'in_stock' => $stockFisicoColor,
-                        'in_detailed' => $wipDetailedColor,
-                        'delivered' => $salesDeliveredColor,
-                        'pending_sales' => $pendingSalesColor,
-                        'pending_wo' => $pendingWOColor,
-                        'pending_to_fabricate' => $pendingToFabricateColor,
-                    ];
+                    // Para el reporte impreso: únicamente incluir colores con requerimiento o a fabricar
+                    if ($totalColorNeeded > 0 || $pendingToFabricateColor > 0) {
+                        $colorBreakdown[] = [
+                            'color' => $c,
+                            'needed' => $totalColorNeeded,
+                            'in_stock' => $stockFisicoColor,
+                            'in_detailed' => $wipDetailedColor,
+                            'delivered' => $salesDeliveredColor,
+                            'pending_sales' => $pendingSalesColor,
+                            'pending_wo' => $pendingWOColor,
+                            'pending_to_fabricate' => $pendingToFabricateColor,
+                        ];
+                    }
 
                     $pendingSales += $pendingSalesColor;
                     $pendingWO += $pendingWOColor;
@@ -551,17 +555,21 @@ class ProductionController extends Controller
                     $pendingWOColor = max(0, $woNeededColor - $woCompletedColor);
 
                     $pendingToFabricateColor = $pendingSalesColor + $pendingWOColor;
+                    $totalColorNeeded = $salesNeededColor + $woNeededColor;
 
-                    $colorBreakdown[] = [
-                        'color' => $c,
-                        'needed' => $salesNeededColor + $woNeededColor,
-                        'in_stock' => $stockFisicoColor,
-                        'in_detailed' => $wipDetailedColor,
-                        'delivered' => $salesDeliveredColor,
-                        'pending_sales' => $pendingSalesColor,
-                        'pending_wo' => $pendingWOColor,
-                        'pending_to_fabricate' => $pendingToFabricateColor,
-                    ];
+                    // Para el reporte impreso: únicamente incluir colores con requerimiento o a fabricar
+                    if ($totalColorNeeded > 0 || $pendingToFabricateColor > 0) {
+                        $colorBreakdown[] = [
+                            'color' => $c,
+                            'needed' => $totalColorNeeded,
+                            'in_stock' => $stockFisicoColor,
+                            'in_detailed' => $wipDetailedColor,
+                            'delivered' => $salesDeliveredColor,
+                            'pending_sales' => $pendingSalesColor,
+                            'pending_wo' => $pendingWOColor,
+                            'pending_to_fabricate' => $pendingToFabricateColor,
+                        ];
+                    }
 
                     $pendingSales += $pendingSalesColor;
                     $pendingWO += $pendingWOColor;
@@ -605,6 +613,20 @@ class ProductionController extends Controller
                 $pendingToFabricate = $pendingSales + $pendingWO;
             }
 
+            $specialNotes = $group->map(function ($i) {
+                if (!empty($i->custom_notes)) {
+                    $prefix = !empty($i->chosen_color) ? "[$i->chosen_color] " : '';
+                    return "{$prefix}Muestra: {$i->custom_notes}";
+                }
+                if (!empty($i->notes)) {
+                    return "OT: {$i->notes}";
+                }
+                if (!empty($i->chosen_color) && str_starts_with($i->chosen_color, 'Especial:')) {
+                    return $i->chosen_color;
+                }
+                return null;
+            })->filter()->unique()->values()->all();
+
             return [
                 'name' => $group->first()->product_name,
                 'material' => $variant->material ?? 'Estándar',
@@ -616,6 +638,7 @@ class ProductionController extends Controller
                 'pending_wo' => $pendingWO,
                 'pending_to_fabricate' => $pendingToFabricate,
                 'color_breakdown' => $colorBreakdown,
+                'special_notes' => $specialNotes,
                 'details' => $group->map(function ($item) {
                     $rem = ($item->source_type === 'work_order')
                         ? max(0, $item->quantity - ($item->completed_quantity ?? 0))
@@ -632,6 +655,9 @@ class ProductionController extends Controller
                         'detailed_quantity' => $item->detailed_quantity ?? 0,
                         'pending_quantity' => $rem,
                         'chosen_color' => $item->chosen_color,
+                        'custom_notes' => $item->custom_notes ?? null,
+                        'notes' => $item->notes ?? null,
+                        'is_special' => $item->is_special ?? false,
                         'variant' => $item->variant,
                         'sale' => $item->sale ?? null,
                     ];

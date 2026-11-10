@@ -5,8 +5,13 @@ import { ref, computed, watch } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    products: Array 
+    products: Array,
+    discontinuedStocks: Array
 });
+
+const isColorDiscontinued = (cs) => {
+    return props.discontinuedStocks?.some(d => d.id === cs.id);
+};
 
 const search = ref('');
 
@@ -200,6 +205,23 @@ const deleteProduct = (product) => {
                     </div>
                 </div>
 
+                <!-- Alerta de Existencias en Colores Descontinuados (Regla A6) -->
+                <div v-if="discontinuedStocks && discontinuedStocks.length > 0" 
+                     class="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 text-xs text-amber-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-xl">⚠️</span>
+                        <div>
+                            <strong class="font-bold text-amber-950 block">Existencias Remanentes en Colores Descontinuados:</strong>
+                            <span class="text-amber-800">Hay {{ discontinuedStocks.length }} partida(s) con inventario físico restante disponible para despacho pero no admiten nueva fabricación.</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span v-for="d in discontinuedStocks" :key="d.id" class="bg-white border border-amber-300 text-amber-950 px-2 py-0.5 rounded-lg text-[11px] font-bold shadow-2xs">
+                            {{ d.product_name }} — {{ d.color }}: <strong>{{ d.stock }} pza(s)</strong>
+                        </span>
+                    </div>
+                </div>
+
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-500">
@@ -250,9 +272,12 @@ const deleteProduct = (product) => {
                                                     
                                                     <!-- Desglose por color si tiene existencias registradas -->
                                                     <div v-if="variant.color_stocks && variant.color_stocks.length > 0" class="flex items-center gap-1 flex-wrap">
-                                                        <span v-for="cs in variant.color_stocks" :key="cs.id || cs.color" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px]" :class="cs.stock > 0 ? 'bg-blue-50 text-blue-800 border border-blue-200 font-bold' : 'bg-gray-100 text-gray-400 border border-gray-200'">
-                                                            <span class="w-1.5 h-1.5 rounded-full mr-1" :class="cs.stock > 0 ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                                                        <span v-for="cs in variant.color_stocks" :key="cs.id || cs.color" 
+                                                              class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px]" 
+                                                              :class="isColorDiscontinued(cs) ? 'bg-amber-50 text-amber-950 border border-amber-300 font-bold' : (cs.stock > 0 ? 'bg-blue-50 text-blue-800 border border-blue-200 font-bold' : 'bg-gray-100 text-gray-400 border border-gray-200')">
+                                                            <span class="w-1.5 h-1.5 rounded-full mr-1" :class="isColorDiscontinued(cs) ? 'bg-amber-500' : (cs.stock > 0 ? 'bg-blue-500' : 'bg-gray-300')"></span>
                                                             {{ cs.color }}: {{ cs.stock }}
+                                                            <span v-if="isColorDiscontinued(cs)" class="ml-1 text-[8px] uppercase tracking-tighter bg-amber-200/80 text-amber-900 px-1 rounded">Desc.</span>
                                                         </span>
                                                     </div>
                                                 </div>

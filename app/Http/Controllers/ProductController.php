@@ -17,20 +17,66 @@ class ProductController extends Controller
 {
     public function index()
     {
+        $products = Product::select('id', 'name', 'category_id', 'image', 'is_favorite', 'created_at')
+            ->with([
+                'category:id,name',
+                'variants:id,product_id,material_id,sku,material,measurements,price_1,stock,reserved_stock,damaged_stock,min_stock',
+                'variants.colorStocks',
+                'variants.damagedLogs' => function ($q) {
+                    $q->with('user:id,name')->latest()->take(20);
+                }
+            ])
+            ->orderBy('is_favorite', 'desc') 
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $discontinuedStocks = VariantColorStock::where('stock', '>', 0)
+            ->with([
+                'productVariant.product:id,name',
+                'productVariant.materialModel:id,name',
+                'colorRelation:id,name'
+            ])
+            ->get()
+            ->filter(function ($vcs) {
+                $variant = $vcs->productVariant;
+                if (!$variant || !$variant->materialModel) return false;
+
+                $pivot = DB::table('material_color')
+                    ->where('material_id', $variant->materialModel->id)
+                    ->where(function ($sub) use ($vcs) {
+                        if ($vcs->color_id) {
+                            $sub->where('color_id', $vcs->color_id);
+                        } else {
+                            $sub->whereExists(function ($ex) use ($vcs) {
+                                $ex->select(DB::raw(1))->from('colors')
+                                    ->whereColumn('colors.id', 'material_color.color_id')
+                                    ->where('colors.name', $vcs->color);
+                            });
+                        }
+                    })
+                    ->first();
+
+                return $pivot && !$pivot->activo;
+            })
+            ->map(function ($vcs) {
+                $colorName = $vcs->colorRelation ? $vcs->colorRelation->name : $vcs->color;
+                $productName = $vcs->productVariant->product->name ?? 'Producto';
+                $materialName = $vcs->productVariant->materialModel->name ?? ($vcs->productVariant->material ?? '');
+                return [
+                    'id' => $vcs->id,
+                    'product_name' => $productName,
+                    'material_name' => $materialName,
+                    'color' => $colorName,
+                    'stock' => $vcs->stock,
+                    'available_stock' => $vcs->available_stock,
+                    'message' => "Quedan {$vcs->stock} piezas de {$productName} ({$materialName}) en color {$colorName} (descontinuado)."
+                ];
+            })->values();
+
         // Cargamos productos con sus variantes y categoría
         return Inertia::render('Products/Index', [
-            'products' => Product::select('id', 'name', 'category_id', 'image', 'is_favorite', 'created_at')
-                ->with([
-                    'category:id,name',
-                    'variants:id,product_id,sku,material,measurements,price_1,stock,reserved_stock,damaged_stock,min_stock',
-                    'variants.colorStocks',
-                    'variants.damagedLogs' => function ($q) {
-                        $q->with('user:id,name')->latest()->take(20);
-                    }
-                ])
-                ->orderBy('is_favorite', 'desc') 
-                ->orderBy('created_at', 'desc')
-                ->get()
+            'products' => $products,
+            'discontinuedStocks' => $discontinuedStocks,
         ]);
     }
 
