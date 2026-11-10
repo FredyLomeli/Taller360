@@ -54,10 +54,11 @@
 > 1) **Fase 0 — Hotfix colores de Melamina:** COMPLETADA Y VALIDADA ✅.
 > 2) **Fase 2.7 — Catálogos Administrables:** COMPLETADA Y VALIDADA EN QA (114/114 tests en verde) ✅. Migraciones ejecutadas, modelos y relaciones Eloquent, módulo `/catalogs` (CRUD, asignaciones, descontinuado por material, candado de renombrado histórico), integración reactiva en Productos y POS, OTs y Embarques con `color_id`, alertas de stock remanente, vista compacta en taller y catálogo público Blade 100% dinámico.
 > 3) **Fase 2.8 — Módulo de Devoluciones:** COMPLETADA Y VALIDADA EN QA (134/134 tests en verde) ✅. Migración `sale_returns` y `sale_return_items`, modelos `SaleReturn` y `SaleReturnItem`, motor transaccional con `lockForUpdate` y destinos `danada`, `baja`, `color_equivocado`, regla B4-Bis de bloqueo de cancelación, UI en `/shipments/returns` (Index y Create), auditoría en `/sales/{id}`, reversión automática a producción con bitácora, faltantes netos en taller, re-embarque de reposición, remisión PDF con bonificación por devolución e indicador dinámico KPI en Dashboard.
-> 4) **Fase 3.2 Cobranza: EN PAUSA** (esperando respuestas del cliente; solo se documenta estado y puntos de integración futura).
-> 5) **Fase 4.2 (catálogo con link personalizado por cliente con precios):** 🔴 SIGUIENTE EN ORDEN DE EJECUCIÓN (URGENTE).
-> 6) Fase 3 (dashboards especializados por rol), Fase 5 (fletes dinámicos), Fase 6 (reportes PDF) y rendimiento en hosting (Fase 7).
-> **Numeración:** `2.7` y `2.8` cerradas exitosamente.
+> 4) **Fase 7 — Optimización y Rendimiento para Hosting Compartido:** COMPLETADA Y VALIDADA EN QA (142/142 tests en verde) ✅. Erradicación de N+1 (Dashboard, Productos, Devoluciones), blindaje global de firmas Base64 (`$hidden`), poda de payloads en POS y Productos, exclusión de pedidos históricos entregados en Plan de Producción, y 7 índices de rendimiento en base de datos.
+> 5) **Fase 3.2 Cobranza: EN PAUSA** (esperando respuestas del cliente; solo se documenta estado y puntos de integración futura).
+> 6) **Fase 4.2 (catálogo con link personalizado por cliente con precios):** 🔴 SIGUIENTE EN ORDEN DE EJECUCIÓN (URGENTE).
+> 7) Fase 3 (dashboards especializados por rol), Fase 5 (fletes dinámicos) y Fase 6 (reportes PDF).
+> **Numeración:** `2.7`, `2.8` y `7` cerradas exitosamente.
 
 ### 0.3-A. Fase 2.7 — Sprint Catálogos Administrables (COMPLETADO Y VALIDADO EN QA — NOVIEMBRE 2026) ✅
 
@@ -252,23 +253,20 @@ damaged_stock_logs (Reutilizado para auditoría de disposition 'danada')
 
 **Combinaciones categoría + material presentes en los datos semilla** (`storage/app/import`, 89 productos, 181 variantes): Roperos MDF 64 / Madera 35 / Melamina 26; Cómodas y Lokers MDF 11 / Madera 11 / Melamina 9; Trincheros MDF 12 / Madera 12; Bases Madera 1; Recámaras y comedores: 0 variantes. *(Son los datos de importación inicial; la base de producción puede diferir — ver consultas del Anexo 0.3-X5.)*
 
-### 0.3-X4. Anexo — Schema real (leído de migraciones, 29 oct 2026) y índices a revisar
+### 0.3-X4. Anexo — Schema real e índices de rendimiento implementados (Fase 7 — Noviembre 2026) ✅
 
-Las 12 tablas solicitadas están descritas en la sección 2 (actualizada). Resumen de **índices reales**: MySQL crea índice automático por cada FK; los únicos índices explícitos son `settings.key` (unique), `users.email` (unique) y `variant_color_stocks` unique `['product_variant_id','color']`. **No existe ningún otro índice** (no hay índice en `sales.stage`, `shipments.status`, `work_orders.status` ni `product_variants.material`).
+Las 12 tablas solicitadas están descritas en la sección 2 (actualizada). Tras la ejecución de la migración `database/migrations/2026_11_10_094849_add_performance_indexes_to_core_tables.php`, se crearon los índices compuestos y específicos para erradicar Full Table Scans en el hosting compartido (Neubox CloudLinux):
 
-| Índice faltante / a revisar | Motivo para la migración a IDs |
-|---|---|
-| `materials.name` (unique), `colors.name` (unique), `categories.name` (unique) | Evitar duplicados al sembrar y al renombrar (A8). |
-| `category_material` PK/unique `['category_id','material_id']`; `material_color` PK/unique `['material_id','color_id']` | Integridad de pivotes M:N. |
-| `product_variants.material_id` (FK + índice) | Reemplaza la columna texto sin índice. |
-| `variant_color_stocks` unique `['product_variant_id','color_id']` (reemplaza el de `color`) | Mantener unicidad tras migrar a `color_id`. |
-| `variant_color_stocks.color_id`, `work_orders.color_id`, `sale_details.color_id` (FK + índice) | Consultas "¿se usó este color?" (candado de renombrado A8) y alertas de descontinuados. |
-| `work_orders.status` | La cola de producción filtra `whereIn('status', ['pending','in_progress'])` en cada carga. |
-| `shipments.status` | Todos los `withSum` de entregas usan `whereHas('shipment', status != 'cancelado')`. |
-| `sale_deliveries` compuesto `['sale_detail_id','shipment_id']` | Subconsulta de `withSum` por partida. |
-| `sales.stage` (+ `promised_date`) | Filtros de producción, embarques y dashboard (ya pendiente en Fase 2.6/7). |
-| `sale_return_items.sale_detail_id` y `sale_returns.client_id` (FK + índice) | Módulo 2.8: suma de devoluciones por partida en cada `withSum`. |
-| Verificar en producción `sale_details.sale_id`, `sale_details.product_variant_id`, `production_completions.sale_detail_id/work_order_id` | Cubiertos por FK; confirmar con `SHOW INDEX`. |
+| Índice implementado / Estado | Tabla / Columnas | Motivo y Beneficio en Producción |
+|---|---|---|
+| `idx_sales_stage_promised_date` ✅ | `sales(stage, promised_date)` | Filtros de producción, embarques y dashboard sin escanear histórico de ventas. |
+| `idx_sales_created_at` ✅ | `sales(created_at)` | Ordenamientos y rangos de fechas rápidos en Kanban y reportes. |
+| `idx_shipments_status` ✅ | `shipments(status)` | Subconsultas `withSum` de entregas filtrando `status != 'cancelado'`. |
+| `idx_work_orders_status` ✅ | `work_orders(status)` | Cola de producción filtrando `whereIn('status', ['pending', 'in_progress'])`. |
+| `idx_sale_details_hold_sale` ✅ | `sale_details(hold_production, sale_id)` | Subconsulta `whereDoesntHave('saleDetails', hold_production=true)`. |
+| `idx_variant_color_stocks_stock` ✅ | `variant_color_stocks(stock)` | Filtro rápido en dashboard de colores con stock remanente (`stock > 0`). |
+| `idx_return_items_detail_shipment` ✅ | `sale_return_items(sale_detail_id, shipment_id)` | Agrupación y suma de devoluciones por partida en creación de devoluciones. |
+| FK Indexes (Integridad) | `materials`, `colors`, `categories`, pivotes | Cubiertos por claves foráneas e índices únicos. |
 
 ### 0.3-X5. Anexo — Consultas SELECT de solo lectura para correr en producción (Ajustadas a 7 Colores Oficiales)
 
@@ -770,13 +768,14 @@ A diferencia de lo que indicaba el Backlog anterior (marcado como "backend listo
 
 `ShipmentController::create()` recibe `client_ids[]` vía query param y `Shipments/Create.vue` cuenta con el selector múltiple integrado en la UI, filtrando correctamente las ventas disponibles por los clientes seleccionados.
 
-### ⚠️ Patrón de rendimiento — modelos completos viajando sin usarse
+### ✅ Patrón de rendimiento y optimización de hosting (Fase 7 — Resuelto en Noviembre 2026)
 
-Confirmado ya corregido en `ShipmentController::create()`, `index()` y `show()`: usan `select()` explícito, sin `signature` (base64 pesado) ni columnas de precio para roles de Inventarios.
-
-**Pendiente confirmado, sin corregir todavía:**
-- `ProductController::index()` — `Product::with(['category','variants'])->get()` sin `select()` ni paginación: carga todos los productos con todas sus variantes completas (incluidos los 5 precios) en cada visita al catálogo interno.
-- `SaleController::create()` (POS) — `Client::all()` sin límite ni `select()`, se ejecuta en cada apertura del POS.
+- `Sale.php` → Se protegió globalmente la firma digital del cliente con `protected $hidden = ['signature'];`, evitando la fuga accidental de Base64s pesados (50–200 KB) al frontend en Inertia/JSON. Para generación de PDFs y correos se accede directamente al atributo (`$sale->signature`).
+- `ProductController::index()` → Se erradicó el bucle N+1 de `material_color` usando un subquery `whereExists` directamente en MySQL, y se podaron las columnas de `colorStocks` y `damagedLogs`.
+- `SaleController::create()` (POS) → Payload podado: `Client::select('id', 'name', 'business_name', 'price_tier', 'phones', 'email')->orderBy('name')->get()`, y variantes de productos con `select` explícito a columnas indispensables (eliminando sobrecarga de precios no utilizados y datos innecesarios).
+- `ProductionController::index()` → Exclusión a nivel BD (`stage = 'entregado'` histórico no se evalúa) y eliminación del bucle de reversión innecesario en peticiones GET.
+- `SaleReturnController::create()` → Consultas agregadas con `groupBy('sale_detail_id', 'shipment_id')` y eager loading en vez de consultas en bucle.
+- Base de datos → 7 índices de rendimiento añadidos vía `2026_11_10_094849_add_performance_indexes_to_core_tables.php`.
 
 ### Roles y Redirección al Login
 - `admin`, `vendedor` → `/dashboard`

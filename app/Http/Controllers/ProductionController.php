@@ -22,41 +22,22 @@ class ProductionController extends Controller
 
         $endWeek = $startWeek->copy()->endOfWeek();
 
-        // Regularización automática: Pedidos con devoluciones que hayan quedado con saldo pendiente
-        $salesToRevert = Sale::whereIn('stage', ['entregado', 'enviado'])
-            ->whereHas('details.returnItems')
-            ->with(['details' => function ($q) {
-                $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
-                    $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
-                }], 'quantity_delivered')
-                ->withSum('returnItems as returned_quantity', 'quantity');
-            }])
-            ->get();
-
-        foreach ($salesToRevert as $saleRev) {
-            $hasPending = $saleRev->details->contains(function ($d) {
-                $netDeliv = max(0, ($d->delivered_quantity ?? 0) - ($d->returned_quantity ?? 0));
-                return $netDeliv < $d->quantity;
-            });
-            if ($hasPending) {
-                $saleRev->update(['stage' => 'produccion']);
-                \App\Models\SaleHistory::create([
-                    'sale_id' => $saleRev->id,
-                    'user_id' => auth()->id() ?? 1,
-                    'to_stage' => 'produccion',
-                    'notes' => '↩️ Regularización por piezas devueltas pendientes de reposición.',
-                ]);
-            }
-        }
-
-        // 1. Buscamos lo de esta semana + TODO LO ATRASADO + Los sin fecha (SOLO NO PAUSADOS)
+        // 1. Buscamos pedidos activos (atrasados + semana + sin fecha) y entregados únicamente de esta semana
         $saleItems = SaleDetail::where('production_hold', false)
-            ->whereHas('sale', function ($query) use ($endWeek) {
-                $query->whereIn('stage', ['confirmado', 'produccion', 'enviado', 'entregado'])
-                      ->where(function($q) use ($endWeek) {
-                          $q->whereDate('promised_date', '<=', $endWeek)
-                            ->orWhereNull('promised_date');
-                      });
+            ->whereHas('sale', function ($query) use ($startWeek, $endWeek) {
+                $query->where(function ($activeQ) use ($endWeek) {
+                    $activeQ->whereIn('stage', ['confirmado', 'produccion', 'enviado'])
+                        ->where(function ($dq) use ($endWeek) {
+                            $dq->whereDate('promised_date', '<=', $endWeek)
+                               ->orWhereNull('promised_date');
+                        });
+                })->orWhere(function ($deliveredQ) use ($startWeek, $endWeek) {
+                    $deliveredQ->where('stage', 'entregado')
+                        ->whereBetween('promised_date', [
+                            $startWeek->toDateString(),
+                            $endWeek->toDateString()
+                        ]);
+                });
             })
             ->withSum('completions as completed_quantity', 'quantity_completed')
             ->withSum('detalladoRecords as detailed_quantity', 'quantity')

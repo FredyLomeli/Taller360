@@ -20,7 +20,7 @@ class WorkOrderLogicTest extends TestCase
     {
         $user = User::factory()->create(['role' => 'admin']);
         $product = Product::factory()->create();
-        $variant = ProductVariant::factory()->create(['product_id' => $product->id]);
+        $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'material' => 'Madera']);
 
         $response = $this->actingAs($user)->post(route('work-orders.store'), [
             'product_variant_id' => $variant->id,
@@ -42,7 +42,7 @@ class WorkOrderLogicTest extends TestCase
         $client = Client::factory()->create();
         $sale = Sale::factory()->create(['client_id' => $client->id, 'user_id' => $user->id]);
         $product = Product::factory()->create();
-        $variant = ProductVariant::factory()->create(['product_id' => $product->id]);
+        $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'material' => 'Madera']);
         
         $detail = SaleDetail::create([
             'sale_id' => $sale->id,
@@ -106,7 +106,7 @@ class WorkOrderLogicTest extends TestCase
     {
         $user = User::factory()->create(['role' => 'admin']);
         $product = Product::factory()->create();
-        $variant = ProductVariant::factory()->create(['product_id' => $product->id]);
+        $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'material' => 'Madera']);
 
         $workOrder = WorkOrder::create([
             'product_variant_id' => $variant->id,

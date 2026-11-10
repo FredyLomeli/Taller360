@@ -21,43 +21,43 @@ class ProductController extends Controller
             ->with([
                 'category:id,name',
                 'variants:id,product_id,material_id,sku,material,measurements,price_1,stock,reserved_stock,damaged_stock,min_stock',
-                'variants.colorStocks',
+                'variants.colorStocks:id,product_variant_id,color,color_id,stock,damaged_stock,reserved_stock',
                 'variants.damagedLogs' => function ($q) {
-                    $q->with('user:id,name')->latest()->take(20);
+                    $q->select('id', 'product_variant_id', 'user_id', 'type', 'quantity', 'notes', 'created_at')
+                      ->with('user:id,name')
+                      ->latest();
                 }
             ])
             ->orderBy('is_favorite', 'desc') 
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $discontinuedStocks = VariantColorStock::where('stock', '>', 0)
+        $discontinuedStocks = VariantColorStock::where('variant_color_stocks.stock', '>', 0)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('product_variants')
+                    ->join('material_color', 'material_color.material_id', '=', 'product_variants.material_id')
+                    ->whereColumn('product_variants.id', 'variant_color_stocks.product_variant_id')
+                    ->where('material_color.activo', false)
+                    ->where(function ($sub) {
+                        $sub->whereColumn('material_color.color_id', 'variant_color_stocks.color_id')
+                            ->orWhere(function ($nameSub) {
+                                $nameSub->whereNull('variant_color_stocks.color_id')
+                                    ->whereExists(function ($colEx) {
+                                        $colEx->select(DB::raw(1))
+                                            ->from('colors')
+                                            ->whereColumn('colors.id', 'material_color.color_id')
+                                            ->whereColumn('colors.name', 'variant_color_stocks.color');
+                                    });
+                            });
+                    });
+            })
             ->with([
                 'productVariant.product:id,name',
                 'productVariant.materialModel:id,name',
                 'colorRelation:id,name'
             ])
             ->get()
-            ->filter(function ($vcs) {
-                $variant = $vcs->productVariant;
-                if (!$variant || !$variant->materialModel) return false;
-
-                $pivot = DB::table('material_color')
-                    ->where('material_id', $variant->materialModel->id)
-                    ->where(function ($sub) use ($vcs) {
-                        if ($vcs->color_id) {
-                            $sub->where('color_id', $vcs->color_id);
-                        } else {
-                            $sub->whereExists(function ($ex) use ($vcs) {
-                                $ex->select(DB::raw(1))->from('colors')
-                                    ->whereColumn('colors.id', 'material_color.color_id')
-                                    ->where('colors.name', $vcs->color);
-                            });
-                        }
-                    })
-                    ->first();
-
-                return $pivot && !$pivot->activo;
-            })
             ->map(function ($vcs) {
                 $colorName = $vcs->colorRelation ? $vcs->colorRelation->name : $vcs->color;
                 $productName = $vcs->productVariant->product->name ?? 'Producto';

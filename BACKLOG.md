@@ -156,11 +156,14 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 - [x] **Fecha compromiso (`promised_date`) editable después de creado el pedido.** Completado y verificado. Al avanzar la etapa en el Kanban (ej: hacia `confirmado`), SweetAlert2 solicita/permite corregir la fecha compromiso.
 - [x] Forzar Modo Taller (sin precios) automáticamente por rol en el backend. Completado. En `SaleController::show()`, los roles `produccion`, `inventario` y `supervisor` ahora asumen `is_production_mode = true` desde el servidor, y el sistema borra (`makeHidden`) toda la información financiera y precios unitarios del objeto de la base de datos antes de enviarlo al Vue.
 
-### Rendimiento (hosting compartido) - MOVIDO AL FINAL (FASE 7)
-- [ ] `ProductController::index()` — `Product::with(['category','variants'])->get()` sin `select()` ni paginación. Carga todos los productos, todas sus variantes y los 5 precios de cada una en cada visita al catálogo interno. *(Pospuesto por decisión del cliente)*.
-- [ ] `SaleController::create()` (POS) — Carga todos los clientes. Ya tiene `select()` explícito pero falta límite. *(Pospuesto por decisión del cliente)*.
-- [ ] Revisar índices en BD: `sale_details.sale_id`, `sale_details.product_variant_id`, `sale_deliveries.shipment_id`, `sale_deliveries.sale_detail_id`, `sales.stage` + `sales.promised_date` — no se pudo confirmar sin acceso al schema real de la BD.
-- [ ] `composer.lock`/`package-lock.json` — auditar dependencias de desarrollo innecesarias en producción en esta ronda final.
+### Rendimiento (hosting compartido) - FASE 7 (COMPLETADO Y VALIDADO EN QA ✅ - NOVIEMBRE 2026)
+- [x] Blindaje de firmas y archivos pesados: `sales.signature` excluido de serialización global con `$hidden` en modelo `Sale`, y poda de consultas backend en `ProductionController`, `SaleReturnController` y `ShipmentController`.
+- [x] Erradicación de N+1 en Dashboard y Productos: alerta de colores descontinuados refactorizada a una sola consulta SQL indexada vía `whereExists`.
+- [x] Erradicación de N+1 en Devoluciones: `SaleReturnController::create` pre-agrupa devoluciones previas en una sola consulta indexada (`groupBy`) y precarga `colorStocks` en variantes.
+- [x] Optimización de Plan de Producción: desacoplado el barrido de regularización en caliente y restringido en SQL el descarte de pedidos históricos concluidos.
+- [x] Índices estratégicos en base de datos: migración ejecutada con 7 índices compuestos y simples en `sales`, `shipments`, `work_orders`, `sale_details`, `variant_color_stocks` y `sale_return_items`.
+- [x] Poda de Payloads en POS y Catálogos: selección estricta de atributos en `SaleController::create` y `ProductController::index`.
+- [x] Auditoría de dependencias y compatibilidad: `composer.json` con dependencias mínimas y limpias (Laravel 12, DomPDF v3, Inertia v2) 100% compatibles con PHP 8.3.
 
 ### Roles y Fase 3 (Pausada / Posterior a Fases 2.7 y 2.8)
 - [ ] ~~`supervisor` y~~ `financiero` no tiene ninguna ruta asignada — cae directo a pantalla de bienvenida (~~`supervisor`~~ ya tiene acceso operativo completo a Producción, Almacén y Embarques ✅ Corregido 29 oct 2026).
@@ -349,6 +352,33 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
 
 ---
 
+## ✅ FASE 7 — OPTIMIZACIÓN Y RENDIMIENTO PARA HOSTING COMPARTIDO (COMPLETADO Y VALIDADO EN QA — NOVIEMBRE 2026)
+**Prioridad:** 🔴 ALTA / RENDIMIENTO | **Estado:** COMPLETADO Y VALIDADO EN QA (142/142 tests en verde)  
+**Motivo:** Reducción drástica del consumo de recursos en hosting compartido (Neubox / cPanel / CloudLinux) mitigando cuellos de botella de CPU, Memoria RAM (PMEM), Entrada de Procesos (EP / Error 508) y Lecturas de Disco (IOPS).
+
+### Tareas Completadas:
+1. [x] **Blindaje de Firmas Digitales (`sales.signature`):**
+   - Configurado `protected $hidden = ['signature'];` en `app/Models/Sale.php`, bloqueando fugas de Base64 (50–200 KB) a payloads JSON/Inertia.
+   - Poda estricta de columnas en backend (`ProductionController`, `SaleReturnController`, `ShipmentController`) asegurando que MySQL no lea la columna de disco en lecturas ordinarias.
+   - Preservación íntegra de la firma para generación de PDFs en `SaleController::printNote` y `sendSaleNoteMail`.
+2. [x] **Erradicación de Consultas N+1 Recientes (Colores y Devoluciones):**
+   - Refactorizada la alerta de colores descontinuados en `DashboardController` y `ProductController`, pasando de iteraciones PHP con queries individuales a una sola subconsulta `whereExists` evaluada directamente por MySQL.
+   - En `SaleReturnController::create`, pre-agrupadas las entregas y devoluciones previas en una sola consulta indexada (`groupBy('sale_detail_id', 'shipment_id')`), eliminando consultas en bucle `foreach`.
+3. [x] **Optimización de Plan de Producción:**
+   - Desacoplado el barrido de regularización automática de `ProductionController::index` (la reversión a `produccion` ya se procesa atómicamente en `SaleReturnController::store`).
+   - Refactorizada la consulta `$saleItems` para que MySQL descarte directamente los pedidos históricos concluidos (`stage = 'entregado'`), cargando en memoria únicamente las ventas activas o de la semana en curso.
+4. [x] **Migración de Índices de Base de Datos para Hosting:**
+   - Creada y ejecutada la migración `database/migrations/2026_11_10_094849_add_performance_indexes_to_core_tables.php`.
+   - Índices creados: `sales` (`idx_sales_stage_promised_date`, `idx_sales_created_at`), `shipments` (`idx_shipments_status`), `work_orders` (`idx_work_orders_status`), `sale_details` (`idx_sale_details_hold_sale`), `variant_color_stocks` (`idx_variant_color_stocks_stock`), `sale_return_items` (`idx_return_items_detail_shipment`).
+5. [x] **Poda de Payloads en POS y Catálogos:**
+   - En `SaleController::create`, selección estricta de atributos de productos, variantes, materiales, colores y clientes requeridos por el carrito de venta.
+   - En `ProductController::index`, poda de columnas para `colorStocks` y `damagedLogs`.
+6. [x] **Pruebas Automatizadas y Prevención de Regresiones:**
+   - Pruebas dedicadas en `tests/Feature/PayloadOptimizationTest.php` (4 tests), `tests/Feature/QueryOptimizationTest.php` (4 tests) y `tests/Feature/DatabaseIndexTest.php` (1 test).
+   - Suite global de pruebas del sistema: **142 tests pasando (1,006 aserciones en verde)**.
+
+---
+
 ## 📌 Orden de Dependencias (actualizado 10 nov 2026)
  
  ```
@@ -362,6 +392,8 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
                                       ↓
                      Fase 2.8 — Módulo de Devoluciones (COMPLETADO ✅)
                                       ↓
+                     Fase 7 — Rendimiento en Hosting Compartido (COMPLETADO ✅)
+                                      ↓
                      ⏸️ [Fase 3.2 Cobranza — EN PAUSA esperando respuestas del cliente]
                                       ↓
                      🔴 Fase 4.2 — Link Personalizado por Cliente con Precios (catalog_token) (¡SIGUIENTE PRIORIDAD!)
@@ -371,8 +403,6 @@ No quedan huecos pendientes de estos 5 — a diferencia de lo que decía `GUIA_R
                      Fase 5 (Precios dinámicos por flete) — depende de Fase 4.2
                                       ↓
                      Fase 6 (Reportes PDF globales) — depende de Fase 3
-                                      ↓
-                     Fase 7 (Rendimiento en Hosting) — Paginación y Optimizaciones (Fase 2.6 pospuesta)
  ```
 
 > **Nota sobre Cobranza (Fase 3.2 en Pausa):** Se encuentra temporalmente detenida a la espera de definiciones de negocio por parte del cliente (política de crédito y días de gracia, obligatoriedad de anticipo para confirmar pedido, reglas de abonos globales entre ventas, política de anticipos ante cancelaciones, roles autorizados para cobrar, bloqueo automático por saldo vencido y formatos contables requeridos). Se reanudará una vez resueltas estas incógnitas.

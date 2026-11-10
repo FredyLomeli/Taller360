@@ -82,12 +82,18 @@ class SaleController extends Controller
             'products' => \App\Models\Product::select('id', 'name', 'category_id', 'image', 'is_favorite')
                 ->with([
                     'category:id,name',
-                    'variants:id,product_id,material,material_id,measurements,price_1,price_2,price_3,price_4,price_5,stock,reserved_stock',
-                    'variants.materialModel.activeColors'
+                    'variants:id,product_id,material,material_id,sku,measurements,price_1,price_2,price_3,price_4,price_5,stock,reserved_stock,damaged_stock',
+                    'variants.materialModel:id,name,color_obligatorio',
+                    'variants.materialModel.activeColors:id,name,hex',
                 ])
                 ->orderBy('is_favorite', 'desc')
                 ->get(),
-            'materials' => Material::with('activeColors')->where('activo', true)->get(),
+            'materials' => Material::select('id', 'name', 'color_obligatorio')
+                ->with(['activeColors' => function ($q) {
+                    $q->select('colors.id', 'colors.name', 'colors.hex');
+                }])
+                ->where('activo', true)
+                ->get(),
             'clients' => Client::select('id', 'name', 'business_name', 'price_tier', 'phones', 'email')->get(),
         ]);
     }

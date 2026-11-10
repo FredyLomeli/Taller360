@@ -292,8 +292,9 @@ class ShipmentController extends Controller
      */
     private function closeOrderIfComplete(SaleDetail $detail, string $targetStage = 'entregado'): void
     {
-        $sale = $detail->sale()->with(['details' => function ($q) {
-            $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
+        $sale = $detail->sale()->select('id', 'stage')->with(['details' => function ($q) {
+            $q->select('id', 'sale_id', 'quantity')
+            ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                 $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
             }], 'quantity_delivered')
             ->withSum('returnItems as returned_quantity', 'quantity');

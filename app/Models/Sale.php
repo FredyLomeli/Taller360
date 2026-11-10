@@ -27,6 +27,10 @@ class Sale extends Model
         'is_partial_shipping' => 'boolean',
     ];
 
+    protected $hidden = [
+        'signature',
+    ];
+
     // Relaciones
     public function client()
     {

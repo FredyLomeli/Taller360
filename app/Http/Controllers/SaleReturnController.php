@@ -76,22 +76,33 @@ class SaleReturnController extends Controller
                         $q->with([
                             'sale:id,client_id,created_at',
                             'variant.materialModel',
+                            'variant.colorStocks:id,product_variant_id',
                             'colorRelation:id,name,hex',
                         ]);
                     }
                 ])
                 ->get();
 
+            // Pre-agrupamos todas las devoluciones de estas entregas en una sola consulta indexada
+            $saleDetailIds = $deliveries->pluck('sale_detail_id')->unique()->filter();
+            $shipmentIds = $deliveries->pluck('shipment_id')->unique()->filter();
+
+            $returnedMap = SaleReturnItem::whereIn('sale_detail_id', $saleDetailIds)
+                ->whereIn('shipment_id', $shipmentIds)
+                ->groupBy('sale_detail_id', 'shipment_id')
+                ->select('sale_detail_id', 'shipment_id', DB::raw('SUM(quantity) as total_returned'))
+                ->get()
+                ->keyBy(fn($item) => $item->sale_detail_id . '-' . $item->shipment_id);
+
             foreach ($deliveries as $deliv) {
-                $alreadyReturned = (int) SaleReturnItem::where('sale_detail_id', $deliv->sale_detail_id)
-                    ->where('shipment_id', $deliv->shipment_id)
-                    ->sum('quantity');
+                $mapKey = $deliv->sale_detail_id . '-' . $deliv->shipment_id;
+                $alreadyReturned = (int) ($returnedMap->get($mapKey)?->total_returned ?? 0);
 
                 $netAvailable = max(0, $deliv->quantity_delivered - $alreadyReturned);
 
                 if ($netAvailable > 0) {
                     $detail = $deliv->saleDetail;
-                    $isMelamina = ($detail->variant?->materialModel ? $detail->variant->materialModel->stock_por_color : ($detail->variant?->material === 'Melamina')) || VariantColorStock::where('product_variant_id', $detail->variant?->id)->exists();
+                    $isMelamina = ($detail->variant?->materialModel ? $detail->variant->materialModel->stock_por_color : ($detail->variant?->material === 'Melamina')) || ($detail->variant?->colorStocks && $detail->variant->colorStocks->isNotEmpty());
 
                     $returnableDeliveries[] = [
                         'delivery_id' => $deliv->id,
@@ -180,7 +191,7 @@ class SaleReturnController extends Controller
                 $detailId = $itemData['sale_detail_id'];
                 $shipmentId = $itemData['shipment_id'] ?? null;
 
-                $detail = SaleDetail::with(['variant.materialModel', 'sale'])->lockForUpdate()->findOrFail($detailId);
+                $detail = SaleDetail::with(['variant.materialModel', 'sale:id,stage,client_id'])->lockForUpdate()->findOrFail($detailId);
                 $salesToEvaluate[$detail->sale_id] = $detail->sale;
 
                 // Cálculo estricto de entregado neto
@@ -277,8 +288,9 @@ class SaleReturnController extends Controller
             // Revertir etapa de ventas que hayan quedado con saldo pendiente de entrega
             foreach ($salesToEvaluate as $sale) {
                 if (!$sale) continue;
-                $saleWithDetails = Sale::with(['details' => function ($q) {
-                    $q->withSum(['deliveries as delivered_quantity' => function ($dq) {
+                $saleWithDetails = Sale::select(['id', 'stage'])->with(['details' => function ($q) {
+                    $q->select('id', 'sale_id', 'quantity')
+                    ->withSum(['deliveries as delivered_quantity' => function ($dq) {
                         $dq->whereHas('shipment', fn($sq) => $sq->where('status', '!=', 'cancelado'));
                     }], 'quantity_delivered')
                     ->withSum('returnItems as returned_quantity', 'quantity');
